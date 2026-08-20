@@ -1,73 +1,66 @@
-# Altana BSC Testnet Runbook
+# MandateFi BSC Testnet Runbook
 
-## What This Proves
+## What This Flow Proves
 
-MandateFi now supports two authority lifecycles. The Safe Treasury Rebalance path proves a bounded strategy action:
+The live product demonstrates a complete owner-controlled portfolio mandate:
 
 1. A device passkey controls an Altana smart wallet.
-2. The owner registers a public, expiring session in Altana KeyStore.
-3. MandateFi fetches a fresh PancakeSwap V2 quote for `0.001 tBNB → BUSD`.
-4. The session executes `swapExactETHForTokens` with 1% maximum slippage and a ten-minute deadline.
-5. BUSD is returned to the Altana smart wallet and the before/after balance delta is recorded.
-6. The owner revokes the session with the passkey.
-7. Grant, swap, and revoke receipts link to BscScan.
+2. The owner defines managed capital, a goal, risk, and duration.
+3. MandateFi reads tBNB and BUSD balances and a live PancakeSwap V2 price.
+4. The deterministic engine proposes BUY_STABLE, BUY_NATIVE, or HOLD.
+5. The owner reviews the allocation, quote, slippage, methods, and spend caps.
+6. An expiring Altana session executes only the permitted first action.
+7. The dashboard records the decision and receipt.
+8. The owner can pause local checks or revoke the session onchain.
 
-Catalog-only agents keep the earlier verification profile: one `isValidKey(address,bytes32)` selector, zero call value, and a `0.003 tBNB/day` native fee cap.
+## Dynamic Policy
 
-## Safe Treasury Rebalance Policy
-
-| Constraint | Value | Enforcement |
+| Constraint | Source | Enforcement |
 | --- | --- | --- |
-| Network | BSC Testnet, chain `97` | Altana client configuration |
-| Router | `0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3` | Altana call permission |
-| Method | `swapExactETHForTokens(uint256,address[],address,uint256)` | Altana call permission |
-| Daily native cap | `0.004 tBNB` | Altana spend permission |
-| Per-run amount | `0.001 tBNB` | MandateFi executor |
-| Path | WBNB `0xae13...a7cd` → BUSD `0x7886...F2A7` | MandateFi executor |
-| Recipient | The activating Altana smart wallet | MandateFi executor |
-| Slippage | 1%; `amountOutMin = quote × 99%` | PancakeSwap transaction calldata |
-| Quote lifetime | 10 minutes | PancakeSwap transaction deadline |
+| Network | BSC Testnet, chain `97` | Wallet and Altana client configuration |
+| Managed value | Owner input, capped by wallet value | Portfolio engine |
+| Target allocation | Goal plus risk profile | Portfolio engine |
+| Drift and action limits | Selected risk profile | Portfolio engine |
+| Router | PancakeSwap V2 `0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3` | Altana call permission |
+| Methods | Two swap methods plus BUSD approval | Altana call permission |
+| Native and token daily caps | Derived from managed value and risk | Altana spend permission |
+| Recipient | Activating Altana smart wallet | Transaction builder |
+| Slippage | 0.5%, 1%, or 1.5% by risk profile | PancakeSwap calldata |
+| Session lifetime | Owner-selected duration | Altana expiry |
 
 ## Browser Flow
 
 1. Open MandateFi over HTTPS or `localhost` in a passkey-capable browser.
-2. Connect an injected EVM wallet and switch to BNB Smart Chain Testnet (`97`).
-3. Select **Range Pilot**, inspect the live quote and policy, and continue.
-4. Create a passkey smart wallet, or recover an existing MandateFi passkey.
-5. Fund the displayed smart-wallet address with `0.01 tBNB` through the connected wallet.
-6. Select **Authorize & execute** and approve the passkey prompt.
-7. Wait for the Altana grant and bounded PancakeSwap swap to confirm.
-8. Open **My mandates** and inspect the grant, swap, and BUSD received.
-9. Select **Revoke**, approve the passkey prompt, and inspect the revoke transaction.
+2. Select **Create mandate**.
+3. Enter the managed amount and duration.
+4. Choose an investment goal and risk profile.
+5. Review the target allocation, current drift, initial action, quote, and guardrails.
+6. Connect an injected wallet and switch to BNB Smart Chain Testnet.
+7. Create or recover the Altana passkey smart wallet.
+8. Fund the displayed smart wallet with sufficient tBNB for the managed amount and gas reserve.
+9. Select **Approve & start mandate** and approve the passkey prompt.
+10. Wait for the grant and any required first swap to confirm.
+11. Inspect **Portfolio**, **Decision log**, and **Policies**.
+12. Use **Revoke onchain** when the mandate should no longer have authority.
 
-If registration succeeds but the immediate swap cannot produce evidence, MandateFi still persists the live grant and keeps **Revoke** available. This prevents a partially completed activation from becoming an invisible authorization.
+If the grant succeeds but execution fails, MandateFi retains the public grant information and keeps revoke available. A partial activation never becomes an invisible authorization.
 
-## Custody Boundary
+## Custody and Runtime Boundary
 
-- The injected wallet is only used to send test gas to the smart wallet.
-- The passkey private material remains in the device authenticator.
-- Only the JSON-safe credential ID and public key are stored in local storage.
-- The generated session signer remains in memory and is used for the immediate verification call.
-- Persisted mandate metadata contains public keys and transaction hashes, never a private key.
-- A page reload cannot reuse the session signer, but the owner can still revoke by public key with the recovered passkey.
-
-## Current Contracts
-
-| Component | BSC Testnet address |
-| --- | --- |
-| Altana KeyStore | `0x6b8361C29d05D498b1a12B54A37310f94171E94A` |
-| Altana KeyStore Controller | `0xb530D1971f5453F3359518343F05D0AedFfF7e12` |
-
-The SDK uses the Altana BSC Testnet relay at `https://testnet-relay.altana.network` and public chain ID `97`.
+- The injected wallet only funds the smart wallet.
+- The owner passkey remains in the device authenticator.
+- Only JSON-safe credential metadata and public transaction evidence are persisted.
+- The scoped session signer exists in memory for the active browser session.
+- A page reload discards that signer; the onchain policy remains revocable.
+- The current app checks every 60 seconds only while its tab is active.
+- Production continuous management requires a secure always-on executor described in `INTEGRATION_PLAN.md`.
 
 ## Verified Reference Run
-
-The following public run was completed from the deployed MandateFi product on 20 August 2026:
 
 | Step | Transaction |
 | --- | --- |
 | Fund smart wallet `0x2cd25c624f1a9e75c2991db6f8636f712c38914a` with `0.01 tBNB` | [`0xd06ce7...ffc70b`](https://testnet.bscscan.com/tx/0xd06ce74431c7b33c1d8299e1c073f39da727fde034f56841862e103631ffc70b) |
-| Register the passkey admin and expiring session in Altana KeyStore | [`0x726ed5...7e263`](https://testnet.bscscan.com/tx/0x726ed597395ef065e84ac93c1cbbbbadbed6680f690e77c12c86e440cdb7e263) |
-| Execute the session-scoped zero-value KeyStore verification | [`0xfd00b2...5dc3a`](https://testnet.bscscan.com/tx/0xfd00b2341d4366840f0125ba0279c50ef0aaf8d7f522d9658332fdf14cf5dc3a) |
+| Register passkey admin and an expiring session | [`0x726ed5...7e263`](https://testnet.bscscan.com/tx/0x726ed597395ef065e84ac93c1cbbbbadbed6680f690e77c12c86e440cdb7e263) |
+| Execute a session-scoped KeyStore verification | [`0xfd00b2...5dc3a`](https://testnet.bscscan.com/tx/0xfd00b2341d4366840f0125ba0279c50ef0aaf8d7f522d9658332fdf14cf5dc3a) |
 
-Post-run RPC verification returned two active public KeyStore entries and two account keys: one permanent super-admin passkey and one non-admin session expiring at `2026-09-19T13:16:07Z`.
+These receipts verify the wallet and session lifecycle. Record the next owner-authorized dynamic swap separately after executing this exact build; do not reuse the verification transaction as swap evidence.

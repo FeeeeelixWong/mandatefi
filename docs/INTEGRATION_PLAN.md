@@ -1,66 +1,56 @@
-# MandateFi Integration Plan
+# MandateFi Production Plan
 
 ## Objective
 
-Replace every scenario-only element in the prototype with inspectable BNB Smart Chain evidence while preserving a clear custody boundary.
+Move the current BSC Testnet product from an active-browser executor to a secure, observable, always-on portfolio-management service without changing the owner-approved policy model.
 
 ## Runtime Boundaries
 
 | Component | Responsibility | Trust boundary |
 | --- | --- | --- |
-| Marketplace web app | Discovery, comparison, mandate authoring, revoke UI | Never stores owner private keys |
-| Catalog adapter | Normalizes agent identity, reputation, and activity | Read-only data from 8004scan and Agent Studio |
-| Mandate service | Validates cap, allowed contracts, expiry, and requested call | Rejects any call outside the signed policy |
-| Altana session | Gives the agent temporary scoped authority | Revocable by the owner; expires automatically |
-| Strategy agent | Produces a deterministic action proposal | Cannot expand its own authority |
-| BSC contracts | Execute selected protocol calls and emit receipts | Publicly inspectable source of truth |
+| Product UI | Mandate setup, approval, portfolio status, decision log, pause, revoke | Never stores owner or session private keys persistently |
+| Portfolio engine | Deterministic allocation, drift, action size, and slippage calculation | Cannot sign, broadcast, or alter policy |
+| Secure executor | Schedules checks and holds the scoped session signer in an enclave | Cannot exceed the registered Altana permission set |
+| Altana session | Enforces allowed contracts, methods, spend caps, expiry, and revoke | Cannot access the owner passkey |
+| PancakeSwap V2 | Quotes and executes the approved BNB/BUSD rebalance | Receives only bounded transaction calldata |
+| BNB Smart Chain | Stores grants, revocations, swaps, and receipts | Public source of truth |
 
-## Phase 1: Data
+## Production Milestones
 
-1. ✅ Connect to the anonymous 8004scan API with runtime schema validation.
-2. ✅ Show the live BNB identity count, latest registrations, provenance, and source status.
-3. Obtain the hackathon 8004scan Pro API credential for higher rate limits.
-4. Map each MandateFi strategy to a registered identity and raw evidence source.
-5. Replace `src/data/agents.ts` scenario values only after comparable measured evidence exists.
+### 1. Durable execution
 
-## Phase 2: Bounded Activation
+- Run the portfolio evaluator on a scheduled worker.
+- Store the scoped session signer only in a hardware-backed enclave or equivalent isolated signer.
+- Use an idempotency key per mandate and decision window.
+- Lock each mandate during execution to prevent concurrent rebalances.
 
-1. ✅ Connect an EIP-1193 owner wallet and enforce BSC Testnet chain ID 97.
-2. ✅ Read the owner's native tBNB balance from BSC Testnet.
-3. ✅ Pin the initial safe verification target to Altana KeyStore `isValidKey(address,bytes32)`: zero call value, `0.003 tBNB/day` native gas cap, and no token or protocol spend permission.
-4. ✅ Build a public passkey-controlled session with an explicit expiry.
-5. ✅ Implement public session registration in the Altana KeyStore.
-6. ✅ Implement a session-signed verification call and explorer evidence links.
-7. ✅ Implement passkey-authorized revoke and persistence of the revoke receipt.
-8. Run the funded browser flow and publish its grant, execute, and revoke transaction hashes.
-9. ✅ Pin the first strategy adapter to PancakeSwap V2 Testnet: router `0x9Ac64...e5c3`, `swapExactETHForTokens` only, `0.001 tBNB` per run, `0.004 tBNB/day`, 1% slippage, and ten-minute deadline.
-10. Capture the first user-authorized public swap receipt and BUSD balance delta.
-11. Pin verified Venus/Lista contract addresses and token-specific spend limits before enabling those strategy families.
+### 2. Reliable market inputs
 
-## Phase 3: Strategy Proof
+- Compare the direct PancakeSwap quote with a secondary price source.
+- Reject stale, missing, or divergent prices.
+- Simulate every transaction immediately before broadcast.
+- Requote when the transaction misses its bounded quote lifetime.
 
-Implement one deterministic action per category before expanding sophistication:
+### 3. Operational safety
 
-- **Rebalancing:** detect an out-of-range PancakeSwap V3 position and propose a bounded rebalance.
-- **Grid Trading:** place one grid leg inside an owner-defined inventory limit.
-- **Yield Optimisation:** compare net APY and move only when the configured hurdle is met.
-- **Health Factor:** simulate a Venus position and submit one allowed protective action.
+- Add retry classes that never rebroadcast after an ambiguous submission result.
+- Reconcile receipts and balances before creating another action.
+- Alert on failed checks, expired grants, cap exhaustion, and abnormal price movement.
+- Preserve an append-only decision and execution audit log.
 
-Each action record must include inputs, decision, requested authority, transaction hash, outcome, and owner-visible receipt.
+### 4. Product expansion
 
-## Acceptance Tests
+- Add more stablecoins only after token-decimal, liquidity, and contract reviews.
+- Add additional protocols through isolated adapters with their own method allowlists.
+- Keep risk profiles versioned so an active mandate never changes silently.
+- Require explicit owner approval for every policy migration.
 
-- The permission builder exposes only the pinned KeyStore verification selector.
-- A call over the capital limit is rejected.
+## Acceptance Criteria
+
+- The same snapshot always produces the same policy decision.
+- A call outside the allowed contract or selector is rejected by the session policy.
+- A trade above native or token daily limits is rejected.
 - An expired or revoked session cannot execute.
-- A permitted action produces a BSC Testnet transaction and receipt.
-- Marketplace metrics link to their raw source.
-- Every demo path can be repeated from a clean wallet.
-
-## Implemented frontend boundaries
-
-- `src/hooks/useInjectedWallet.ts`: injected-wallet lifecycle, account/chain events, network switching, and balance refresh.
-- `src/services/erc8004.ts`: public 8004scan API boundary with Zod validation.
-- `src/data/agents.ts`: explicitly simulated strategy catalog until every agent has a registered identity and measured execution evidence.
-- `src/integrations/altana.ts`: passkey wallet persistence, public session grant, session verification execution, and revoke.
-- `src/hooks/useAltanaWallet.ts`: browser lifecycle, funding, progress, balance, and safe error handling.
+- Concurrent checks produce at most one onchain action.
+- Every action or HOLD decision has inputs, rationale, policy version, and evidence.
+- No private key is present in browser storage, application logs, or analytics.

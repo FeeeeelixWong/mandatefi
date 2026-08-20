@@ -6,6 +6,7 @@ import {
   type GrantSessionResult,
   type PasskeyCredential,
   type PasskeySigner,
+  type Session,
   type Wallet,
 } from '@altananetwork/sdk'
 import {
@@ -19,6 +20,7 @@ import {
   type Hex,
 } from 'viem'
 import { z } from 'zod'
+import type { PortfolioPlan, PortfolioSnapshot } from '../domain/portfolio'
 import { bscTestnetClient } from '../lib/chains'
 
 const STORAGE_KEY = 'mandatefi.altana-wallet.v1'
@@ -83,6 +85,19 @@ const pancakeRouterAbi = [
     ],
     outputs: [{ name: 'amounts', type: 'uint256[]' }],
   },
+  {
+    name: 'swapExactTokensForETH',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'amountIn', type: 'uint256' },
+      { name: 'amountOutMin', type: 'uint256' },
+      { name: 'path', type: 'address[]' },
+      { name: 'to', type: 'address' },
+      { name: 'deadline', type: 'uint256' },
+    ],
+    outputs: [{ name: 'amounts', type: 'uint256[]' }],
+  },
 ] as const
 
 const erc20BalanceAbi = [{
@@ -91,6 +106,17 @@ const erc20BalanceAbi = [{
   stateMutability: 'view',
   inputs: [{ name: 'account', type: 'address' }],
   outputs: [{ type: 'uint256' }],
+}] as const
+
+const erc20ApproveAbi = [{
+  name: 'approve',
+  type: 'function',
+  stateMutability: 'nonpayable',
+  inputs: [
+    { name: 'spender', type: 'address' },
+    { name: 'amount', type: 'uint256' },
+  ],
+  outputs: [{ type: 'bool' }],
 }] as const
 
 export type AltanaWalletProfile = {
@@ -115,10 +141,29 @@ export type SafeRebalanceQuote = {
   outputSymbol: 'BUSD'
 }
 
+export type PortfolioRebalanceQuote = {
+  amountIn: bigint
+  quotedOut: bigint
+  minimumOut: bigint
+  slippageBps: bigint
+  inputSymbol: 'tBNB' | 'BUSD'
+  outputSymbol: 'tBNB' | 'BUSD'
+}
+
 export type AltanaStrategyProof = {
   session: GrantSessionResult
   grant: GrantSessionResult
   quote: SafeRebalanceQuote
+  execution?: ExecuteResult
+  executionError?: string
+  outputReceived?: bigint
+}
+
+export type AltanaPortfolioProof = {
+  session: GrantSessionResult
+  grant: GrantSessionResult
+  plan: PortfolioPlan
+  quote?: PortfolioRebalanceQuote
   execution?: ExecuteResult
   executionError?: string
   outputReceived?: bigint
@@ -216,8 +261,8 @@ export function buildVerificationPermissions() {
   } as const
 }
 
-export function minimumOutputFor(quotedOut: bigint) {
-  return quotedOut * (10_000n - SAFE_REBALANCE_SLIPPAGE_BPS) / 10_000n
+export function minimumOutputFor(quotedOut: bigint, slippageBps = SAFE_REBALANCE_SLIPPAGE_BPS) {
+  return quotedOut * (10_000n - slippageBps) / 10_000n
 }
 
 export function buildSafeRebalancePermissions() {
@@ -230,6 +275,20 @@ export function buildSafeRebalancePermissions() {
       limit: SAFE_REBALANCE_NATIVE_CAP,
       period: 'day',
     }],
+  } as const
+}
+
+export function buildPortfolioPermissions(plan: PortfolioPlan) {
+  return {
+    calls: [
+      { to: PANCAKE_V2_ROUTER, signature: 'swapExactETHForTokens(uint256,address[],address,uint256)' },
+      { to: BSC_TESTNET_BUSD, signature: 'approve(address,uint256)' },
+      { to: PANCAKE_V2_ROUTER, signature: 'swapExactTokensForETH(uint256,uint256,address[],address,uint256)' },
+    ],
+    spend: [
+      { limit: plan.dailyNativeCap, period: 'day' },
+      { limit: plan.dailyStableCap, period: 'day', token: BSC_TESTNET_BUSD },
+    ],
   } as const
 }
 
@@ -251,17 +310,75 @@ export async function quoteSafeRebalance(): Promise<SafeRebalanceQuote> {
   }
 }
 
+export async function quotePortfolioPlan(plan: PortfolioPlan): Promise<PortfolioRebalanceQuote | null> {
+  if (plan.action === 'HOLD' || plan.amountIn <= 0n) return null
+  const path = plan.action === 'BUY_STABLE'
+    ? [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD]
+    : [BSC_TESTNET_BUSD, BSC_TESTNET_WBNB]
+  const amounts = await bscTestnetClient.readContract({
+    address: PANCAKE_V2_ROUTER,
+    abi: pancakeRouterAbi,
+    functionName: 'getAmountsOut',
+    args: [plan.amountIn, path],
+  })
+  const quotedOut = amounts.at(-1)
+  if (!quotedOut || quotedOut <= 0n) throw new Error('PancakeSwap returned no executable quote for this allocation change.')
+  return {
+    amountIn: plan.amountIn,
+    quotedOut,
+    minimumOut: minimumOutputFor(quotedOut, plan.maxSlippageBps),
+    slippageBps: plan.maxSlippageBps,
+    inputSymbol: plan.inputAsset,
+    outputSymbol: plan.outputAsset,
+  }
+}
+
 export function formatStrategyToken(value: bigint) {
   return Number(formatUnits(value, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 })
 }
 
-async function readBusdBalance(address: Address) {
+export async function readBusdBalance(address: Address) {
   return bscTestnetClient.readContract({
     address: BSC_TESTNET_BUSD,
     abi: erc20BalanceAbi,
     functionName: 'balanceOf',
     args: [address],
   })
+}
+
+export async function readPortfolioSnapshot(address: Address): Promise<PortfolioSnapshot> {
+  const [nativeBalance, stableBalance, unitQuote] = await Promise.all([
+    readAltanaBalance(address),
+    readBusdBalance(address),
+    bscTestnetClient.readContract({
+      address: PANCAKE_V2_ROUTER,
+      abi: pancakeRouterAbi,
+      functionName: 'getAmountsOut',
+      args: [parseEther('1'), [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD]],
+    }),
+  ])
+  const priceStablePerNative = unitQuote.at(-1)
+  if (!priceStablePerNative || priceStablePerNative <= 0n) {
+    throw new Error('PancakeSwap price feed is unavailable.')
+  }
+  return {
+    nativeBalance,
+    stableBalance,
+    priceStablePerNative,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+export async function readPancakePrice() {
+  const amounts = await bscTestnetClient.readContract({
+    address: PANCAKE_V2_ROUTER,
+    abi: pancakeRouterAbi,
+    functionName: 'getAmountsOut',
+    args: [parseEther('1'), [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD]],
+  })
+  const price = amounts.at(-1)
+  if (!price || price <= 0n) throw new Error('PancakeSwap price feed is unavailable.')
+  return price
 }
 
 async function waitForBusdIncrease(address: Address, before: bigint) {
@@ -271,6 +388,115 @@ async function waitForBusdIncrease(address: Address, before: bigint) {
     await new Promise((resolve) => setTimeout(resolve, 750))
   }
   return 0n
+}
+
+async function waitForNativeIncrease(address: Address, before: bigint) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const current = await readAltanaBalance(address)
+    if (current > before) return current - before
+    await new Promise((resolve) => setTimeout(resolve, 750))
+  }
+  return 0n
+}
+
+export async function grantAndExecutePortfolioPlan(
+  profile: AltanaWalletProfile,
+  durationDays: number,
+  plan: PortfolioPlan,
+  onStage?: (stage: 'granting' | 'executing') => void,
+): Promise<AltanaPortfolioProof> {
+  const expiry = Math.floor(Date.now() / 1000) + durationDays * 24 * 60 * 60
+  const quote = await quotePortfolioPlan(plan)
+
+  onStage?.('granting')
+  const grant = await altanaClient.grantSession({
+    wallet: profile.wallet,
+    signer: profile.signer,
+    chainId: ALTANA_CHAIN_ID,
+    permissions: buildPortfolioPermissions(plan),
+    expiry,
+    register: true,
+  })
+
+  if (!quote || plan.action === 'HOLD') {
+    return { session: grant, grant, plan }
+  }
+
+  const executed = await executePortfolioPlanWithSession(grant, plan, quote, onStage)
+  return { session: grant, grant, plan, ...executed }
+}
+
+export async function executePortfolioPlanWithSession(
+  session: Session,
+  plan: PortfolioPlan,
+  suppliedQuote?: PortfolioRebalanceQuote,
+  onStage?: (stage: 'granting' | 'executing') => void,
+): Promise<Pick<AltanaPortfolioProof, 'quote' | 'execution' | 'executionError' | 'outputReceived'>> {
+  const quote = suppliedQuote ?? await quotePortfolioPlan(plan)
+  if (!quote || plan.action === 'HOLD') return {}
+
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + SAFE_REBALANCE_DEADLINE_SECONDS)
+  const calls = plan.action === 'BUY_STABLE'
+    ? [{
+      to: PANCAKE_V2_ROUTER,
+      value: plan.amountIn,
+      data: encodeFunctionData({
+        abi: pancakeRouterAbi,
+        functionName: 'swapExactETHForTokens',
+        args: [quote.minimumOut, [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD], session.walletAddress, deadline],
+      }),
+    }]
+    : [
+      {
+        to: BSC_TESTNET_BUSD,
+        value: 0n,
+        data: encodeFunctionData({
+          abi: erc20ApproveAbi,
+          functionName: 'approve',
+          args: [PANCAKE_V2_ROUTER, plan.amountIn],
+        }),
+      },
+      {
+        to: PANCAKE_V2_ROUTER,
+        value: 0n,
+        data: encodeFunctionData({
+          abi: pancakeRouterAbi,
+          functionName: 'swapExactTokensForETH',
+          args: [plan.amountIn, quote.minimumOut, [BSC_TESTNET_BUSD, BSC_TESTNET_WBNB], session.walletAddress, deadline],
+        }),
+      },
+    ]
+
+  const outputBefore = plan.action === 'BUY_STABLE'
+    ? await readBusdBalance(session.walletAddress)
+    : await readAltanaBalance(session.walletAddress)
+
+  onStage?.('executing')
+  try {
+    const execution = await altanaClient.execute({
+      session,
+      chainId: ALTANA_CHAIN_ID,
+      calls,
+    })
+    const outputReceived = execution.status === 'CONFIRMED'
+      ? plan.action === 'BUY_STABLE'
+        ? await waitForBusdIncrease(session.walletAddress, outputBefore)
+        : await waitForNativeIncrease(session.walletAddress, outputBefore)
+      : 0n
+    return {
+      quote,
+      execution,
+      outputReceived,
+      executionError: execution.status === 'FAILED'
+        ? 'The bounded PancakeSwap rebalance failed; the policy remains revocable.'
+        : undefined,
+    }
+  } catch (error) {
+    return {
+      quote,
+      executionError: altanaErrorMessage(error),
+    }
+  }
 }
 
 export async function grantAndExecuteSafeRebalance(

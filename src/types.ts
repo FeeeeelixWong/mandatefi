@@ -1,66 +1,40 @@
-export type AgentCategory =
-  | 'Rebalancing'
-  | 'Grid Trading'
-  | 'Yield Optimisation'
-  | 'Health Factor'
-
-export type RiskLevel = 'Low' | 'Medium' | 'High'
-
-export interface AgentMetric {
-  label: string
-  value: string
-  hint: string
-}
-
-export interface Agent {
-  id: string
-  name: string
-  tagline: string
-  category: AgentCategory
-  risk: RiskLevel
-  verified: boolean
-  studioLive: boolean
-  identity: string
-  protocols: string[]
-  fee: string
-  successRate: number
-  activeMandates: number
-  managedValue: string
-  updated: string
-  primaryMetric: AgentMetric
-  metrics: AgentMetric[]
-  sparkline: number[]
-  description: string
-  safeguards: string[]
-  strategyMode?: 'safe-rebalance'
-}
-
 export interface Mandate {
   id: string
-  agentId: string
-  agentName: string
-  budget: number
+  name: string
+  goal: 'preserve' | 'balanced-growth' | 'maximize-growth'
+  riskProfile: 'conservative' | 'balanced' | 'growth'
+  managedAmount: string
   duration: number
-  protocols: string[]
-  status: 'Active' | 'Revoked'
+  status: 'Active' | 'Paused' | 'Revoked'
   createdAt: string
   chainId: number
   smartWallet: `0x${string}`
   sessionPublicKey: `0x${string}`
   expiry: number
+  targetStableBps: number
+  driftBandBps: number
+  maxSlippageBps: number
+  dailyNativeCap: string
+  dailyStableCap: string
   grantTxHash?: `0x${string}`
-  verificationTxHash?: `0x${string}`
-  verificationState?: 'CONFIRMED' | 'PENDING' | 'FAILED' | 'UNAVAILABLE'
-  verificationError?: string
   revokeTxHash?: `0x${string}`
-  strategyId?: 'safe-rebalance'
-  strategyTxHash?: `0x${string}`
-  strategyState?: 'CONFIRMED' | 'PENDING' | 'FAILED' | 'UNAVAILABLE'
-  strategyError?: string
-  inputAmount?: string
-  inputAsset?: string
+  decisions: DecisionRecord[]
+}
+
+export interface DecisionRecord {
+  id: string
+  createdAt: string
+  action: 'BUY_STABLE' | 'BUY_NATIVE' | 'HOLD'
+  state: 'CONFIRMED' | 'FAILED' | 'POLICY_ONLY'
+  rationale: string
+  currentStableBps: number
+  targetStableBps: number
+  projectedStableBps: number
+  amountIn: string
+  inputAsset: 'tBNB' | 'BUSD'
   quotedOutput?: string
   minimumOutput?: string
   outputReceived?: string
-  outputAsset?: string
+  outputAsset: 'tBNB' | 'BUSD'
+  transactionHash?: `0x${string}`
 }

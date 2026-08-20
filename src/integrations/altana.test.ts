@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { parseEther } from 'viem'
+import { buildPortfolioPlan } from '../domain/portfolio'
 import {
   ALTANA_CHAIN_ID,
   ALTANA_KEYSTORE,
   ALTANA_NATIVE_FEE_CAP,
+  BSC_TESTNET_BUSD,
   PANCAKE_V2_ROUTER,
   SAFE_REBALANCE_NATIVE_CAP,
   altanaClient,
+  buildPortfolioPermissions,
   buildSafeRebalancePermissions,
   buildVerificationPermissions,
   grantAndVerifyAltanaMandate,
@@ -75,5 +79,48 @@ describe('Safe Treasury Rebalance mandate', () => {
   it('derives a deterministic 1% minimum output', () => {
     expect(minimumOutputFor(1_000_000n)).toBe(990_000n)
     expect(minimumOutputFor(445_735_144_932_801_459n)).toBe(441_277_793_483_473_444n)
+  })
+})
+
+describe('Dynamic portfolio mandate', () => {
+  const plan = buildPortfolioPlan({
+    snapshot: {
+      nativeBalance: parseEther('0.0115'),
+      stableBalance: 0n,
+      priceStablePerNative: parseEther('450'),
+      updatedAt: '2026-08-20T00:00:00.000Z',
+    },
+    managedAmount: parseEther('0.01'),
+    goal: 'balanced-growth',
+    risk: 'balanced',
+  })
+
+  it('allows only the two PancakeSwap directions and the required BUSD approval', () => {
+    expect(buildPortfolioPermissions(plan).calls).toEqual([
+      {
+        to: PANCAKE_V2_ROUTER,
+        signature: 'swapExactETHForTokens(uint256,address[],address,uint256)',
+      },
+      {
+        to: BSC_TESTNET_BUSD,
+        signature: 'approve(address,uint256)',
+      },
+      {
+        to: PANCAKE_V2_ROUTER,
+        signature: 'swapExactTokensForETH(uint256,uint256,address[],address,uint256)',
+      },
+    ])
+  })
+
+  it('derives native and token daily caps from the managed value', () => {
+    expect(buildPortfolioPermissions(plan).spend).toEqual([
+      { limit: parseEther('0.005'), period: 'day' },
+      { limit: parseEther('2.25'), period: 'day', token: BSC_TESTNET_BUSD },
+    ])
+  })
+
+  it('uses the selected risk profile when calculating minimum output', () => {
+    expect(minimumOutputFor(1_000_000n, 50n)).toBe(995_000n)
+    expect(minimumOutputFor(1_000_000n, 150n)).toBe(985_000n)
   })
 })

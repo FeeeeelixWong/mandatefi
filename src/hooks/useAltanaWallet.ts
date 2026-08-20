@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { formatEther, parseEther, type Address, type Hex } from 'viem'
 import type { AltanaWalletProfile } from '../integrations/altana'
+import type { PortfolioPlan } from '../domain/portfolio'
 import { bscTestnetClient } from '../lib/chains'
 import { sendNativeTransfer, type Eip1193Provider } from '../lib/wallet'
 
@@ -124,6 +125,22 @@ export function useAltanaWallet() {
     }
   }, [profile, refreshBalance])
 
+  const activatePortfolio = useCallback(async (durationDays: number, plan: PortfolioPlan) => {
+    if (!profile) throw new Error('Create or recover the Altana wallet first.')
+    setError('')
+    try {
+      const { grantAndExecutePortfolioPlan } = await import('../integrations/altana')
+      const result = await grantAndExecutePortfolioPlan(profile, durationDays, plan, setStage)
+      await refreshBalance(profile)
+      setStage('idle')
+      return result
+    } catch (operationError) {
+      setError(operationErrorMessage(operationError))
+      setStage('error')
+      throw operationError
+    }
+  }, [profile, refreshBalance])
+
   const revoke = useCallback(async (publicKey: Hex) => {
     if (!profile) throw new Error('Recover the Altana owner passkey before revoking.')
     setStage('revoking')
@@ -143,6 +160,7 @@ export function useAltanaWallet() {
 
   return {
     activate,
+    activatePortfolio,
     address: profile?.wallet.address ?? null,
     balance: displayBalance(balanceWei),
     balanceWei,

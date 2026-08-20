@@ -7,6 +7,7 @@
   --ink: #14211d;
   --muted: #63716c;
   --line: #dce4e0;
+  --app-bg: #f2f5f3;
   --surface: #ffffff;
   --soft: #f6f8f7;
   --sidebar: #11211c;
@@ -27,4 +28,3 @@ button, input, select { font: inherit; letter-spacing: 0; }
 button { color: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 #root { min-height: 100vh; }
-
