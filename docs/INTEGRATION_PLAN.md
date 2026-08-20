@@ -27,11 +27,13 @@ Replace every scenario-only element in the prototype with inspectable BNB Smart 
 
 1. ✅ Connect an EIP-1193 owner wallet and enforce BSC Testnet chain ID 97.
 2. ✅ Read the owner's native tBNB balance from BSC Testnet.
-3. Pin verified protocol contract addresses and function selectors per strategy.
-4. Build a mandate from capital cap, contract allowlist, function selectors, and expiry.
-5. Register the session in the Altana Keystore.
-6. Display the session address, transaction hash, expiry, and remaining allowance.
-7. Execute revoke and confirm the revoked state onchain.
+3. ✅ Pin the initial safe verification target to Altana KeyStore `isValidKey(address,bytes32)`: zero call value, `0.003 tBNB/day` native gas cap, and no token or protocol spend permission.
+4. ✅ Build a public passkey-controlled session with an explicit expiry.
+5. ✅ Implement public session registration in the Altana KeyStore.
+6. ✅ Implement a session-signed verification call and explorer evidence links.
+7. ✅ Implement passkey-authorized revoke and persistence of the revoke receipt.
+8. Run the funded browser flow and publish its grant, execute, and revoke transaction hashes.
+9. Pin verified PancakeSwap/Venus/Lista contract addresses and token-specific spend limits before enabling strategy execution.
 
 ## Phase 3: Strategy Proof
 
@@ -46,7 +48,7 @@ Each action record must include inputs, decision, requested authority, transacti
 
 ## Acceptance Tests
 
-- A disallowed contract call is rejected before wallet signing.
+- The permission builder exposes only the pinned KeyStore verification selector.
 - A call over the capital limit is rejected.
 - An expired or revoked session cannot execute.
 - A permitted action produces a BSC Testnet transaction and receipt.
@@ -58,4 +60,5 @@ Each action record must include inputs, decision, requested authority, transacti
 - `src/hooks/useInjectedWallet.ts`: injected-wallet lifecycle, account/chain events, network switching, and balance refresh.
 - `src/services/erc8004.ts`: public 8004scan API boundary with Zod validation.
 - `src/data/agents.ts`: explicitly simulated strategy catalog until every agent has a registered identity and measured execution evidence.
-- Future `src/integrations/altana.ts`: smart-wallet creation, grant, execute, and revoke calls after all contract targets are verified.
+- `src/integrations/altana.ts`: passkey wallet persistence, public session grant, session verification execution, and revoke.
+- `src/hooks/useAltanaWallet.ts`: browser lifecycle, funding, progress, balance, and safe error handling.

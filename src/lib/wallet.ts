@@ -1,5 +1,5 @@
-import type { Address } from 'viem'
-import { getAddress } from 'viem'
+import type { Address, Hex } from 'viem'
+import { getAddress, toHex } from 'viem'
 import { BSC_TESTNET_WALLET_PARAMS, TARGET_CHAIN_ID_HEX } from './chains'
 
 export type Eip1193Provider = {
@@ -50,6 +50,22 @@ export async function switchToBscTestnet(provider: Eip1193Provider) {
       params: [BSC_TESTNET_WALLET_PARAMS],
     })
   }
+}
+
+export async function sendNativeTransfer(
+  provider: Eip1193Provider,
+  from: Address,
+  to: Address,
+  value: bigint,
+): Promise<Hex> {
+  const result = await provider.request({
+    method: 'eth_sendTransaction',
+    params: [{ from, to, value: toHex(value) }],
+  })
+  if (typeof result !== 'string' || !result.startsWith('0x')) {
+    throw new Error('Wallet returned an invalid transaction hash.')
+  }
+  return result as Hex
 }
 
 export function walletErrorMessage(error: unknown) {

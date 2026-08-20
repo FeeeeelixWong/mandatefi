@@ -89,6 +89,10 @@ export function useInjectedWallet() {
     }
   }, [account, sync])
 
+  const refresh = useCallback(async () => {
+    await sync()
+  }, [sync])
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => { void sync() }, 0)
     return () => window.clearTimeout(timeoutId)
@@ -116,6 +120,8 @@ export function useInjectedWallet() {
     hasProvider: Boolean(provider),
     isConnected: Boolean(account),
     isTargetNetwork: chainId === TARGET_CHAIN.id,
+    provider,
+    refresh,
     status,
     switchNetwork,
   }

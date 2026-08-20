@@ -43,4 +43,13 @@ export interface Mandate {
   protocols: string[]
   status: 'Active' | 'Revoked'
   createdAt: string
+  chainId: number
+  smartWallet: `0x${string}`
+  sessionPublicKey: `0x${string}`
+  expiry: number
+  grantTxHash?: `0x${string}`
+  verificationTxHash?: `0x${string}`
+  verificationState?: 'CONFIRMED' | 'PENDING' | 'FAILED' | 'UNAVAILABLE'
+  verificationError?: string
+  revokeTxHash?: `0x${string}`
 }

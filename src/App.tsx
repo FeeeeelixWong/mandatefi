@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Activity, ArrowLeftRight, ArrowRight, BadgeCheck, Bot, Check, ChevronRight,
   CircleDollarSign, ExternalLink, Filter, Grid2X2, HeartPulse, Info, LayoutGrid,
-  LockKeyhole, Menu, RefreshCw, Search, ShieldCheck, SlidersHorizontal,
-  TrendingUp, Wallet, X, Zap,
+  Fingerprint, Fuel, KeyRound, LoaderCircle, LockKeyhole, Menu, RefreshCw,
+  Search, ShieldCheck, SlidersHorizontal, TrendingUp, Wallet, X, Zap,
 } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer } from 'recharts'
 import { agents } from './data/agents'
 import { use8004Registry } from './hooks/use8004Registry'
+import { useAltanaWallet, type AltanaStage } from './hooks/useAltanaWallet'
 import { useInjectedWallet } from './hooks/useInjectedWallet'
+import { BSC_TESTNET_EXPLORER_URL } from './lib/chains'
 import { shortAddress } from './lib/wallet'
 import type { Agent, AgentCategory, Mandate } from './types'
 import './App.css'
@@ -37,6 +39,38 @@ const activityRows = [
   { agent: 'Yield Scout', action: 'Compared lending routes', result: 'No move · hurdle not met', age: '4 min' },
   { agent: 'Grid Smith', action: 'Filled grid order', result: '+$3.18 realized', age: '7 min' },
 ]
+
+const mandateStorageKey = 'mandatefi.mandates.v1'
+
+function loadMandates(): Mandate[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(mandateStorageKey) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is Mandate => Boolean(
+      item && typeof item === 'object' &&
+      typeof item.smartWallet === 'string' &&
+      typeof item.sessionPublicKey === 'string' &&
+      typeof item.expiry === 'number',
+    ))
+  } catch {
+    return []
+  }
+}
+
+function altanaExplorerTx(hash?: `0x${string}`) {
+  return hash ? `${BSC_TESTNET_EXPLORER_URL}/tx/${hash}` : null
+}
+
+const altanaStageCopy: Record<AltanaStage, string> = {
+  idle: 'Ready',
+  creating: 'Creating passkey wallet…',
+  recovering: 'Recovering passkey wallet…',
+  funding: 'Waiting for funding transaction…',
+  granting: 'Registering session in Altana KeyStore…',
+  executing: 'Verifying session with an onchain call…',
+  revoking: 'Revoking session onchain…',
+  error: 'Action required',
+}
 
 function Sparkline({ values, tone }: { values: number[]; tone: string }) {
   const data = values.map((value, index) => ({ index, value }))
@@ -129,16 +163,30 @@ function DetailDrawer({ agent, onClose, onActivate }: { agent: Agent; onClose: (
   )
 }
 
-function ActivationModal({ agent, account, balance, isTargetNetwork, walletError, onConnect, onSwitchNetwork, onClose, onConfirm }: {
+function ActivationModal({
+  agent, account, balance, isTargetNetwork, walletError, altanaAddress,
+  altanaBalance, altanaFunded, altanaStage, altanaError, isPasskeySupported,
+  onConnect, onSwitchNetwork, onCreateAltana, onRecoverAltana, onFundAltana,
+  onClose, onConfirm,
+}: {
   agent: Agent
   account: `0x${string}` | null
   balance: string | null
   isTargetNetwork: boolean
   walletError: string
+  altanaAddress: `0x${string}` | null
+  altanaBalance: string
+  altanaFunded: boolean
+  altanaStage: AltanaStage
+  altanaError: string
+  isPasskeySupported: boolean
   onConnect: () => void
   onSwitchNetwork: () => void
+  onCreateAltana: () => void
+  onRecoverAltana: () => void
+  onFundAltana: () => void
   onClose: () => void
-  onConfirm: (budget: number, duration: number, protocols: string[]) => void
+  onConfirm: (budget: number, duration: number, protocols: string[]) => Promise<void>
 }) {
   const [step, setStep] = useState(1)
   const [budget, setBudget] = useState(250)
@@ -147,23 +195,42 @@ function ActivationModal({ agent, account, balance, isTargetNetwork, walletError
   function toggleProtocol(protocol: string) {
     setProtocols((current) => current.includes(protocol) ? current.filter((item) => item !== protocol) : [...current, protocol])
   }
+  const altanaBusy = !['idle', 'error'].includes(altanaStage)
+  const readyToRegister = Boolean(account && isTargetNetwork && altanaAddress && altanaFunded)
   return (
-    <div className="modal-scrim" onMouseDown={onClose}>
+    <div className="modal-scrim" onMouseDown={() => { if (!altanaBusy) onClose() }}>
       <div className="activation-modal" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="modal-header"><div><span className="eyebrow">Activate {agent.name}</span><h2>{step === 1 ? 'Define the mandate' : step === 2 ? 'Review authority' : 'Ready to register'}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close activation"><X size={19} /></button></div>
+        <div className="modal-header"><div><span className="eyebrow">Activate {agent.name}</span><h2>{step === 1 ? 'Define the mandate' : step === 2 ? 'Review authority' : 'Ready to register'}</h2></div><button className="icon-button" disabled={altanaBusy} onClick={onClose} aria-label="Close activation"><X size={19} /></button></div>
         <div className="stepper" aria-label={`Step ${step} of 3`}>{[1, 2, 3].map((item) => <span key={item} className={item <= step ? 'active' : ''}>{item < step ? <Check size={14} /> : item}</span>)}</div>
         {step === 1 && <div className="modal-body">
-          <label className="field-label">Maximum capital<div className="money-input"><span>$</span><input type="number" min="10" value={budget} onChange={(event) => setBudget(Number(event.target.value))} /></div><small>The session key cannot move more than this amount.</small></label>
+          <label className="field-label">Strategy capital policy<div className="money-input"><span>$</span><input type="number" min="10" value={budget} onChange={(event) => setBudget(Number(event.target.value))} /></div><small>Recorded as the strategy-level budget. Token-specific onchain limits arrive with the protocol execution adapter.</small></label>
           <label className="field-label">Permission expires<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}><option value={1}>After 24 hours</option><option value={7}>After 7 days</option><option value={30}>After 30 days</option></select></label>
-          <fieldset className="protocol-fieldset"><legend>Allowed contracts</legend>{agent.protocols.map((protocol) => <label key={protocol}><input type="checkbox" checked={protocols.includes(protocol)} onChange={() => toggleProtocol(protocol)} /><span><Check size={14} /></span>{protocol}</label>)}</fieldset>
+          <fieldset className="protocol-fieldset"><legend>Strategy protocol policy</legend>{agent.protocols.map((protocol) => <label key={protocol}><input type="checkbox" checked={protocols.includes(protocol)} onChange={() => toggleProtocol(protocol)} /><span><Check size={14} /></span>{protocol}</label>)}</fieldset>
           <div className="callout"><LockKeyhole size={18} /><span>Your wallet keeps custody. The agent receives only scoped, revocable authority.</span></div>
         </div>}
         {step === 2 && <div className="modal-body">
-          <div className="review-list"><div><span>Agent</span><strong>{agent.name}</strong></div><div><span>Capital limit</span><strong>${budget.toLocaleString()}</strong></div><div><span>Expiry</span><strong>{duration} day{duration > 1 ? 's' : ''}</strong></div><div><span>Contracts</span><strong>{protocols.join(', ')}</strong></div><div><span>Network</span><strong>BNB Smart Chain Testnet</strong></div></div>
-          <div className="simulation-result"><ShieldCheck size={22} /><div><strong>Demo authority check passed</strong><span>No unlimited approvals or unlisted contract calls appear in this simulated mandate.</span></div></div>
+          <div className="review-list"><div><span>Agent</span><strong>{agent.name}</strong></div><div><span>Strategy budget</span><strong>${budget.toLocaleString()}</strong></div><div><span>Expiry</span><strong>{duration} day{duration > 1 ? 's' : ''}</strong></div><div><span>Protocol policy</span><strong>{protocols.join(', ')}</strong></div><div><span>Network</span><strong>BNB Smart Chain Testnet</strong></div></div>
+          <div className="simulation-result live"><ShieldCheck size={22} /><div><strong>Safe verification scope</strong><span>This release registers one public Altana session limited to KeyStore `isValidKey`. The verification call sends zero value, while native gas is capped at 0.003 tBNB per day. Strategy protocol transactions remain the next adapter milestone.</span></div></div>
         </div>}
-        {step === 3 && <div className="modal-body final-step"><div className="final-icon"><Wallet size={30} /></div><h3>{!account ? 'Connect the owner wallet' : isTargetNetwork ? 'Owner wallet ready' : 'Switch to BSC Testnet'}</h3><p>{!account ? 'Connect an injected EVM wallet to verify the mandate owner.' : isTargetNetwork ? 'The owner account and network are verified. This build saves a local mandate draft; Altana onchain session registration is the next integration step.' : 'MandateFi is currently developing against BNB Smart Chain Testnet (chain ID 97).'}</p>{account && <div className="wallet-proof"><span>Owner</span><strong>{shortAddress(account)}</strong><span>Balance</span><strong>{balance === null ? 'Reading…' : `${balance} tBNB`}</strong></div>}{!account ? <button className="wallet-connect-large" onClick={onConnect}><Wallet size={18} /> Connect wallet</button> : !isTargetNetwork ? <button className="wallet-connect-large" onClick={onSwitchNetwork}><RefreshCw size={18} /> Switch network</button> : null}{walletError && <span className="wallet-error">{walletError}</span>}</div>}
-        <div className="modal-footer">{step > 1 ? <button className="secondary-button" onClick={() => setStep(step - 1)}>Back</button> : <span />}{step < 3 ? <button className="primary-button large" disabled={step === 1 && protocols.length === 0} onClick={() => setStep(step + 1)}>Continue <ChevronRight size={17} /></button> : <button className="primary-button large" disabled={!account || !isTargetNetwork} onClick={() => onConfirm(budget, duration, protocols)}>Save mandate draft <Check size={16} /></button>}</div>
+        {step === 3 && <div className="modal-body final-step">
+          <div className="final-icon"><Fingerprint size={30} /></div>
+          <h3>Prepare the onchain owner account</h3>
+          <p>The injected wallet supplies test gas. A device passkey controls the Altana smart wallet and authorizes every grant or revoke.</p>
+          <div className="setup-checklist">
+            <div className={account && isTargetNetwork ? 'complete' : ''}><span>{account && isTargetNetwork ? <Check size={15} /> : <Wallet size={15} />}</span><div><strong>Funding wallet</strong><small>{account ? `${shortAddress(account)} · ${isTargetNetwork ? 'BSC Testnet' : 'wrong network'}` : 'Not connected'}</small></div></div>
+            <div className={altanaAddress ? 'complete' : ''}><span>{altanaAddress ? <Check size={15} /> : <KeyRound size={15} />}</span><div><strong>Passkey smart wallet</strong><small>{altanaAddress ? shortAddress(altanaAddress) : 'Not created'}</small></div></div>
+            <div className={altanaFunded ? 'complete' : ''}><span>{altanaFunded ? <Check size={15} /> : <Fuel size={15} />}</span><div><strong>Execution balance</strong><small>{altanaAddress ? `${altanaBalance} tBNB` : 'Fund after creation'}</small></div></div>
+          </div>
+          {account && <div className="wallet-proof"><span>Funding wallet</span><strong>{shortAddress(account)}</strong><span>Balance</span><strong>{balance === null ? 'Reading…' : `${balance} tBNB`}</strong>{altanaAddress && <><span>Altana wallet</span><strong title={altanaAddress}>{shortAddress(altanaAddress)}</strong></>}</div>}
+          {!account ? <button className="wallet-connect-large" onClick={onConnect}><Wallet size={18} /> Connect wallet</button>
+            : !isTargetNetwork ? <button className="wallet-connect-large" onClick={onSwitchNetwork}><RefreshCw size={18} /> Switch network</button>
+              : !altanaAddress ? <div className="passkey-actions"><button className="wallet-connect-large" disabled={!isPasskeySupported || altanaBusy} onClick={onCreateAltana}>{altanaStage === 'creating' ? <LoaderCircle className="spin" size={18} /> : <Fingerprint size={18} />} Create passkey wallet</button><button className="text-button" disabled={!isPasskeySupported || altanaBusy} onClick={onRecoverAltana}>Recover existing wallet</button></div>
+                : !altanaFunded ? <button className="wallet-connect-large" disabled={altanaBusy} onClick={onFundAltana}>{altanaStage === 'funding' ? <LoaderCircle className="spin" size={18} /> : <Fuel size={18} />} Fund 0.01 tBNB</button> : null}
+          {altanaBusy && <div className="operation-status"><LoaderCircle className="spin" size={16} /> {altanaStageCopy[altanaStage]}</div>}
+          {!isPasskeySupported && <span className="wallet-error">This browser does not expose WebAuthn passkeys.</span>}
+          {(walletError || altanaError) && <span className="wallet-error">{walletError || altanaError}</span>}
+        </div>}
+        <div className="modal-footer">{step > 1 ? <button className="secondary-button" disabled={altanaBusy} onClick={() => setStep(step - 1)}>Back</button> : <span />}{step < 3 ? <button className="primary-button large" disabled={step === 1 && protocols.length === 0} onClick={() => setStep(step + 1)}>Continue <ChevronRight size={17} /></button> : <button className="primary-button large" disabled={!readyToRegister || altanaBusy} onClick={() => void onConfirm(budget, duration, protocols)}>{altanaBusy ? <LoaderCircle className="spin" size={16} /> : <KeyRound size={16} />} {altanaBusy ? altanaStageCopy[altanaStage] : 'Register onchain'}</button>}</div>
       </div>
     </div>
   )
@@ -184,8 +251,8 @@ function CompareView({ selected, onOpen, onClear }: { selected: Agent[]; onOpen:
   </div>
 }
 
-function MandatesView({ mandates, onRevoke }: { mandates: Mandate[]; onRevoke: (id: string) => void }) {
-  return <div><div className="view-title-row"><div><span className="eyebrow">Owner control</span><h1>My mandates</h1></div></div>{mandates.length === 0 ? <div className="empty-state"><div className="empty-icon"><ShieldCheck size={26} /></div><h2>No active mandates</h2><p>Activate an agent to register a scoped session with a spend cap, contract allowlist, and expiry.</p></div> : <div className="mandate-list">{mandates.map((mandate) => <article key={mandate.id} className="mandate-row"><div className="mandate-icon"><Bot size={20} /></div><div className="mandate-main"><strong>{mandate.agentName}</strong><span>{mandate.protocols.join(' · ')}</span></div><div><span>Capital limit</span><strong>${mandate.budget.toLocaleString()}</strong></div><div><span>Expires</span><strong>{mandate.duration} days</strong></div><div><span>Status</span><strong className={mandate.status === 'Active' ? 'status-active' : 'status-revoked'}>{mandate.status}</strong></div><button className="danger-button" disabled={mandate.status === 'Revoked'} onClick={() => onRevoke(mandate.id)}>Revoke</button></article>)}</div>}</div>
+function MandatesView({ mandates, revokingId, onRevoke }: { mandates: Mandate[]; revokingId: string; onRevoke: (id: string) => void }) {
+  return <div><div className="view-title-row"><div><span className="eyebrow">Owner control</span><h1>My mandates</h1></div><span className="live-status"><i className="online" /> Altana onchain</span></div>{mandates.length === 0 ? <div className="empty-state"><div className="empty-icon"><ShieldCheck size={26} /></div><h2>No onchain mandates</h2><p>Activate an agent to register a public, scoped Altana session on BSC Testnet.</p></div> : <div className="mandate-list">{mandates.map((mandate) => <article key={mandate.id} className="mandate-row-wrap"><div className="mandate-row"><div className="mandate-icon"><Bot size={20} /></div><div className="mandate-main"><strong>{mandate.agentName}</strong><span>{mandate.protocols.join(' · ')}</span></div><div><span>Strategy budget</span><strong>${mandate.budget.toLocaleString()}</strong></div><div><span>Expires</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div><div><span>Status</span><strong className={mandate.status === 'Active' ? 'status-active' : 'status-revoked'}>{mandate.status}</strong></div><button className="danger-button" disabled={mandate.status === 'Revoked' || revokingId === mandate.id} onClick={() => onRevoke(mandate.id)}>{revokingId === mandate.id ? <LoaderCircle className="spin" size={14} /> : null}{revokingId === mandate.id ? 'Revoking' : 'Revoke'}</button></div><div className="mandate-evidence"><span><KeyRound size={14} /> Smart wallet {shortAddress(mandate.smartWallet)} · verification {(mandate.verificationState ?? (mandate.verificationTxHash ? 'CONFIRMED' : 'UNAVAILABLE')).toLowerCase()}</span>{mandate.grantTxHash && <a href={altanaExplorerTx(mandate.grantTxHash) ?? '#'} target="_blank" rel="noreferrer">Grant tx <ExternalLink size={12} /></a>}{mandate.verificationTxHash && <a href={altanaExplorerTx(mandate.verificationTxHash) ?? '#'} target="_blank" rel="noreferrer">Session execution <ExternalLink size={12} /></a>}{mandate.revokeTxHash && <a href={altanaExplorerTx(mandate.revokeTxHash) ?? '#'} target="_blank" rel="noreferrer">Revoke tx <ExternalLink size={12} /></a>}</div></article>)}</div>}</div>
 }
 
 function ActivityView() {
@@ -200,10 +267,16 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [activationAgent, setActivationAgent] = useState<Agent | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [mandates, setMandates] = useState<Mandate[]>([])
+  const [mandates, setMandates] = useState<Mandate[]>(loadMandates)
+  const [revokingId, setRevokingId] = useState('')
   const [notice, setNotice] = useState('')
   const wallet = useInjectedWallet()
+  const altana = useAltanaWallet()
   const registry = use8004Registry()
+
+  useEffect(() => {
+    localStorage.setItem(mandateStorageKey, JSON.stringify(mandates))
+  }, [mandates])
 
   const filteredAgents = useMemo(() => agents.filter((agent) => {
     const categoryMatch = category === 'All agents' || agent.category === category
@@ -221,15 +294,64 @@ function App() {
     })
   }
 
-  function confirmMandate(budget: number, duration: number, protocols: string[]) {
+  async function confirmMandate(budget: number, duration: number, protocols: string[]) {
     if (!activationAgent) return
-    setMandates((current) => [{ id: crypto.randomUUID(), agentId: activationAgent.id, agentName: activationAgent.name, budget, duration, protocols, status: 'Active', createdAt: new Date().toISOString() }, ...current])
-    setActivationAgent(null); setSelectedAgent(null); setNotice(`${activationAgent.name} mandate draft saved. Altana session registration is not active yet.`); setView('mandates')
+    try {
+      const proof = await altana.activate(duration)
+      setMandates((current) => [{
+        id: crypto.randomUUID(),
+        agentId: activationAgent.id,
+        agentName: activationAgent.name,
+        budget,
+        duration,
+        protocols,
+        status: 'Active',
+        createdAt: new Date().toISOString(),
+        chainId: 97,
+        smartWallet: proof.session.walletAddress,
+        sessionPublicKey: proof.session.publicKey,
+        expiry: proof.session.expiry,
+        grantTxHash: proof.grant.transactionHash,
+        verificationTxHash: proof.verification?.transactionHash,
+        verificationState: proof.verification?.status ?? 'UNAVAILABLE',
+        verificationError: proof.verificationError,
+      }, ...current])
+      setActivationAgent(null)
+      setSelectedAgent(null)
+      setNotice(proof.verification?.status === 'CONFIRMED'
+        ? `${activationAgent.name} session registered and verified on BSC Testnet.`
+        : `${activationAgent.name} session registered. Verification evidence is unavailable; the mandate remains revocable.`)
+      setView('mandates')
+    } catch {
+      // The hook keeps the detailed, user-visible failure state in the modal.
+    }
   }
 
-  function revokeMandate(id: string) {
-    setMandates((current) => current.map((mandate) => mandate.id === id ? { ...mandate, status: 'Revoked' } : mandate))
-    setNotice('Demo mandate revoked locally.')
+  async function revokeMandate(id: string) {
+    const mandate = mandates.find((item) => item.id === id)
+    if (!mandate) return
+    setRevokingId(id)
+    try {
+      const result = await altana.revoke(mandate.sessionPublicKey)
+      if (result.status === 'FAILED') throw new Error('Altana reported a failed revoke transaction.')
+      setMandates((current) => current.map((item) => item.id === id ? { ...item, status: 'Revoked', revokeTxHash: result.transactionHash } : item))
+      setNotice(`${mandate.agentName} session revoked on BSC Testnet.`)
+    } catch {
+      // The Altana hook exposes the exact error in the global toast.
+    } finally {
+      setRevokingId('')
+    }
+  }
+
+  async function fundAltanaWallet() {
+    if (!wallet.provider || !wallet.account) return
+    try {
+      await altana.fund(wallet.provider, wallet.account)
+      await wallet.refresh()
+      setNotice('Altana smart wallet funded with 0.01 tBNB.')
+    } catch {
+      // Errors are presented by the Altana hook.
+    }
   }
 
   const navItems: Array<{ id: View; label: string; icon: typeof Bot }> = [
@@ -241,8 +363,8 @@ function App() {
     <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
       <div className="brand-block"><div className="brand-mark">M</div><div><strong>MandateFi</strong><span>BNB Agent Market</span></div><button className="icon-button mobile-close" onClick={() => setMenuOpen(false)} aria-label="Close menu"><X size={19} /></button></div>
       <nav className="primary-nav">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => { setView(item.id); setMenuOpen(false) }}><Icon size={18} /><span>{item.label}</span>{item.id === 'compare' && comparedIds.length > 0 && <b>{comparedIds.length}</b>}</button> })}</nav>
-      <div className="network-panel"><div className="network-row"><span><i className={wallet.isTargetNetwork ? 'online' : ''} /> BNB Smart Chain</span><strong>{wallet.isTargetNetwork ? 'Testnet connected' : 'Testnet target'}</strong></div><div className="network-row"><span>8004scan</span><strong>{registry.snapshot ? 'Live' : registry.loading ? 'Connecting' : 'Unavailable'}</strong></div><div className="network-row"><span>Altana sessions</span><strong>Next milestone</strong></div></div>
-      <div className="sidebar-foot"><ShieldCheck size={18} /><div><strong>Bounded by design</strong><span>Every activation has a cap, allowlist, and expiry.</span></div></div>
+      <div className="network-panel"><div className="network-row"><span><i className={wallet.isTargetNetwork ? 'online' : ''} /> BNB Smart Chain</span><strong>{wallet.isTargetNetwork ? 'Testnet connected' : 'Testnet target'}</strong></div><div className="network-row"><span>8004scan</span><strong>{registry.snapshot ? 'Live' : registry.loading ? 'Connecting' : 'Unavailable'}</strong></div><div className="network-row"><span>Altana sessions</span><strong>{altana.address ? 'Wallet ready' : 'Passkey ready'}</strong></div></div>
+      <div className="sidebar-foot"><ShieldCheck size={18} /><div><strong>Bounded by design</strong><span>Every onchain session has scoped calls, expiry, and owner revoke.</span></div></div>
     </aside>
     <main className="main-area">
       <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></button><div className="breadcrumb"><span>MandateFi</span><ChevronRight size={14} /><strong>{navItems.find((item) => item.id === view)?.label}</strong></div><div className="topbar-actions"><span className="prototype-badge">Prototype</span><button className="icon-button" title="Strategy outcomes are scenario data; wallet and 8004scan connections are live"><Info size={18} /></button><button className={wallet.isConnected ? 'wallet-button connected' : 'wallet-button'} disabled={wallet.status === 'connecting'} onClick={() => wallet.isConnected && !wallet.isTargetNetwork ? void wallet.switchNetwork() : !wallet.isConnected ? void wallet.connect() : undefined} title={wallet.isConnected && !wallet.isTargetNetwork ? 'Switch to BNB Smart Chain Testnet' : wallet.account ?? 'Connect an injected EVM wallet'}><Wallet size={17} />{wallet.status === 'connecting' ? 'Connecting…' : wallet.account ? shortAddress(wallet.account) : 'Connect wallet'}</button></div></header>
@@ -257,15 +379,16 @@ function App() {
           {filteredAgents.length === 0 && <div className="empty-state compact"><Search size={26} /><h2>No matching agents</h2><p>Try a protocol name or clear the current category.</p></div>}
         </>}
         {view === 'compare' && <CompareView selected={comparedAgents} onOpen={setSelectedAgent} onClear={() => setComparedIds([])} />}
-        {view === 'mandates' && <MandatesView mandates={mandates} onRevoke={revokeMandate} />}
+        {view === 'mandates' && <MandatesView mandates={mandates} revokingId={revokingId} onRevoke={(id) => void revokeMandate(id)} />}
         {view === 'activity' && <ActivityView />}
       </div>
     </main>
     {comparedIds.length > 0 && view === 'marketplace' && <div className="compare-tray"><div><ArrowLeftRight size={18} /><strong>{comparedIds.length} selected</strong><span>{comparedAgents.map((agent) => agent.name).join(' · ')}</span></div><button className="primary-button" disabled={comparedIds.length < 2} onClick={() => setView('compare')}>Compare now <ArrowRight size={16} /></button></div>}
     {selectedAgent && <DetailDrawer agent={selectedAgent} onClose={() => setSelectedAgent(null)} onActivate={() => { setActivationAgent(selectedAgent); setSelectedAgent(null) }} />}
-    {activationAgent && <ActivationModal agent={activationAgent} account={wallet.account} balance={wallet.balance} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} onConnect={() => void wallet.connect()} onSwitchNetwork={() => void wallet.switchNetwork()} onClose={() => setActivationAgent(null)} onConfirm={confirmMandate} />}
+    {activationAgent && <ActivationModal agent={activationAgent} account={wallet.account} balance={wallet.balance} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} altanaAddress={altana.address} altanaBalance={altana.balance} altanaFunded={altana.hasMinimumBalance} altanaStage={altana.stage} altanaError={altana.error} isPasskeySupported={altana.isPasskeySupported} onConnect={() => void wallet.connect()} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={() => void fundAltanaWallet()} onClose={() => { setActivationAgent(null); wallet.clearError(); altana.clearError() }} onConfirm={confirmMandate} />}
     {notice && <div className="toast"><Check size={17} /><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15} /></button></div>}
-    {wallet.error && <div className="toast error-toast"><Info size={17} /><span>{wallet.error}</span><button onClick={wallet.clearError} aria-label="Dismiss wallet error"><X size={15} /></button></div>}
+    {wallet.error && !activationAgent && <div className="toast error-toast"><Info size={17} /><span>{wallet.error}</span><button onClick={wallet.clearError} aria-label="Dismiss wallet error"><X size={15} /></button></div>}
+    {altana.error && !activationAgent && <div className="toast error-toast"><Info size={17} /><span>{altana.error}</span><button onClick={altana.clearError} aria-label="Dismiss Altana error"><X size={15} /></button></div>}
   </div>
 }
 
