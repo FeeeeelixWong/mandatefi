@@ -1,5 +1,5 @@
 :root {
-  font-family: Kanit, Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #280d5f;
   background: #f5f7ff;
   font-synthesis: none;
@@ -33,6 +33,7 @@
 html { min-width: 320px; background: #f5f7ff; }
 body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; }
 button, input, select { font: inherit; letter-spacing: 0; }
+h1, h2, h3, .header-brand strong { font-family: Kanit, Inter, ui-sans-serif, sans-serif; letter-spacing: 0; }
 button { color: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 #root { min-height: 100vh; }
