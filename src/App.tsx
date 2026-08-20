@@ -123,7 +123,7 @@ function EmptyPortfolio({ onCreate }: { onCreate: () => void }) {
     <section className="launch-intro">
       <span className="product-kicker"><Sparkles size={15} /> Non-custodial AI asset manager</span>
       <h1>AI manages your onchain portfolio.<br />You set the rules.</h1>
-      <p>Choose how much to manage and how much risk to take. MandateFi rebalances through PancakeSwap within a revocable policy that you control.</p>
+      <p>Choose a goal and risk level. MandateFi keeps your BNB/BUSD allocation inside the approved band and uses PancakeSwap only when a bounded rebalance is required.</p>
     </section>
     <section className="launch-workspace" aria-label="Example AI mandate">
       <div className="launch-card">
@@ -137,7 +137,7 @@ function EmptyPortfolio({ onCreate }: { onCreate: () => void }) {
         <div className="preview-head"><span>Live policy preview</span><strong>Balanced risk</strong></div>
         <div className="preview-value"><span>Target allocation</span><strong>45% BUSD</strong><small>Rebalance only outside the 37%–53% band</small></div>
         <AllocationBar stableBps={4500n} targetBps={4500n} compact />
-        <div className="preview-policy-list"><div><LockKeyhole size={16} /><span>Allowed venue</span><strong>PancakeSwap V2</strong></div><div><ArrowDownUp size={16} /><span>Daily trade cap</span><strong>0.005 tBNB</strong></div><div><Clock3 size={16} /><span>Policy expiry</span><strong>14 days</strong></div></div>
+        <div className="preview-policy-list"><div><LockKeyhole size={16} /><span>Rebalance venue</span><strong>PancakeSwap V2</strong></div><div><ArrowDownUp size={16} /><span>Daily rebalance cap</span><strong>0.005 tBNB</strong></div><div><Clock3 size={16} /><span>Policy expiry</span><strong>14 days</strong></div></div>
       </aside>
     </section>
     <div className="launch-trust"><span><Fingerprint size={17} /><b>Passkey owned</b><small>You remain the smart-wallet admin.</small></span><span><LockKeyhole size={17} /><b>Precisely scoped</b><small>Contracts, methods and caps are explicit.</small></span><span><Activity size={17} /><b>Explainable</b><small>Every hold or trade has evidence.</small></span></div>
