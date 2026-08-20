@@ -7,6 +7,9 @@ import {
 } from 'lucide-react'
 import { Line, LineChart, ResponsiveContainer } from 'recharts'
 import { agents } from './data/agents'
+import { use8004Registry } from './hooks/use8004Registry'
+import { useInjectedWallet } from './hooks/useInjectedWallet'
+import { shortAddress } from './lib/wallet'
 import type { Agent, AgentCategory, Mandate } from './types'
 import './App.css'
 
@@ -126,8 +129,16 @@ function DetailDrawer({ agent, onClose, onActivate }: { agent: Agent; onClose: (
   )
 }
 
-function ActivationModal({ agent, connected, onConnect, onClose, onConfirm }: {
-  agent: Agent; connected: boolean; onConnect: () => void; onClose: () => void; onConfirm: (budget: number, duration: number, protocols: string[]) => void
+function ActivationModal({ agent, account, balance, isTargetNetwork, walletError, onConnect, onSwitchNetwork, onClose, onConfirm }: {
+  agent: Agent
+  account: `0x${string}` | null
+  balance: string | null
+  isTargetNetwork: boolean
+  walletError: string
+  onConnect: () => void
+  onSwitchNetwork: () => void
+  onClose: () => void
+  onConfirm: (budget: number, duration: number, protocols: string[]) => void
 }) {
   const [step, setStep] = useState(1)
   const [budget, setBudget] = useState(250)
@@ -151,8 +162,8 @@ function ActivationModal({ agent, connected, onConnect, onClose, onConfirm }: {
           <div className="review-list"><div><span>Agent</span><strong>{agent.name}</strong></div><div><span>Capital limit</span><strong>${budget.toLocaleString()}</strong></div><div><span>Expiry</span><strong>{duration} day{duration > 1 ? 's' : ''}</strong></div><div><span>Contracts</span><strong>{protocols.join(', ')}</strong></div><div><span>Network</span><strong>BNB Smart Chain Testnet</strong></div></div>
           <div className="simulation-result"><ShieldCheck size={22} /><div><strong>Demo authority check passed</strong><span>No unlimited approvals or unlisted contract calls appear in this simulated mandate.</span></div></div>
         </div>}
-        {step === 3 && <div className="modal-body final-step"><div className="final-icon"><Wallet size={30} /></div><h3>{connected ? 'Demo wallet connected' : 'Connect the demo owner wallet'}</h3><p>{connected ? 'The prototype will save this scoped mandate locally. Altana Keystore registration is the next integration milestone.' : 'Preview the owner-controlled registration and revocation flow without submitting a transaction.'}</p>{!connected && <button className="wallet-connect-large" onClick={onConnect}><Wallet size={18} /> Connect demo wallet</button>}</div>}
-        <div className="modal-footer">{step > 1 ? <button className="secondary-button" onClick={() => setStep(step - 1)}>Back</button> : <span />}{step < 3 ? <button className="primary-button large" disabled={step === 1 && protocols.length === 0} onClick={() => setStep(step + 1)}>Continue <ChevronRight size={17} /></button> : <button className="primary-button large" disabled={!connected} onClick={() => onConfirm(budget, duration, protocols)}>Create demo mandate <Check size={16} /></button>}</div>
+        {step === 3 && <div className="modal-body final-step"><div className="final-icon"><Wallet size={30} /></div><h3>{!account ? 'Connect the owner wallet' : isTargetNetwork ? 'Owner wallet ready' : 'Switch to BSC Testnet'}</h3><p>{!account ? 'Connect an injected EVM wallet to verify the mandate owner.' : isTargetNetwork ? 'The owner account and network are verified. This build saves a local mandate draft; Altana onchain session registration is the next integration step.' : 'MandateFi is currently developing against BNB Smart Chain Testnet (chain ID 97).'}</p>{account && <div className="wallet-proof"><span>Owner</span><strong>{shortAddress(account)}</strong><span>Balance</span><strong>{balance === null ? 'Reading…' : `${balance} tBNB`}</strong></div>}{!account ? <button className="wallet-connect-large" onClick={onConnect}><Wallet size={18} /> Connect wallet</button> : !isTargetNetwork ? <button className="wallet-connect-large" onClick={onSwitchNetwork}><RefreshCw size={18} /> Switch network</button> : null}{walletError && <span className="wallet-error">{walletError}</span>}</div>}
+        <div className="modal-footer">{step > 1 ? <button className="secondary-button" onClick={() => setStep(step - 1)}>Back</button> : <span />}{step < 3 ? <button className="primary-button large" disabled={step === 1 && protocols.length === 0} onClick={() => setStep(step + 1)}>Continue <ChevronRight size={17} /></button> : <button className="primary-button large" disabled={!account || !isTargetNetwork} onClick={() => onConfirm(budget, duration, protocols)}>Save mandate draft <Check size={16} /></button>}</div>
       </div>
     </div>
   )
@@ -188,10 +199,11 @@ function App() {
   const [comparedIds, setComparedIds] = useState<string[]>([])
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [activationAgent, setActivationAgent] = useState<Agent | null>(null)
-  const [connected, setConnected] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [mandates, setMandates] = useState<Mandate[]>([])
   const [notice, setNotice] = useState('')
+  const wallet = useInjectedWallet()
+  const registry = use8004Registry()
 
   const filteredAgents = useMemo(() => agents.filter((agent) => {
     const categoryMatch = category === 'All agents' || agent.category === category
@@ -212,7 +224,7 @@ function App() {
   function confirmMandate(budget: number, duration: number, protocols: string[]) {
     if (!activationAgent) return
     setMandates((current) => [{ id: crypto.randomUUID(), agentId: activationAgent.id, agentName: activationAgent.name, budget, duration, protocols, status: 'Active', createdAt: new Date().toISOString() }, ...current])
-    setActivationAgent(null); setSelectedAgent(null); setNotice(`${activationAgent.name} demo mandate created. Onchain registration is not active yet.`); setView('mandates')
+    setActivationAgent(null); setSelectedAgent(null); setNotice(`${activationAgent.name} mandate draft saved. Altana session registration is not active yet.`); setView('mandates')
   }
 
   function revokeMandate(id: string) {
@@ -229,16 +241,17 @@ function App() {
     <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
       <div className="brand-block"><div className="brand-mark">M</div><div><strong>MandateFi</strong><span>BNB Agent Market</span></div><button className="icon-button mobile-close" onClick={() => setMenuOpen(false)} aria-label="Close menu"><X size={19} /></button></div>
       <nav className="primary-nav">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => { setView(item.id); setMenuOpen(false) }}><Icon size={18} /><span>{item.label}</span>{item.id === 'compare' && comparedIds.length > 0 && <b>{comparedIds.length}</b>}</button> })}</nav>
-      <div className="network-panel"><div className="network-row"><span><i /> BNB Smart Chain</span><strong>Testnet target</strong></div><div className="network-row"><span>Demo agents</span><strong>8</strong></div><div className="network-row"><span>Integration</span><strong>In progress</strong></div></div>
+      <div className="network-panel"><div className="network-row"><span><i className={wallet.isTargetNetwork ? 'online' : ''} /> BNB Smart Chain</span><strong>{wallet.isTargetNetwork ? 'Testnet connected' : 'Testnet target'}</strong></div><div className="network-row"><span>8004scan</span><strong>{registry.snapshot ? 'Live' : registry.loading ? 'Connecting' : 'Unavailable'}</strong></div><div className="network-row"><span>Altana sessions</span><strong>Next milestone</strong></div></div>
       <div className="sidebar-foot"><ShieldCheck size={18} /><div><strong>Bounded by design</strong><span>Every activation has a cap, allowlist, and expiry.</span></div></div>
     </aside>
     <main className="main-area">
-      <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></button><div className="breadcrumb"><span>MandateFi</span><ChevronRight size={14} /><strong>{navItems.find((item) => item.id === view)?.label}</strong></div><div className="topbar-actions"><span className="prototype-badge">Prototype</span><button className="icon-button" title="Current catalog uses simulated data while BSC integrations are being built"><Info size={18} /></button><button className={connected ? 'wallet-button connected' : 'wallet-button'} onClick={() => setConnected(!connected)}><Wallet size={17} />{connected ? 'Demo connected' : 'Try wallet flow'}</button></div></header>
+      <header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></button><div className="breadcrumb"><span>MandateFi</span><ChevronRight size={14} /><strong>{navItems.find((item) => item.id === view)?.label}</strong></div><div className="topbar-actions"><span className="prototype-badge">Prototype</span><button className="icon-button" title="Strategy outcomes are scenario data; wallet and 8004scan connections are live"><Info size={18} /></button><button className={wallet.isConnected ? 'wallet-button connected' : 'wallet-button'} disabled={wallet.status === 'connecting'} onClick={() => wallet.isConnected && !wallet.isTargetNetwork ? void wallet.switchNetwork() : !wallet.isConnected ? void wallet.connect() : undefined} title={wallet.isConnected && !wallet.isTargetNetwork ? 'Switch to BNB Smart Chain Testnet' : wallet.account ?? 'Connect an injected EVM wallet'}><Wallet size={17} />{wallet.status === 'connecting' ? 'Connecting…' : wallet.account ? shortAddress(wallet.account) : 'Connect wallet'}</button></div></header>
       <div className="page-content">
         {view === 'marketplace' && <>
-          <section className="market-heading"><div><span className="eyebrow">BNB Smart Money Era prototype</span><h1>Find the right DeFi agent.<br />Set the limits yourself.</h1><p>Compare four strategy types, then preview a bounded mandate with a spend cap, allowlist, expiry, and revoke control.</p></div><div className="market-stats"><div><span>Demo agents</span><strong>8</strong><small>4 required categories</small></div><div><span>Strategy types</span><strong>4</strong><small>equal marketplace depth</small></div><div><span>Owner controls</span><strong>4</strong><small>cap · allowlist · expiry · revoke</small></div></div></section>
+          <section className="market-heading"><div><span className="eyebrow">BNB Smart Money Era prototype</span><h1>Find the right DeFi agent.<br />Set the limits yourself.</h1><p>Compare four strategy types, then preview a bounded mandate with a spend cap, allowlist, expiry, and revoke control.</p></div><div className="market-stats"><div><span>BNB agent identities</span><strong>{registry.snapshot ? registry.snapshot.total.toLocaleString() : '—'}</strong><small>{registry.snapshot ? 'live from 8004scan' : 'registry connection pending'}</small></div><div><span>Strategy types</span><strong>4</strong><small>equal marketplace depth</small></div><div><span>Owner controls</span><strong>4</strong><small>cap · allowlist · expiry · revoke</small></div></div></section>
+          {registry.snapshot && <section className="registry-strip"><div><BadgeCheck size={17} /><span><strong>Live ERC-8004 registry</strong><small>Latest BNB identities, separate from the scenario strategy catalog</small></span></div><div className="registry-agent-list">{registry.snapshot.agents.slice(0, 3).map((agent) => <span key={agent.token_id}>{agent.name || `Agent #${agent.token_id}`} <b>#{agent.token_id}</b></span>)}</div><a href="https://8004scan.io/agents" target="_blank" rel="noreferrer">Open 8004scan <ExternalLink size={13} /></a></section>}
           <section className="category-strip" aria-label="Agent categories">{categories.map((item) => { const Icon = item.icon; const count = item.label === 'All agents' ? agents.length : agents.filter((agent) => agent.category === item.label).length; return <button key={item.label} className={category === item.label ? 'active' : ''} onClick={() => setCategory(item.label)}><Icon size={17} /><span>{item.label}</span><b>{count}</b></button> })}</section>
-          <div className="toolbar"><label className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search agents or protocols" /></label><div className="toolbar-right"><span className="freshness"><i /> Simulated catalog · API wiring next</span><button className="tool-button"><Filter size={16} /> Filters</button><button className="icon-button" title="Sort agents"><SlidersHorizontal size={17} /></button></div></div>
+          <div className="toolbar"><label className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search agents or protocols" /></label><div className="toolbar-right"><span className="freshness"><i className={registry.snapshot ? 'online' : ''} /> {registry.snapshot ? '8004scan live · strategy outcomes simulated' : registry.loading ? 'Connecting to 8004scan…' : 'Scenario catalog · registry unavailable'}</span><button className="tool-button"><Filter size={16} /> Filters</button><button className="icon-button" title="Sort agents"><SlidersHorizontal size={17} /></button></div></div>
           <div className="results-row"><span>{filteredAgents.length} demo agents</span><span>Sorted by risk-adjusted outcome</span></div>
           <section className="agent-grid">{filteredAgents.map((agent) => <AgentCard key={agent.id} agent={agent} compared={comparedIds.includes(agent.id)} onCompare={() => toggleCompare(agent.id)} onOpen={() => setSelectedAgent(agent)} onActivate={() => setActivationAgent(agent)} />)}</section>
           {filteredAgents.length === 0 && <div className="empty-state compact"><Search size={26} /><h2>No matching agents</h2><p>Try a protocol name or clear the current category.</p></div>}
@@ -250,8 +263,9 @@ function App() {
     </main>
     {comparedIds.length > 0 && view === 'marketplace' && <div className="compare-tray"><div><ArrowLeftRight size={18} /><strong>{comparedIds.length} selected</strong><span>{comparedAgents.map((agent) => agent.name).join(' · ')}</span></div><button className="primary-button" disabled={comparedIds.length < 2} onClick={() => setView('compare')}>Compare now <ArrowRight size={16} /></button></div>}
     {selectedAgent && <DetailDrawer agent={selectedAgent} onClose={() => setSelectedAgent(null)} onActivate={() => { setActivationAgent(selectedAgent); setSelectedAgent(null) }} />}
-    {activationAgent && <ActivationModal agent={activationAgent} connected={connected} onConnect={() => setConnected(true)} onClose={() => setActivationAgent(null)} onConfirm={confirmMandate} />}
+    {activationAgent && <ActivationModal agent={activationAgent} account={wallet.account} balance={wallet.balance} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} onConnect={() => void wallet.connect()} onSwitchNetwork={() => void wallet.switchNetwork()} onClose={() => setActivationAgent(null)} onConfirm={confirmMandate} />}
     {notice && <div className="toast"><Check size={17} /><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15} /></button></div>}
+    {wallet.error && <div className="toast error-toast"><Info size={17} /><span>{wallet.error}</span><button onClick={wallet.clearError} aria-label="Dismiss wallet error"><X size={15} /></button></div>}
   </div>
 }
 

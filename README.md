@@ -10,7 +10,7 @@ MandateFi is an agent marketplace for the **BNB Chain Smart Money Era Hackathon*
 
 **Prototype:** https://feeeeelixwong.github.io/mandatefi/
 
-> **Data notice:** the current catalog and performance values are clearly labeled scenario data. Real 8004scan identities, BSC Testnet transactions, and Altana sessions are integration milestones, not completed claims.
+> **Data notice:** strategy outcomes remain clearly labeled scenario data. Wallet/network state and the ERC-8004 registry strip are live. Strategy transactions and Altana sessions remain integration milestones, not completed claims.
 
 ## ✦ Product Journey
 
@@ -74,11 +74,17 @@ See [the integration plan](docs/INTEGRATION_PLAN.md) for contract and API bounda
 | Search, filtering, and comparison | ✅ Functional |
 | Mandate setup and revoke UX | ✅ Functional prototype |
 | Responsive desktop/mobile UI | ✅ Functional |
-| 8004scan identity/activity API | ⏳ Next |
+| Injected wallet + BSC Testnet guard | ✅ Live |
+| tBNB balance read | ✅ Live |
+| 8004scan identity API | ✅ Live read-only |
 | BNB Agent Studio agent runtime | ⏳ Next |
 | Altana Keystore session | ⏳ Next |
 | BSC Testnet execution evidence | ⏳ Next |
 | Advantage Report measurements | ⏳ Template ready |
+
+The UI keeps live identity data visually separate from the simulated strategy catalog so evaluators can identify which claims are currently backed by external systems. The live integration is implemented in `src/hooks/useInjectedWallet.ts` and `src/services/erc8004.ts`.
+
+Official references: [BNB wallet configuration](https://docs.bnbchain.org/bnb-smart-chain/developers/wallet-configuration/) and [8004scan Builder Hub](https://8004scan.io/developers).
 
 ## Run Locally
 

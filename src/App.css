@@ -16,6 +16,7 @@
 .network-row span { color: #91a59d; display: flex; align-items: center; gap: 6px; }
 .network-row strong { color: #e9f3ef; font-size: 11px; }
 .network-row i, .freshness i, .live-status i { width: 7px; height: 7px; border-radius: 50%; background: #37cf88; box-shadow: 0 0 0 3px rgba(55, 207, 136, .12); }
+.network-row i:not(.online), .freshness i:not(.online) { background: #789087; box-shadow: none; }
 .sidebar-foot { margin-top: auto; padding: 13px 10px; border-top: 1px solid #294139; display: flex; align-items: flex-start; gap: 9px; color: #9de4c5; }
 .sidebar-foot div { display: grid; gap: 3px; }
 .sidebar-foot strong { font-size: 11px; color: #e9f3ef; }
@@ -29,6 +30,7 @@
 .icon-button:hover { border-color: #aebbb5; background: #f8faf9; }
 .wallet-button { min-height: 36px; padding: 0 12px; border: 1px solid #18382d; border-radius: 6px; background: #18382d; color: #fff; display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 12px; font-weight: 700; }
 .wallet-button.connected { color: #14513c; border-color: #a6d9c3; background: #e8f7f0; }
+.wallet-button:disabled { cursor: wait; opacity: .72; }
 .page-content { width: min(1420px, 100%); margin: 0 auto; padding: 32px 30px 100px; }
 .market-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 36px; padding: 4px 0 26px; }
 .eyebrow { display: block; color: #29815f; font-size: 10px; font-weight: 800; text-transform: uppercase; }
@@ -39,6 +41,15 @@
 .market-stats > div:last-child { border-right: 0; }
 .market-stats span, .market-stats small { color: #74817c; font-size: 10px; }
 .market-stats strong { font-size: 20px; }
+.registry-strip { min-height: 54px; margin-bottom: 14px; padding: 9px 12px; border: 1px solid #c9dfd5; border-radius: 6px; background: #f2faf6; display: flex; align-items: center; gap: 16px; }
+.registry-strip > div:first-child { min-width: 215px; display: flex; align-items: center; gap: 8px; color: #1e7554; }
+.registry-strip > div:first-child span { display: grid; gap: 2px; }
+.registry-strip strong { color: #1c4f3d; font-size: 10px; }
+.registry-strip small { color: #688078; font-size: 8px; }
+.registry-agent-list { min-width: 0; flex: 1; display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.registry-agent-list > span { max-width: 180px; padding: 6px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid #d7e8e0; border-radius: 4px; color: #465a52; background: #fff; font-size: 9px; }
+.registry-agent-list b { color: #778c83; font-size: 8px; }
+.registry-strip > a { white-space: nowrap; color: #176747; display: inline-flex; align-items: center; gap: 5px; font-size: 9px; font-weight: 800; text-decoration: none; }
 .category-strip { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: #fff; }
 .category-strip button { min-height: 52px; padding: 0 14px; border: 0; border-right: 1px solid var(--line); background: #fff; display: flex; align-items: center; gap: 8px; cursor: pointer; color: #68746f; }
 .category-strip button:last-child { border-right: 0; }
@@ -164,6 +175,10 @@
 .final-step h3 { margin: 0; font-size: 17px; }
 .final-step p { max-width: 360px; margin: 0; color: #65726c; font-size: 10px; line-height: 1.55; }
 .wallet-connect-large { padding: 0 14px; color: #fff; border: 1px solid #172d26; background: #172d26; }
+.wallet-proof { width: min(340px, 100%); padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; text-align: left; background: #f8faf9; }
+.wallet-proof span { color: #76837d; font-size: 8px; }
+.wallet-proof strong { text-align: right; font-size: 9px; }
+.wallet-error { max-width: 390px; color: #a1443d; font-size: 9px; line-height: 1.45; }
 .modal-footer { min-height: 66px; padding: 12px 20px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
 .view-title-row { min-height: 84px; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
 .view-title-row h1 { font-size: 34px; margin-bottom: 0; }
@@ -197,6 +212,7 @@
 .toast { position: fixed; z-index: 80; right: 22px; bottom: 22px; max-width: 420px; min-height: 46px; padding: 9px 9px 9px 12px; border: 1px solid #b7d7ca; border-radius: 6px; color: #255442; background: #eff8f4; box-shadow: 0 10px 30px rgba(18,39,31,.15); display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; }
 .toast span { flex: 1; }
 .toast button { width: 28px; height: 28px; border: 0; background: transparent; cursor: pointer; }
+.error-toast { bottom: 78px; color: #8a3732; border-color: #e5b7b2; background: #fff3f1; }
 .mobile-menu, .mobile-close { display: none; }
 .prototype-badge { padding: 5px 7px; border: 1px solid #d9c47e; border-radius: 4px; color: #765b11; background: #fff8dc; font-size: 8px; font-weight: 800; text-transform: uppercase; }
 
@@ -222,6 +238,9 @@
   .market-stats { grid-template-columns: 1fr; }
   .market-stats > div { border-right: 0; border-bottom: 1px solid var(--line); }
   .market-stats > div:last-child { border-bottom: 0; }
+  .registry-strip { align-items: flex-start; flex-direction: column; }
+  .registry-agent-list { width: 100%; flex-wrap: wrap; }
+  .registry-agent-list > span { max-width: calc(50% - 3px); }
   .category-strip { grid-template-columns: 1fr; }
   .category-strip button:last-child { grid-column: auto; }
   .toolbar { align-items: stretch; flex-direction: column; }

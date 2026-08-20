@@ -17,18 +17,21 @@ Replace every scenario-only element in the prototype with inspectable BNB Smart 
 
 ## Phase 1: Data
 
-1. Obtain the hackathon 8004scan Pro API credential.
-2. Index the eligible agent set and normalize identity, reputation, and activity.
-3. Replace `src/data/agents.ts` scenario values with typed API responses.
-4. Show data provenance and freshness beside each metric.
+1. ✅ Connect to the anonymous 8004scan API with runtime schema validation.
+2. ✅ Show the live BNB identity count, latest registrations, provenance, and source status.
+3. Obtain the hackathon 8004scan Pro API credential for higher rate limits.
+4. Map each MandateFi strategy to a registered identity and raw evidence source.
+5. Replace `src/data/agents.ts` scenario values only after comparable measured evidence exists.
 
 ## Phase 2: Bounded Activation
 
-1. Connect an EIP-1193 owner wallet on BSC Testnet.
-2. Build a mandate from capital cap, contract allowlist, function selectors, and expiry.
-3. Register the session in the Altana Keystore.
-4. Display the session address, transaction hash, expiry, and remaining allowance.
-5. Execute revoke and confirm the revoked state onchain.
+1. ✅ Connect an EIP-1193 owner wallet and enforce BSC Testnet chain ID 97.
+2. ✅ Read the owner's native tBNB balance from BSC Testnet.
+3. Pin verified protocol contract addresses and function selectors per strategy.
+4. Build a mandate from capital cap, contract allowlist, function selectors, and expiry.
+5. Register the session in the Altana Keystore.
+6. Display the session address, transaction hash, expiry, and remaining allowance.
+7. Execute revoke and confirm the revoked state onchain.
 
 ## Phase 3: Strategy Proof
 
@@ -49,3 +52,10 @@ Each action record must include inputs, decision, requested authority, transacti
 - A permitted action produces a BSC Testnet transaction and receipt.
 - Marketplace metrics link to their raw source.
 - Every demo path can be repeated from a clean wallet.
+
+## Implemented frontend boundaries
+
+- `src/hooks/useInjectedWallet.ts`: injected-wallet lifecycle, account/chain events, network switching, and balance refresh.
+- `src/services/erc8004.ts`: public 8004scan API boundary with Zod validation.
+- `src/data/agents.ts`: explicitly simulated strategy catalog until every agent has a registered identity and measured execution evidence.
+- Future `src/integrations/altana.ts`: smart-wallet creation, grant, execute, and revoke calls after all contract targets are verified.
