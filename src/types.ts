@@ -5,6 +5,10 @@ export interface Mandate {
   riskProfile: 'conservative' | 'balanced' | 'growth'
   managedAmount: string
   duration: number
+  liquidityNeed?: 'anytime' | 'weekly' | 'term'
+  strategyAllocations?: Record<'reserve' | 'market' | 'liquidity' | 'earn', number>
+  modelYieldBps?: number
+  strategyRiskScore?: number
   status: 'Active' | 'Paused' | 'Revoked'
   createdAt: string
   chainId: number

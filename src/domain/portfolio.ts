@@ -47,7 +47,7 @@ export const riskProfiles: Record<RiskProfileId, RiskProfile> = {
   conservative: {
     id: 'conservative',
     name: 'Conservative',
-    description: 'Prioritises capital stability and keeps most managed value in BUSD.',
+    description: 'Prioritises capital stability, liquid reserves, and tightly capped yield positions.',
     baseStableBps: 7_000n,
     driftBandBps: 500n,
     maxSlippageBps: 50n,
@@ -57,7 +57,7 @@ export const riskProfiles: Record<RiskProfileId, RiskProfile> = {
   balanced: {
     id: 'balanced',
     name: 'Balanced',
-    description: 'Balances BNB upside with a meaningful stablecoin buffer.',
+    description: 'Balances spot exposure, fee income, farming rewards, and withdrawal liquidity.',
     baseStableBps: 4_500n,
     driftBandBps: 800n,
     maxSlippageBps: 100n,
@@ -67,7 +67,7 @@ export const riskProfiles: Record<RiskProfileId, RiskProfile> = {
   growth: {
     id: 'growth',
     name: 'Growth',
-    description: 'Keeps greater BNB exposure while preserving a smaller liquidity reserve.',
+    description: 'Accepts more market and LP exposure while preserving a hard minimum reserve.',
     baseStableBps: 2_000n,
     driftBandBps: 1_000n,
     maxSlippageBps: 150n,
@@ -77,9 +77,9 @@ export const riskProfiles: Record<RiskProfileId, RiskProfile> = {
 }
 
 export const goalOptions: Array<{ id: InvestmentGoal; name: string; description: string }> = [
-  { id: 'preserve', name: 'Preserve capital', description: 'Reduce volatility and maintain a larger stable reserve.' },
-  { id: 'balanced-growth', name: 'Balanced growth', description: 'Participate in BNB upside without staying fully exposed.' },
-  { id: 'maximize-growth', name: 'Maximise growth', description: 'Accept more volatility in exchange for higher BNB exposure.' },
+  { id: 'preserve', name: 'Preserve capital', description: 'Prioritise liquid reserves and lower-risk sources of yield.' },
+  { id: 'balanced-growth', name: 'Balanced growth', description: 'Combine market exposure, liquidity fees, and farming income.' },
+  { id: 'maximize-growth', name: 'Maximise growth', description: 'Allocate more to spot and liquidity positions without using leverage.' },
 ]
 
 function min(...values: bigint[]) {
@@ -146,8 +146,8 @@ export function buildPortfolioPlan({
       driftBandBps: profile.driftBandBps, amountIn, inputAsset: 'tBNB', outputAsset: 'BUSD',
       maxSlippageBps: profile.maxSlippageBps, dailyNativeCap, dailyStableCap,
       rationale: amountIn > 0n
-        ? `Stable exposure is below the ${formatPercent(targetStableBps)} target, so the next bounded action converts ${formatNative(amountIn)} tBNB to BUSD.`
-        : 'Stable exposure is below target, but the gas reserve leaves no tBNB available to rebalance.',
+        ? `The liquid-reserve sleeve is below its ${formatPercent(targetStableBps)} execution target, so the live Swap adapter can convert ${formatNative(amountIn)} tBNB to BUSD within the mandate.`
+        : 'The liquid-reserve sleeve is below target, but the gas reserve leaves no tBNB available for the next Swap action.',
     }
   }
 
@@ -162,8 +162,8 @@ export function buildPortfolioPlan({
       driftBandBps: profile.driftBandBps, amountIn, inputAsset: 'BUSD', outputAsset: 'tBNB',
       maxSlippageBps: profile.maxSlippageBps, dailyNativeCap, dailyStableCap,
       rationale: amountIn > 0n
-        ? `Stable exposure is above the ${formatPercent(targetStableBps)} target, so the next bounded action converts ${formatStable(amountIn)} BUSD to tBNB.`
-        : 'Stable exposure is above target, but no BUSD is available in the managed wallet.',
+        ? `The liquid-reserve sleeve is above its ${formatPercent(targetStableBps)} execution target, so the live Swap adapter can convert ${formatStable(amountIn)} BUSD to tBNB within the mandate.`
+        : 'The liquid-reserve sleeve is above target, but no BUSD is available for the next Swap action.',
     }
   }
 
@@ -172,7 +172,7 @@ export function buildPortfolioPlan({
     currentStableBps, targetStableBps, projectedStableBps: currentStableBps,
     driftBandBps: profile.driftBandBps, amountIn: 0n, inputAsset: 'tBNB', outputAsset: 'BUSD',
     maxSlippageBps: profile.maxSlippageBps, dailyNativeCap, dailyStableCap,
-    rationale: `Allocation is inside the ${formatPercent(lowerBound)}–${formatPercent(upperBound)} policy band. No transaction is needed.`,
+    rationale: `The liquid-reserve sleeve is inside its ${formatPercent(lowerBound)}–${formatPercent(upperBound)} execution band. The strategy keeps the current Swap position while other sleeves remain subject to their own approval and adapter status.`,
   }
 }
 
@@ -187,4 +187,3 @@ export function formatNative(value: bigint) {
 export function formatStable(value: bigint) {
   return Number(formatEther(value)).toLocaleString(undefined, { maximumFractionDigits: 4 })
 }
-

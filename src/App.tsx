@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, AlertTriangle, ArrowDownUp, ArrowRight, BarChart3, BrainCircuit,
-  Check, ChevronRight, CircleCheck, Clock3, ExternalLink,
-  Fingerprint, Fuel, Gauge, KeyRound, LayoutDashboard, LoaderCircle, LockKeyhole,
-  Menu, Pause, Play, Plus, RefreshCw, Settings2, ShieldCheck, Sparkles,
-  TrendingUp, Wallet, X,
+  Activity, AlertTriangle, ArrowDownUp, ArrowRight, BarChart3, Bot, BrainCircuit,
+  Check, ChevronRight, CircleCheck, ExternalLink, Fingerprint, Fuel, Gauge,
+  KeyRound, Layers3, LayoutDashboard, Leaf, LoaderCircle, Menu, Pause, Play,
+  Plus, RefreshCw, Route, Settings2, ShieldCheck, TrendingUp, Vault, Wallet,
+  Waves, X,
 } from 'lucide-react'
 import { parseEther } from 'viem'
 import type { Session } from '@altananetwork/sdk'
 import {
-  buildPortfolioPlan, formatNative, formatPercent, formatStable, GAS_RESERVE,
-  goalOptions, riskProfiles, type InvestmentGoal, type PortfolioPlan,
-  type PortfolioSnapshot, type RiskProfileId,
+  buildPortfolioPlan, formatNative, formatStable, GAS_RESERVE, goalOptions,
+  riskProfiles, type InvestmentGoal, type PortfolioPlan, type PortfolioSnapshot,
+  type RiskProfileId,
 } from './domain/portfolio'
+import {
+  buildStrategyPlan, formatBps, type ExecutionCoverage, type LiquidityNeed,
+  type StrategyPlan, type StrategySleeveId,
+} from './domain/strategy'
 import { useAltanaWallet, type AltanaStage } from './hooks/useAltanaWallet'
 import { useInjectedWallet } from './hooks/useInjectedWallet'
 import { BSC_TESTNET_EXPLORER_URL } from './lib/chains'
@@ -22,30 +26,52 @@ import type { DecisionRecord, Mandate } from './types'
 import './App.css'
 
 type View = 'overview' | 'create' | 'decisions' | 'policies'
+type MandateDraft = {
+  amount: string
+  duration: number
+  goal: InvestmentGoal
+  risk: RiskProfileId
+  liquidityNeed: LiquidityNeed
+}
 
-const mandateStorageKey = 'mandatefi.portfolio-mandates.v2'
+const mandateStorageKey = 'mandatefi.portfolio-mandates.v3'
 
 const navItems: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Portfolio', icon: LayoutDashboard },
-  { id: 'create', label: 'New mandate', icon: Plus },
-  { id: 'decisions', label: 'Decision log', icon: Activity },
-  { id: 'policies', label: 'Policies', icon: ShieldCheck },
+  { id: 'create', label: 'New strategy', icon: Plus },
+  { id: 'decisions', label: 'Activity', icon: Activity },
+  { id: 'policies', label: 'Guardrails', icon: ShieldCheck },
 ]
 
 const altanaStageCopy: Record<AltanaStage, string> = {
   idle: 'Ready',
-  creating: 'Creating passkey wallet…',
-  recovering: 'Recovering passkey wallet…',
-  funding: 'Funding the smart wallet…',
-  granting: 'Registering the scoped policy onchain…',
-  executing: 'Executing the approved allocation change…',
-  revoking: 'Revoking the policy onchain…',
+  creating: 'Creating passkey wallet...',
+  recovering: 'Recovering passkey wallet...',
+  funding: 'Funding the smart wallet...',
+  granting: 'Registering the scoped policy onchain...',
+  executing: 'Executing the approved PancakeSwap route...',
+  revoking: 'Revoking the policy onchain...',
   error: 'Action required',
 }
 
+const liquidityOptions: Array<{ id: LiquidityNeed; name: string; description: string }> = [
+  { id: 'anytime', name: 'Anytime', description: 'Keep more capital liquid for withdrawals.' },
+  { id: 'weekly', name: 'Weekly', description: 'Balance liquidity with active yield positions.' },
+  { id: 'term', name: 'At term', description: 'Allow more capital to work in LP and earn positions.' },
+]
+
+const toolNames = {
+  'smart-router': 'PancakeSwap Swap',
+  'infinity-liquidity': 'Infinity Liquidity',
+  'universal-farms': 'Universal Farms',
+  'cake-earn': 'CAKE Earn',
+} as const
+
 function loadMandates(): Mandate[] {
   try {
-    const parsed = JSON.parse(localStorage.getItem(mandateStorageKey) ?? '[]')
+    const current = localStorage.getItem(mandateStorageKey)
+    const legacy = localStorage.getItem('mandatefi.portfolio-mandates.v2')
+    const parsed = JSON.parse(current ?? legacy ?? '[]')
     if (!Array.isArray(parsed)) return []
     return parsed.filter((item): item is Mandate => Boolean(
       item && typeof item === 'object' && typeof item.name === 'string' &&
@@ -57,11 +83,7 @@ function loadMandates(): Mandate[] {
 }
 
 function safeParseNative(value: string) {
-  try {
-    return parseEther(value || '0')
-  } catch {
-    return 0n
-  }
+  try { return parseEther(value || '0') } catch { return 0n }
 }
 
 function txUrl(hash?: `0x${string}`) {
@@ -72,18 +94,23 @@ function allocationLabel(bps: bigint | number) {
   return `${Number(bps) / 100}%`
 }
 
-function actionLabel(action: PortfolioPlan['action']) {
-  if (action === 'BUY_STABLE') return 'Increase stable reserve'
-  if (action === 'BUY_NATIVE') return 'Increase BNB exposure'
-  return 'Hold allocation'
+function executionActionLabel(action: PortfolioPlan['action']) {
+  if (action === 'BUY_STABLE') return 'Build liquid reserve'
+  if (action === 'BUY_NATIVE') return 'Increase market exposure'
+  return 'No swap required'
 }
 
-function buildDecision(plan: PortfolioPlan, proof?: Pick<AltanaPortfolioProof, 'quote' | 'execution' | 'outputReceived' | 'executionError'>): DecisionRecord {
-  const state = plan.action === 'HOLD'
-    ? 'POLICY_ONLY'
-    : proof?.execution?.status === 'CONFIRMED'
-      ? 'CONFIRMED'
-      : 'FAILED'
+function coverageLabel(coverage: ExecutionCoverage) {
+  if (coverage === 'LIVE') return 'Live executor'
+  if (coverage === 'APPROVAL_REQUIRED') return 'Owner approval'
+  return 'Adapter planned'
+}
+
+function buildDecision(
+  plan: PortfolioPlan,
+  proof?: Pick<AltanaPortfolioProof, 'quote' | 'execution' | 'outputReceived' | 'executionError'>,
+): DecisionRecord {
+  const state = plan.action === 'HOLD' ? 'POLICY_ONLY' : proof?.execution?.status === 'CONFIRMED' ? 'CONFIRMED' : 'FAILED'
   return {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
@@ -97,59 +124,71 @@ function buildDecision(plan: PortfolioPlan, proof?: Pick<AltanaPortfolioProof, '
     inputAsset: plan.inputAsset,
     quotedOutput: proof?.quote ? (proof.quote.outputSymbol === 'tBNB' ? formatNative(proof.quote.quotedOut) : formatStable(proof.quote.quotedOut)) : undefined,
     minimumOutput: proof?.quote ? (proof.quote.outputSymbol === 'tBNB' ? formatNative(proof.quote.minimumOut) : formatStable(proof.quote.minimumOut)) : undefined,
-    outputReceived: proof?.outputReceived !== undefined
-      ? (plan.outputAsset === 'tBNB' ? formatNative(proof.outputReceived) : formatStable(proof.outputReceived))
-      : undefined,
+    outputReceived: proof?.outputReceived !== undefined ? (plan.outputAsset === 'tBNB' ? formatNative(proof.outputReceived) : formatStable(proof.outputReceived)) : undefined,
     outputAsset: plan.outputAsset,
     transactionHash: proof?.execution?.transactionHash,
   }
 }
 
-function AllocationBar({ stableBps, targetBps, compact = false }: { stableBps: bigint | number; targetBps: bigint | number; compact?: boolean }) {
-  const stable = Math.max(0, Math.min(100, Number(stableBps) / 100))
-  const target = Math.max(0, Math.min(100, Number(targetBps) / 100))
-  return <div className={compact ? 'allocation compact' : 'allocation'}>
-    <div className="allocation-labels"><span><i className="native-dot" /> tBNB {100 - stable}%</span><span><i className="stable-dot" /> BUSD {stable}%</span></div>
-    <div className="allocation-track" aria-label={`${stable}% BUSD allocation`}>
-      <span className="allocation-stable" style={{ width: `${stable}%` }} />
-      <i className="target-marker" style={{ left: `${target}%` }} title={`Target ${target}% BUSD`} />
+function planForMandate(mandate: Mandate) {
+  return buildStrategyPlan({
+    goal: mandate.goal,
+    risk: mandate.riskProfile,
+    liquidityNeed: mandate.liquidityNeed ?? 'weekly',
+    horizonDays: mandate.duration,
+  })
+}
+
+function StrategyBar({ plan }: { plan: StrategyPlan }) {
+  return <div className="strategy-allocation" aria-label="AI strategy allocation">
+    <div className="strategy-allocation-track">
+      {plan.sleeves.map((sleeve) => <span key={sleeve.id} className={`sleeve-${sleeve.id}`} style={{ width: `${sleeve.allocationBps / 100}%` }} title={`${sleeve.name}: ${formatBps(sleeve.allocationBps)}`} />)}
     </div>
-    <div className="allocation-scale"><span>0% stable</span><strong>Target {target}%</strong><span>100% stable</span></div>
+    <div className="strategy-allocation-legend">
+      {plan.sleeves.map((sleeve) => <span key={sleeve.id}><i className={`sleeve-${sleeve.id}`} /><b>{sleeve.name}</b><strong>{formatBps(sleeve.allocationBps)}</strong></span>)}
+    </div>
   </div>
 }
 
-function EmptyPortfolio({ onCreate }: { onCreate: () => void }) {
-  return <div className="launch-page">
-    <section className="launch-intro">
-      <span className="product-kicker"><Sparkles size={15} /> Non-custodial AI asset manager</span>
-      <h1>AI manages your onchain portfolio.<br />You set the rules.</h1>
-      <p>Choose a goal and risk level. MandateFi keeps your BNB/BUSD allocation inside the approved band and uses PancakeSwap only when a bounded rebalance is required.</p>
-    </section>
-    <section className="launch-workspace" aria-label="Example AI mandate">
-      <div className="launch-card">
-        <div className="launch-card-head"><div><span>New mandate</span><strong>AI portfolio manager</strong></div><span className="live-pill"><i /> BNB Testnet</span></div>
-        <div className="launch-field"><span>Capital to manage</span><div><strong>0.010</strong><b>tBNB</b></div><small>Funds remain in your passkey wallet</small></div>
-        <div className="launch-field compact"><span>Objective</span><div><strong>Balanced growth</strong><b>14 days</b></div></div>
-        <button className="primary-button launch-action" onClick={onCreate}>Configure mandate <ArrowRight size={18} /></button>
-        <div className="launch-safety"><ShieldCheck size={16} /><span>No custody. No unlimited approvals. Revoke anytime.</span></div>
+function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return <div className="metric"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>
+}
+
+function ProductHome({ onCreate }: { onCreate: () => void }) {
+  const preview = buildStrategyPlan({ goal: 'balanced-growth', risk: 'balanced', liquidityNeed: 'weekly', horizonDays: 30 })
+  return <div className="home-page">
+    <section className="home-hero">
+      <div className="hero-copy">
+        <span className="product-kicker"><BrainCircuit size={16} /> AI strategy, owner-controlled</span>
+        <h1>Put your DeFi portfolio<br />on a clear strategy.</h1>
+        <p>Choose an outcome and risk level. MandateFi builds a PancakeSwap portfolio across spot, liquidity, farms, and earn. Completed adapters execute inside your mandate; every other action requires approval.</p>
+        <div className="hero-actions"><button className="primary-button hero-button" onClick={onCreate}>Build my strategy <ArrowRight size={18} /></button><span><ShieldCheck size={16} /> No custody. No leverage. Revoke anytime.</span></div>
       </div>
-      <aside className="launch-preview">
-        <div className="preview-head"><span>Live policy preview</span><strong>Balanced risk</strong></div>
-        <div className="preview-value"><span>Target allocation</span><strong>45% BUSD</strong><small>Rebalance only outside the 37%–53% band</small></div>
-        <AllocationBar stableBps={4500n} targetBps={4500n} compact />
-        <div className="preview-policy-list"><div><LockKeyhole size={16} /><span>Rebalance venue</span><strong>PancakeSwap V2</strong></div><div><ArrowDownUp size={16} /><span>Daily rebalance cap</span><strong>0.005 tBNB</strong></div><div><Clock3 size={16} /><span>Policy expiry</span><strong>14 days</strong></div></div>
-      </aside>
+      <div className="hero-workspace" aria-label="Balanced AI strategy preview">
+        <header><div><span>AI strategy preview</span><strong>Balanced growth</strong></div><span className="network-pill"><i /> BNB Chain</span></header>
+        <div className="hero-total"><span>Capital assigned</span><strong>$10,000</strong><small>30-day mandate · weekly liquidity</small></div>
+        <StrategyBar plan={preview} />
+        <div className="hero-plan-row">
+          <span><Route size={17} /><b>Swap</b><small>Build basket</small></span><ChevronRight size={15} />
+          <span><Waves size={17} /><b>Liquidity</b><small>Earn fees</small></span><ChevronRight size={15} />
+          <span><Layers3 size={17} /><b>Farm</b><small>Add rewards</small></span><ChevronRight size={15} />
+          <span><RefreshCw size={17} /><b>Compound</b><small>Recycle yield</small></span>
+        </div>
+        <footer><span><Bot size={16} /> Strategy review scheduled daily</span><strong>Risk {preview.riskScore}/10</strong></footer>
+      </div>
     </section>
-    <div className="launch-trust"><span><Fingerprint size={17} /><b>Passkey owned</b><small>You remain the smart-wallet admin.</small></span><span><LockKeyhole size={17} /><b>Precisely scoped</b><small>Contracts, methods and caps are explicit.</small></span><span><Activity size={17} /><b>Explainable</b><small>Every hold or trade has evidence.</small></span></div>
+    <section className="product-proof" aria-label="Product capabilities">
+      <div><Route size={19} /><span><strong>Build the basket</strong><small>Live PancakeSwap testnet swaps with bounded routes and slippage.</small></span></div>
+      <div><Layers3 size={19} /><span><strong>Compose yield</strong><small>LP, Farm, and Earn allocations sized by return, liquidity, and IL risk.</small></span></div>
+      <div><ShieldCheck size={19} /><span><strong>Enforce the mandate</strong><small>Contract scope, daily turnover, expiry, and emergency revoke stay explicit.</small></span></div>
+    </section>
   </div>
 }
 
-function PortfolioOverview({
-  mandate, snapshot, plan, loading, runtimeAvailable, checking, onCreate, onCheck, onOpenPolicies,
-}: {
+function PortfolioOverview({ mandate, snapshot, executionPlan, loading, runtimeAvailable, checking, onCreate, onCheck, onOpenPolicies }: {
   mandate: Mandate | null
   snapshot: PortfolioSnapshot | null
-  plan: PortfolioPlan | null
+  executionPlan: PortfolioPlan | null
   loading: boolean
   runtimeAvailable: boolean
   checking: boolean
@@ -157,55 +196,21 @@ function PortfolioOverview({
   onCheck: () => void
   onOpenPolicies: () => void
 }) {
-  if (!mandate) return <EmptyPortfolio onCreate={onCreate} />
+  if (!mandate) return <ProductHome onCreate={onCreate} />
+  const strategy = planForMandate(mandate)
   const latest = mandate.decisions[0]
-  const stableBps = plan?.currentStableBps ?? BigInt(latest?.projectedStableBps ?? mandate.targetStableBps)
-  const managedValue = plan?.managedValue ?? safeParseNative(mandate.managedAmount)
+  const managedValue = executionPlan?.managedValue ?? safeParseNative(mandate.managedAmount)
   return <div className="dashboard-page">
-    <div className="page-title-row">
-      <div><span className="eyebrow">AI-managed portfolio</span><h1>{mandate.name}</h1><p>Mandate capital stays in your passkey smart wallet. The agent can act only inside the approved policy.</p></div>
-      <div className="title-actions"><button className="secondary-button" onClick={onOpenPolicies}><Settings2 size={16} /> Policy</button><button className="primary-button" disabled={checking || mandate.status !== 'Active'} onClick={onCheck}>{checking ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Check now</button></div>
+    <div className="page-title-row"><div><span className="eyebrow">Managed strategy</span><h1>{mandate.name}</h1><p>{strategy.summary} Capital remains in the passkey smart wallet.</p></div><div className="title-actions"><button className="secondary-button" onClick={onOpenPolicies}><Settings2 size={16} /> Guardrails</button><button className="primary-button" disabled={checking || mandate.status !== 'Active'} onClick={onCheck}>{checking ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run live review</button></div></div>
+    <section className="portfolio-hero-panel"><div className="portfolio-value-block"><span>Capital under mandate</span><strong>{loading ? 'Refreshing...' : `${formatNative(managedValue)} tBNB`}</strong><small>BNB Testnet portfolio proof</small></div><Metric label="Model yield" value={`${formatBps(strategy.modelYieldBps)} APY`} detail="Scenario estimate, not a live quote" /><Metric label="Strategy risk" value={`${strategy.riskScore}/10`} detail={`${riskProfiles[mandate.riskProfile].name} mandate`} /><Metric label="Next review" value={strategy.reviewCadence} detail={runtimeAvailable ? 'Local executor online' : 'Owner approval required'} /></section>
+    <div className="dashboard-layout">
+      <section className="workspace-panel allocation-panel"><header className="panel-header"><div><span>AI portfolio construction</span><h2>Where the capital works</h2></div><span className="status-chip active"><i /> Active mandate</span></header><StrategyBar plan={strategy} /><div className="sleeve-grid">{strategy.sleeves.map((sleeve) => <article key={sleeve.id}><div className={`sleeve-icon sleeve-${sleeve.id}`}>{sleeve.id === 'reserve' ? <Vault size={18} /> : sleeve.id === 'market' ? <TrendingUp size={18} /> : sleeve.id === 'liquidity' ? <Waves size={18} /> : <Leaf size={18} />}</div><span>{sleeve.name}</span><strong>{formatBps(sleeve.allocationBps)}</strong><p>{sleeve.purpose}</p><small>{toolNames[sleeve.tool]}</small></article>)}</div></section>
+      <aside className="workspace-panel ai-panel"><header className="panel-header"><div><span>AI strategy state</span><h2>{executionPlan ? executionActionLabel(executionPlan.action) : 'Reading portfolio'}</h2></div><BrainCircuit size={23} /></header>{executionPlan && <><p>{executionPlan.rationale}</p><div className="ai-signals"><div><span>Price route</span><strong>{snapshot ? 'Live' : 'Waiting'}</strong></div><div><span>LP and farm inputs</span><strong>Model scenario</strong></div><div><span>Risk gate</span><strong>Passed</strong></div></div><div className={`ai-decision ${executionPlan.action === 'HOLD' ? 'hold' : 'trade'}`}>{executionPlan.action === 'HOLD' ? <CircleCheck size={17} /> : <ArrowDownUp size={17} />}<span>{executionPlan.action === 'HOLD' ? 'No live swap needed' : `${executionPlan.inputAsset} to ${executionPlan.outputAsset} route ready`}</span></div></>}</aside>
+      <section className="workspace-panel action-panel"><header className="panel-header"><div><span>Execution plan</span><h2>PancakeSwap action queue</h2></div><span className="coverage-note">1 live · 3 staged</span></header><div className="action-queue">{strategy.actions.map((action) => <article key={action.id}><span className="action-order">{action.order}</span><div className="action-copy"><div><strong>{action.title}</strong><span>{toolNames[action.tool]}</span></div><p>{action.detail}</p></div><div className="action-meta"><strong>{formatBps(action.allocationBps)}</strong><span className={`coverage coverage-${action.coverage.toLowerCase().replace('_', '-')}`}>{coverageLabel(action.coverage)}</span></div></article>)}</div></section>
+      <aside className="workspace-panel policy-panel"><header className="panel-header"><div><span>Hard limits</span><h2>What AI cannot cross</h2></div><ShieldCheck size={22} /></header><dl className="policy-facts"><div><dt>Minimum liquid reserve</dt><dd>{formatBps(strategy.guardrails.minimumReserveBps)}</dd></div><div><dt>Maximum LP exposure</dt><dd>{formatBps(strategy.guardrails.maximumLiquidityBps)}</dd></div><div><dt>Single position cap</dt><dd>{formatBps(strategy.guardrails.maximumSinglePositionBps)}</dd></div><div><dt>Maximum slippage</dt><dd>{formatBps(strategy.guardrails.maximumSlippageBps)}</dd></div><div><dt>Leverage</dt><dd>Blocked</dd></div></dl>{latest && <div className="latest-proof"><span>Latest onchain proof</span><strong>{latest.state.replace('_', ' ')}</strong>{latest.transactionHash ? <a href={txUrl(latest.transactionHash)} target="_blank" rel="noreferrer">View transaction <ExternalLink size={12} /></a> : <small>No transaction required</small>}</div>}</aside>
     </div>
-    <section className="portfolio-status-strip">
-      <div><span>Mandate status</span><strong className={`status-${mandate.status.toLowerCase()}`}><i /> {mandate.status}</strong></div>
-      <div><span>Local AI runtime</span><strong>{runtimeAvailable ? 'Monitoring every 60 sec' : 'Owner approval required'}</strong></div>
-      <div><span>Policy expires</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div>
-      <div><span>Network</span><strong>BNB Testnet</strong></div>
-    </section>
-    <div className="dashboard-grid">
-      <section className="portfolio-panel main-panel">
-        <div className="panel-heading"><div><span>Managed portfolio</span><h2>{loading ? 'Refreshing…' : `${formatNative(managedValue)} tBNB`}</h2></div><span className={`live-pill ${snapshot ? '' : 'waiting'}`}><i /> {snapshot ? 'PancakeSwap live quote' : 'Waiting for wallet data'}</span></div>
-        <AllocationBar stableBps={stableBps} targetBps={mandate.targetStableBps} />
-        <div className="asset-table">
-          <div><span className="asset-symbol native">BNB</span><div><strong>tBNB</strong><small>Growth exposure</small></div><b>{snapshot ? formatNative(snapshot.nativeBalance) : '—'}</b></div>
-          <div><span className="asset-symbol stable">$</span><div><strong>BUSD</strong><small>Stable reserve</small></div><b>{snapshot ? formatStable(snapshot.stableBalance) : '—'}</b></div>
-        </div>
-      </section>
-      <section className="portfolio-panel decision-panel">
-        <div className="panel-heading"><div><span>Next policy decision</span><h2>{plan ? actionLabel(plan.action) : 'Reading portfolio'}</h2></div><BrainCircuit size={22} /></div>
-        {plan && <>
-          <p className="decision-rationale">{plan.rationale}</p>
-          <dl className="decision-facts"><div><dt>Current stable</dt><dd>{formatPercent(plan.currentStableBps)}</dd></div><div><dt>Target</dt><dd>{formatPercent(plan.targetStableBps)}</dd></div><div><dt>Action size</dt><dd>{plan.action === 'HOLD' ? 'None' : `${plan.inputAsset === 'tBNB' ? formatNative(plan.amountIn) : formatStable(plan.amountIn)} ${plan.inputAsset}`}</dd></div></dl>
-          <div className={`decision-state ${plan.action === 'HOLD' ? 'hold' : 'trade'}`}>{plan.action === 'HOLD' ? <CircleCheck size={17} /> : <TrendingUp size={17} />}<span>{plan.action === 'HOLD' ? 'Inside policy band' : 'Rebalance required'}</span></div>
-        </>}
-      </section>
-      <section className="portfolio-panel guardrail-panel">
-        <div className="panel-heading"><div><span>Guardrails</span><h2>{riskProfiles[mandate.riskProfile].name} policy</h2></div><ShieldCheck size={22} /></div>
-        <div className="guardrail-list"><div><span>Stable target</span><strong>{allocationLabel(mandate.targetStableBps)}</strong></div><div><span>Drift band</span><strong>±{allocationLabel(mandate.driftBandBps)}</strong></div><div><span>Max slippage</span><strong>{allocationLabel(mandate.maxSlippageBps)}</strong></div><div><span>Daily tBNB cap</span><strong>{mandate.dailyNativeCap}</strong></div></div>
-      </section>
-      <section className="portfolio-panel latest-panel">
-        <div className="panel-heading"><div><span>Latest decision</span><h2>{latest ? actionLabel(latest.action) : 'No decisions yet'}</h2></div>{latest?.state === 'CONFIRMED' ? <CircleCheck size={22} /> : <Activity size={22} />}</div>
-        {latest && <><p>{latest.rationale}</p><div className="latest-meta"><span>{new Date(latest.createdAt).toLocaleString()}</span><strong className={`evidence-${latest.state.toLowerCase()}`}>{latest.state.replace('_', ' ')}</strong></div>{latest.transactionHash && <a href={txUrl(latest.transactionHash)} target="_blank" rel="noreferrer">View transaction <ExternalLink size={13} /></a>}</>}
-      </section>
-    </div>
-    {!runtimeAvailable && mandate.status === 'Active' && <div className="runtime-notice"><AlertTriangle size={18} /><div><strong>The local execution key is no longer in this browser session.</strong><span>The onchain policy is still active and revocable, but autonomous checks require owner approval for a replacement runtime. Production uses a secure always-on executor.</span></div><button onClick={onCreate}>Create replacement</button></div>}
+    {!runtimeAvailable && mandate.status === 'Active' && <div className="runtime-notice"><AlertTriangle size={18} /><div><strong>The execution key is not available in this browser session.</strong><span>The onchain policy remains active and revocable. Create a replacement runtime to resume automatic reviews.</span></div><button onClick={onCreate}>Replace runtime</button></div>}
   </div>
-}
-type MandateDraft = {
-  amount: string
-  duration: number
-  goal: InvestmentGoal
-  risk: RiskProfileId
 }
 
 function MandateWizard({
@@ -233,8 +238,8 @@ function MandateWizard({
   onStart: (draft: MandateDraft) => Promise<void>
   onCancel: () => void
 }) {
-  const [step, setStep] = useState<1 | 2>(1)
-  const [draft, setDraft] = useState<MandateDraft>({ amount: '0.005', duration: 14, goal: 'balanced-growth', risk: 'balanced' })
+  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [draft, setDraft] = useState<MandateDraft>({ amount: '0.005', duration: 30, goal: 'balanced-growth', risk: 'balanced', liquidityNeed: 'weekly' })
   const [quote, setQuote] = useState<PortfolioRebalanceQuote | null>(null)
   const [quoteError, setQuoteError] = useState('')
   const [starting, setStarting] = useState(false)
@@ -245,31 +250,26 @@ function MandateWizard({
     priceStablePerNative: parseEther('500'),
     updatedAt: new Date().toISOString(),
   }, [managedAmount, snapshot])
-  const plan = useMemo(() => buildPortfolioPlan({ snapshot: planningSnapshot, managedAmount, goal: draft.goal, risk: draft.risk }), [draft.goal, draft.risk, managedAmount, planningSnapshot])
-  const usableQuote = quote?.amountIn === plan.amountIn && quote.inputSymbol === plan.inputAsset ? quote : null
+  const executionPlan = useMemo(() => buildPortfolioPlan({ snapshot: planningSnapshot, managedAmount, goal: draft.goal, risk: draft.risk }), [draft.goal, draft.risk, managedAmount, planningSnapshot])
+  const strategy = useMemo(() => buildStrategyPlan({ goal: draft.goal, risk: draft.risk, liquidityNeed: draft.liquidityNeed, horizonDays: draft.duration }), [draft])
+  const usableQuote = quote?.amountIn === executionPlan.amountIn && quote.inputSymbol === executionPlan.inputAsset ? quote : null
   const busy = starting || !['idle', 'error'].includes(altanaStage)
   const amountValid = managedAmount >= parseEther('0.001') && managedAmount <= parseEther('0.05')
   const ready = Boolean(account && isTargetNetwork && altanaAddress && altanaFunded)
   const selectedGoal = goalOptions.find((goal) => goal.id === draft.goal) ?? goalOptions[1]
   const selectedRisk = riskProfiles[draft.risk]
 
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'auto' })
-  }, [step])
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }) }, [step])
 
   useEffect(() => {
-    if (step !== 1 || plan.action === 'HOLD') return
+    if (executionPlan.action === 'HOLD') return
     let active = true
-    void import('./integrations/altana').then(({ quotePortfolioPlan }) => quotePortfolioPlan(plan)).then((next) => {
-      if (active) {
-        setQuote(next)
-        setQuoteError('')
-      }
-    }).catch((error: unknown) => {
-      if (active) setQuoteError(error instanceof Error ? error.message : 'Live quote unavailable.')
-    })
+    void import('./integrations/altana')
+      .then(({ quotePortfolioPlan }) => quotePortfolioPlan(executionPlan))
+      .then((next) => { if (active) { setQuote(next); setQuoteError('') } })
+      .catch((error: unknown) => { if (active) setQuoteError(error instanceof Error ? error.message : 'Live swap quote unavailable.') })
     return () => { active = false }
-  }, [plan, step])
+  }, [executionPlan])
 
   async function start() {
     setStarting(true)
@@ -277,62 +277,51 @@ function MandateWizard({
   }
 
   return <div className="configurator-page">
-    <header className="configurator-header">
-      <button className="icon-button" disabled={busy} onClick={onCancel} aria-label="Back to portfolio"><X size={18} /></button>
-      <div><span className="eyebrow">New AI mandate</span><h1>Configure your portfolio mandate</h1><p>One setup surface. A live policy preview. Owner approval only at the end.</p></div>
-    </header>
-    <nav className="setup-progress" aria-label="Mandate setup progress">
-      <button className={step === 1 ? 'active' : 'complete'} onClick={() => setStep(1)}><span>{step > 1 ? <Check size={14} /> : '1'}</span><div><strong>Configure</strong><small>Capital, objective and risk</small></div></button>
-      <i />
-      <button className={step === 2 ? 'active' : ''} disabled={step === 1}><span>2</span><div><strong>Approve</strong><small>Wallet and onchain policy</small></div></button>
+    <header className="configurator-header"><button className="icon-button" disabled={busy} onClick={onCancel} aria-label="Back to portfolio"><X size={18} /></button><div><span className="eyebrow">New managed strategy</span><h1>Tell the AI how your capital should work</h1><p>MandateFi composes the strategy first. Wallet authority is requested only after you review it.</p></div></header>
+    <nav className="setup-progress" aria-label="Strategy setup progress">
+      {[{ id: 1, name: 'Preferences', detail: 'Goal, risk and access' }, { id: 2, name: 'Strategy', detail: 'Allocation and actions' }, { id: 3, name: 'Approve', detail: 'Wallet and policy' }].map((item, index) => <div className="progress-item" key={item.id}><button className={step === item.id ? 'active' : step > item.id ? 'complete' : ''} disabled={step < item.id} onClick={() => setStep(item.id as 1 | 2 | 3)}><span>{step > item.id ? <Check size={14} /> : item.id}</span><div><strong>{item.name}</strong><small>{item.detail}</small></div></button>{index < 2 && <i />}</div>)}
     </nav>
     <div className="configurator-grid">
       <section className="configurator-card">
-        {step === 1 ? <>
-          <div className="config-section first">
-            <div className="config-section-heading"><span>Capital</span><small>Maximum amount the AI can manage</small></div>
-            <label className="amount-field"><span>Managed capital</span><div><input aria-label="Managed capital" type="number" min="0.001" max="0.05" step="0.001" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} /><b>tBNB</b></div><small className={!amountValid ? 'field-error' : ''}>{amountValid ? 'A 0.0015 tBNB gas reserve stays outside this scope.' : 'Enter an amount from 0.001 to 0.05 tBNB.'}</small></label>
-            <div className="quick-values">{['0.003', '0.005', '0.008'].map((value) => <button type="button" key={value} className={draft.amount === value ? 'active' : ''} onClick={() => setDraft({ ...draft, amount: value })}>{value}</button>)}</div>
-          </div>
-          <div className="config-section">
-            <div className="config-section-heading"><span>Objective</span><small>What the portfolio should optimise for</small></div>
-            <fieldset className="segmented-field"><legend>Primary objective</legend><div>{goalOptions.map((goal) => <button type="button" key={goal.id} className={draft.goal === goal.id ? 'active' : ''} onClick={() => setDraft({ ...draft, goal: goal.id })}>{goal.name}</button>)}</div></fieldset>
-            <p className="selection-explainer"><Sparkles size={15} /> {selectedGoal.description}</p>
-          </div>
-          <div className="config-section">
-            <div className="config-section-heading"><span>Risk and duration</span><small>How tightly the policy should react</small></div>
-            <fieldset className="segmented-field"><legend>Risk tolerance</legend><div>{Object.values(riskProfiles).map((risk) => <button type="button" key={risk.id} className={draft.risk === risk.id ? 'active' : ''} onClick={() => setDraft({ ...draft, risk: risk.id })}>{risk.name}</button>)}</div></fieldset>
-            <p className="selection-explainer"><Gauge size={15} /> {selectedRisk.description} Rebalances outside a ±{formatPercent(selectedRisk.driftBandBps)} band.</p>
-            <fieldset className="segmented-field duration-segment"><legend>Policy duration</legend><div>{[7, 14, 30].map((days) => <button type="button" key={days} className={draft.duration === days ? 'active' : ''} onClick={() => setDraft({ ...draft, duration: days })}>{days} days</button>)}</div></fieldset>
-          </div>
-          <details className="advanced-policy">
-            <summary><Settings2 size={16} /><span><strong>Advanced policy limits</strong><small>Contract scope, slippage and daily caps</small></span><ChevronRight size={16} /></summary>
-            <div className="advanced-policy-grid"><div><span>Allowed venue</span><strong>PancakeSwap V2</strong></div><div><span>Maximum slippage</span><strong>{formatPercent(plan.maxSlippageBps)}</strong></div><div><span>Daily native cap</span><strong>{formatNative(plan.dailyNativeCap)} tBNB</strong></div><div><span>Stable target</span><strong>{formatPercent(plan.targetStableBps)} BUSD</strong></div></div>
-          </details>
-          {quoteError && <div className="inline-error"><AlertTriangle size={16} /> {quoteError}</div>}
-          <footer className="config-actions"><div><ShieldCheck size={17} /><span>Nothing is signed on this screen.</span></div><button className="primary-button" disabled={!amountValid || (plan.action !== 'HOLD' && !usableQuote)} onClick={() => setStep(2)}>Review and approve <ArrowRight size={17} /></button></footer>
-        </> : <>
-          <div className="approval-intro"><span className="eyebrow">Owner approval</span><h2>Connect, fund and authorise</h2><p>Each action is explicit. Your passkey remains the wallet admin and the AI receives only a revocable session policy.</p></div>
-          <div className="approval-checklist compact-checklist">
+        {step === 1 && <>
+          <div className="config-section first"><div className="config-section-heading"><span>Capital</span><small>Maximum amount this mandate may manage</small></div><label className="amount-field" htmlFor="managed-capital"><span>Managed capital</span><div><input id="managed-capital" inputMode="decimal" autoComplete="off" spellCheck={false} value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} aria-invalid={!amountValid} aria-describedby="capital-help" /><b>tBNB</b></div><small id="capital-help" className={!amountValid ? 'field-error' : ''}>{amountValid ? 'A 0.0015 tBNB gas reserve stays outside the mandate.' : 'Enter an amount from 0.001 to 0.05 tBNB.'}</small></label><div className="quick-values">{['0.003', '0.005', '0.008'].map((value) => <button type="button" key={value} className={draft.amount === value ? 'active' : ''} onClick={() => setDraft({ ...draft, amount: value })}>{value}</button>)}</div></div>
+          <div className="config-section"><div className="config-section-heading"><span>Outcome</span><small>What should the AI optimise for?</small></div><fieldset className="option-field"><legend>Primary objective</legend><div>{goalOptions.map((goal) => <button type="button" aria-pressed={draft.goal === goal.id} key={goal.id} className={draft.goal === goal.id ? 'active' : ''} onClick={() => setDraft({ ...draft, goal: goal.id })}><strong>{goal.name}</strong><small>{goal.description}</small></button>)}</div></fieldset></div>
+          <div className="config-section"><div className="config-section-heading"><span>Risk tolerance</span><small>Controls position sizing and hard limits</small></div><fieldset className="segmented-field"><legend>Risk tolerance</legend><div>{Object.values(riskProfiles).map((risk) => <button type="button" aria-pressed={draft.risk === risk.id} key={risk.id} className={draft.risk === risk.id ? 'active' : ''} onClick={() => setDraft({ ...draft, risk: risk.id })}>{risk.name}</button>)}</div></fieldset><p className="selection-explainer"><Gauge size={15} /> {selectedRisk.description}</p></div>
+          <div className="config-section config-pair"><div><div className="config-section-heading"><span>Withdrawal access</span></div><fieldset className="segmented-field"><legend>Withdrawal access</legend><div>{liquidityOptions.map((option) => <button type="button" aria-pressed={draft.liquidityNeed === option.id} key={option.id} className={draft.liquidityNeed === option.id ? 'active' : ''} onClick={() => setDraft({ ...draft, liquidityNeed: option.id })}>{option.name}</button>)}</div></fieldset><p className="field-note">{liquidityOptions.find((item) => item.id === draft.liquidityNeed)?.description}</p></div><div><div className="config-section-heading"><span>Strategy horizon</span></div><fieldset className="segmented-field"><legend>Strategy horizon</legend><div>{[7, 14, 30].map((days) => <button type="button" aria-pressed={draft.duration === days} key={days} className={draft.duration === days ? 'active' : ''} onClick={() => setDraft({ ...draft, duration: days })}>{days} days</button>)}</div></fieldset></div></div>
+          <footer className="config-actions"><div><ShieldCheck size={17} /><span>No wallet permission is requested yet.</span></div><button className="primary-button" disabled={!amountValid} onClick={() => setStep(2)}>Generate strategy <ArrowRight size={17} /></button></footer>
+        </>}
+
+        {step === 2 && <>
+          <div className="strategy-review-intro"><span className="eyebrow">AI recommendation</span><h2>{selectedGoal.name} across four strategy sleeves</h2><p>{strategy.summary}</p></div>
+          <div className="strategy-review-allocation"><StrategyBar plan={strategy} /></div>
+          <div className="review-actions">{strategy.actions.map((action) => <article key={action.id}><span className="action-order">{action.order}</span><div><strong>{action.title}</strong><p>{action.detail}</p><small>{toolNames[action.tool]}</small></div><aside><b>{formatBps(action.allocationBps)}</b><span className={`coverage coverage-${action.coverage.toLowerCase().replace('_', '-')}`}>{coverageLabel(action.coverage)}</span></aside></article>)}</div>
+          <details className="advanced-policy"><summary><ShieldCheck size={17} /><span><strong>Hard policy limits</strong><small>These limits override every AI recommendation</small></span><ChevronRight size={16} /></summary><div className="advanced-policy-grid"><div><span>Minimum reserve</span><strong>{formatBps(strategy.guardrails.minimumReserveBps)}</strong></div><div><span>Maximum LP</span><strong>{formatBps(strategy.guardrails.maximumLiquidityBps)}</strong></div><div><span>Maximum slippage</span><strong>{formatBps(strategy.guardrails.maximumSlippageBps)}</strong></div><div><span>Leverage</span><strong>Blocked</strong></div></div></details>
+          {quoteError && <div className="inline-warning"><AlertTriangle size={16} /><span>The strategy remains reviewable, but the live testnet Swap quote is unavailable: {quoteError}</span></div>}
+          <footer className="config-actions"><button className="secondary-button" onClick={() => setStep(1)}>Edit preferences</button><button className="primary-button" onClick={() => setStep(3)}>Review permissions <ArrowRight size={17} /></button></footer>
+        </>}
+
+        {step === 3 && <>
+          <div className="approval-intro"><span className="eyebrow">Owner approval</span><h2>Connect, fund, and authorise</h2><p>The AI receives a separate session key. Your passkey remains the wallet admin.</p></div>
+          <div className="approval-checklist">
             <div className={account && isTargetNetwork ? 'complete' : ''}><span>{account && isTargetNetwork ? <Check size={16} /> : <Wallet size={16} />}</span><div><strong>Funding wallet</strong><small>{account ? `${shortAddress(account)} · ${isTargetNetwork ? 'BNB Testnet' : 'wrong network'}` : 'Connect an injected wallet'}</small></div>{!account ? <button onClick={onConnect}>Connect</button> : !isTargetNetwork ? <button onClick={onSwitchNetwork}>Switch</button> : null}</div>
             <div className={altanaAddress ? 'complete' : ''}><span>{altanaAddress ? <Check size={16} /> : <Fingerprint size={16} />}</span><div><strong>Passkey smart wallet</strong><small>{altanaAddress ? shortAddress(altanaAddress) : 'Owner-controlled account'}</small></div>{!altanaAddress && <div className="inline-actions"><button disabled={!isPasskeySupported || busy} onClick={onCreateAltana}>Create</button><button disabled={!isPasskeySupported || busy} onClick={onRecoverAltana}>Recover</button></div>}</div>
             <div className={altanaFunded ? 'complete' : ''}><span>{altanaFunded ? <Check size={16} /> : <Fuel size={16} />}</span><div><strong>Execution capital</strong><small>{altanaAddress ? `${altanaBalance} tBNB available` : 'Fund after wallet creation'}</small></div>{altanaAddress && !altanaFunded && <button disabled={busy} onClick={onFundAltana}>Fund 0.01</button>}</div>
           </div>
-          <div className="approval-boundary"><KeyRound size={18} /><div><strong>What the AI receives</strong><span>A separate session key limited to this capital, PancakeSwap methods, daily caps and {draft.duration}-day expiry.</span></div></div>
-          {busy && <div className="operation-status"><LoaderCircle className="spin" size={16} /> {starting ? 'Starting the mandate…' : altanaStageCopy[altanaStage]}</div>}
+          <div className="approval-boundary"><KeyRound size={18} /><div><strong>Exact scope granted today</strong><span>Live testnet Swap methods, token approval, daily spend caps, and {draft.duration}-day expiry. LP and Farm adapters remain approval-gated until connected.</span></div></div>
+          {busy && <div className="operation-status"><LoaderCircle className="spin" size={16} /> {starting ? 'Starting the strategy...' : altanaStageCopy[altanaStage]}</div>}
           {!isPasskeySupported && <div className="inline-error"><AlertTriangle size={16} /> This browser does not expose WebAuthn passkeys.</div>}
           {(walletError || altanaError) && <div className="inline-error"><AlertTriangle size={16} /> {walletError || altanaError}</div>}
-          <footer className="config-actions"><button className="secondary-button" disabled={busy} onClick={() => setStep(1)}>Back to configuration</button><button className="primary-button start-button" disabled={!ready || busy} onClick={() => void start()}>{busy ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} Approve and start</button></footer>
+          <footer className="config-actions"><button className="secondary-button" disabled={busy} onClick={() => setStep(2)}>Back to strategy</button><button className="primary-button" disabled={!ready || busy} aria-busy={busy} onClick={() => void start()}>{busy ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} Approve and start</button></footer>
         </>}
       </section>
+
       <aside className="strategy-preview">
-        <div className="strategy-preview-head"><div><span>Mandate preview</span><strong>{selectedGoal.name}</strong></div><span className="live-pill"><i /> Live</span></div>
-        <div className="strategy-capital"><span>Managed capital</span><strong>{draft.amount || '0'} <small>tBNB</small></strong><small>{selectedRisk.name} risk · {draft.duration} days</small></div>
-        <AllocationBar stableBps={plan.currentStableBps} targetBps={plan.targetStableBps} compact />
-        <div className={`strategy-decision ${plan.action === 'HOLD' ? 'hold' : 'trade'}`}><span>Initial policy decision</span><strong>{actionLabel(plan.action)}</strong><small>{plan.rationale}</small></div>
-        <div className="strategy-route"><span className="route-token">{plan.inputAsset}</span><div><ArrowRight size={17} /><small>PancakeSwap</small></div><span className="route-token output">{plan.outputAsset}</span></div>
-        <dl className="strategy-facts"><div><dt>Target reserve</dt><dd>{formatPercent(plan.targetStableBps)} BUSD</dd></div><div><dt>Rebalance band</dt><dd>±{formatPercent(plan.driftBandBps)}</dd></div><div><dt>Live quote</dt><dd>{usableQuote ? `≈ ${usableQuote.outputSymbol === 'tBNB' ? formatNative(usableQuote.quotedOut) : formatStable(usableQuote.quotedOut)} ${usableQuote.outputSymbol}` : plan.action === 'HOLD' ? 'No trade' : snapshotLoading ? 'Loading…' : 'Refreshing…'}</dd></div><div><dt>Policy owner</dt><dd>{altanaAddress ? shortAddress(altanaAddress) : 'Your passkey'}</dd></div></dl>
-        <div className="preview-guardrail"><ShieldCheck size={17} /><span>AI access is bounded and revocable. MandateFi never receives your owner key.</span></div>
+        <div className="strategy-preview-head"><div><span>Generated strategy preview</span><strong>{selectedGoal.name}</strong></div><span className="network-pill"><i /> BNB Testnet</span></div>
+        <div className="strategy-capital"><span>Capital assigned</span><strong>{draft.amount || '0'} <small>tBNB</small></strong><small>{selectedRisk.name} risk · {draft.duration} days</small></div>
+        <StrategyBar plan={strategy} />
+        <div className="preview-metrics"><div><span>Model yield</span><strong>{formatBps(strategy.modelYieldBps)}</strong></div><div><span>Risk score</span><strong>{strategy.riskScore}/10</strong></div><div><span>Review</span><strong>{strategy.reviewCadence}</strong></div></div>
+        <div className="preview-live-route"><Route size={17} /><div><span>Live executor</span><strong>{executionActionLabel(executionPlan.action)}</strong><small>{usableQuote ? `Quoted ${usableQuote.outputSymbol}` : executionPlan.action === 'HOLD' ? 'No swap required' : snapshotLoading ? 'Loading quote...' : 'Quote pending'}</small></div></div>
+        <div className="preview-guardrail"><ShieldCheck size={17} /><span>The AI can recommend opportunities only inside these allocations and limits. Automatic execution also requires a live, owner-approved adapter.</span></div>
       </aside>
     </div>
   </div>
@@ -340,11 +329,11 @@ function MandateWizard({
 
 function DecisionLog({ mandates }: { mandates: Mandate[] }) {
   const decisions = mandates.flatMap((mandate) => mandate.decisions.map((decision) => ({ mandate, decision }))).sort((a, b) => b.decision.createdAt.localeCompare(a.decision.createdAt))
-  return <div className="list-page"><div className="page-title-row"><div><span className="eyebrow">Explainable automation</span><h1>Decision log</h1><p>Every policy check is recorded, including decisions that correctly produce no transaction.</p></div></div>{decisions.length === 0 ? <div className="simple-empty"><Activity size={26} /><h2>No decisions yet</h2><p>Create a mandate to generate the first allocation decision.</p></div> : <div className="decision-log">{decisions.map(({ mandate, decision }) => <article key={decision.id}><div className={`decision-icon ${decision.action.toLowerCase()}`}>{decision.action === 'HOLD' ? <Pause size={17} /> : <ArrowDownUp size={17} />}</div><div className="decision-copy"><div><strong>{actionLabel(decision.action)}</strong><span>{mandate.name}</span></div><p>{decision.rationale}</p><div className="decision-tags"><span>Current {allocationLabel(decision.currentStableBps)}</span><span>Target {allocationLabel(decision.targetStableBps)}</span>{decision.amountIn !== '0' && <span>{decision.amountIn} {decision.inputAsset}</span>}</div></div><div className="decision-evidence"><strong className={`evidence-${decision.state.toLowerCase()}`}>{decision.state.replace('_', ' ')}</strong><span>{new Date(decision.createdAt).toLocaleString()}</span>{decision.transactionHash && <a href={txUrl(decision.transactionHash)} target="_blank" rel="noreferrer">Explorer <ExternalLink size={12} /></a>}</div></article>)}</div>}</div>
+  return <div className="list-page"><div className="page-title-row"><div><span className="eyebrow">Execution evidence</span><h1>Activity</h1><p>Every live route is recorded. Strategy recommendations that do not produce transactions stay distinguishable from confirmed execution.</p></div></div>{decisions.length === 0 ? <div className="simple-empty"><Activity size={26} /><h2>No activity yet</h2><p>Create a strategy to generate its first decision.</p></div> : <div className="decision-log">{decisions.map(({ mandate, decision }) => <article key={decision.id}><div className={`decision-icon ${decision.action.toLowerCase()}`}>{decision.action === 'HOLD' ? <Pause size={17} /> : <ArrowDownUp size={17} />}</div><div className="decision-copy"><div><strong>{executionActionLabel(decision.action)}</strong><span>{mandate.name}</span></div><p>{decision.rationale}</p><div className="decision-tags"><span>Reserve {allocationLabel(decision.currentStableBps)}</span>{decision.amountIn !== '0' && <span>{decision.amountIn} {decision.inputAsset}</span>}</div></div><div className="decision-evidence"><strong className={`evidence-${decision.state.toLowerCase()}`}>{decision.state.replace('_', ' ')}</strong><span>{new Date(decision.createdAt).toLocaleString()}</span>{decision.transactionHash && <a href={txUrl(decision.transactionHash)} target="_blank" rel="noreferrer">Explorer <ExternalLink size={12} /></a>}</div></article>)}</div>}</div>
 }
 
 function Policies({ mandates, revokingId, onPause, onRevoke, onCreate }: { mandates: Mandate[]; revokingId: string; onPause: (id: string) => void; onRevoke: (id: string) => void; onCreate: () => void }) {
-  return <div className="list-page"><div className="page-title-row"><div><span className="eyebrow">Owner control</span><h1>Policies</h1><p>Review the exact authority delegated to the local AI runtime and revoke it at any time.</p></div><button className="primary-button" onClick={onCreate}><Plus size={16} /> New mandate</button></div>{mandates.length === 0 ? <div className="simple-empty"><ShieldCheck size={26} /><h2>No active policies</h2><p>Create a mandate to register a scoped session on BNB Testnet.</p></div> : <div className="policy-list">{mandates.map((mandate) => <article key={mandate.id}><div className="policy-head"><div className="policy-icon"><ShieldCheck size={20} /></div><div><strong>{mandate.name}</strong><span>{riskProfiles[mandate.riskProfile].name} · {mandate.managedAmount} tBNB</span></div><strong className={`status-${mandate.status.toLowerCase()}`}><i /> {mandate.status}</strong></div><div className="policy-details"><div><span>Smart wallet</span><strong title={mandate.smartWallet}>{shortAddress(mandate.smartWallet)}</strong></div><div><span>Stable target</span><strong>{allocationLabel(mandate.targetStableBps)}</strong></div><div><span>Daily cap</span><strong>{mandate.dailyNativeCap} tBNB</strong></div><div><span>Expiry</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div></div><div className="policy-scope"><span><Check size={14} /> PancakeSwap V2 router</span><span><Check size={14} /> Two swap methods</span><span><Check size={14} /> BUSD approval only</span><span><Check size={14} /> Altana onchain caps</span></div><footer><div>{mandate.grantTxHash && <a href={txUrl(mandate.grantTxHash)} target="_blank" rel="noreferrer">Grant transaction <ExternalLink size={12} /></a>}</div><div>{mandate.status !== 'Revoked' && <button className="secondary-button" onClick={() => onPause(mandate.id)}>{mandate.status === 'Paused' ? <Play size={15} /> : <Pause size={15} />}{mandate.status === 'Paused' ? 'Resume locally' : 'Pause locally'}</button>}<button className="danger-button" disabled={mandate.status === 'Revoked' || revokingId === mandate.id} onClick={() => onRevoke(mandate.id)}>{revokingId === mandate.id ? <LoaderCircle className="spin" size={15} /> : <X size={15} />} {revokingId === mandate.id ? 'Revoking' : 'Revoke onchain'}</button></div></footer></article>)}</div>}</div>
+  return <div className="list-page"><div className="page-title-row"><div><span className="eyebrow">Owner control</span><h1>Guardrails</h1><p>AI strategy selection is flexible. Contract scope, position limits, expiry, and revocation are deterministic.</p></div><button className="primary-button" onClick={onCreate}><Plus size={16} /> New strategy</button></div>{mandates.length === 0 ? <div className="simple-empty"><ShieldCheck size={26} /><h2>No active mandates</h2><p>Create a strategy to register a scoped session on BNB Testnet.</p></div> : <div className="policy-list">{mandates.map((mandate) => { const strategy = planForMandate(mandate); return <article key={mandate.id}><div className="policy-head"><div className="policy-icon"><ShieldCheck size={20} /></div><div><strong>{mandate.name}</strong><span>{riskProfiles[mandate.riskProfile].name} · {mandate.managedAmount} tBNB</span></div><strong className={`status-${mandate.status.toLowerCase()}`}><i /> {mandate.status}</strong></div><div className="policy-details"><div><span>Minimum reserve</span><strong>{formatBps(strategy.guardrails.minimumReserveBps)}</strong></div><div><span>Maximum LP</span><strong>{formatBps(strategy.guardrails.maximumLiquidityBps)}</strong></div><div><span>Daily turnover</span><strong>{formatBps(strategy.guardrails.dailyTurnoverBps)}</strong></div><div><span>Expiry</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div></div><div className="policy-scope"><span><Check size={14} /> PancakeSwap Swap live</span><span><Check size={14} /> LP owner approval</span><span><Check size={14} /> No leverage</span><span><Check size={14} /> Altana onchain caps</span></div><footer><div>{mandate.grantTxHash && <a href={txUrl(mandate.grantTxHash)} target="_blank" rel="noreferrer">Grant transaction <ExternalLink size={12} /></a>}</div><div>{mandate.status !== 'Revoked' && <button className="secondary-button" onClick={() => onPause(mandate.id)}>{mandate.status === 'Paused' ? <Play size={15} /> : <Pause size={15} />}{mandate.status === 'Paused' ? 'Resume locally' : 'Pause locally'}</button>}<button className="danger-button" disabled={mandate.status === 'Revoked' || revokingId === mandate.id} onClick={() => onRevoke(mandate.id)}>{revokingId === mandate.id ? <LoaderCircle className="spin" size={15} /> : <X size={15} />} {revokingId === mandate.id ? 'Revoking' : 'Revoke onchain'}</button></div></footer></article> })}</div>}</div>
 }
 
 function App() {
@@ -366,20 +355,17 @@ function App() {
   const altana = useAltanaWallet()
 
   useEffect(() => { localStorage.setItem(mandateStorageKey, JSON.stringify(mandates)) }, [mandates])
-
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }) }, [view])
+  useEffect(() => { if (menuOpen) mobileCloseButton.current?.focus() }, [menuOpen])
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'auto' })
-  }, [view])
-
-  useEffect(() => {
-    if (menuOpen) mobileCloseButton.current?.focus()
-  }, [menuOpen])
+    function closeOnEscape(event: KeyboardEvent) { if (event.key === 'Escape' && menuOpen) closeMobileMenu() }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  })
 
   function closeMobileMenu() {
     setMenuOpen(false)
-    if (window.matchMedia('(max-width: 760px)').matches) {
-      window.requestAnimationFrame(() => mobileMenuButton.current?.focus())
-    }
+    if (window.matchMedia('(max-width: 760px)').matches) window.requestAnimationFrame(() => mobileMenuButton.current?.focus())
   }
 
   const refreshSnapshot = useCallback(async () => {
@@ -402,19 +388,11 @@ function App() {
   useEffect(() => {
     const initialRefresh = window.setTimeout(() => { void refreshSnapshot() }, 0)
     const interval = altana.address ? window.setInterval(() => { void refreshSnapshot() }, 30_000) : null
-    return () => {
-      window.clearTimeout(initialRefresh)
-      if (interval !== null) window.clearInterval(interval)
-    }
+    return () => { window.clearTimeout(initialRefresh); if (interval !== null) window.clearInterval(interval) }
   }, [altana.address, refreshSnapshot])
 
   const activeMandate = mandates.find((mandate) => mandate.status !== 'Revoked') ?? null
-  const currentPlan = useMemo(() => activeMandate && snapshot ? buildPortfolioPlan({
-    snapshot,
-    managedAmount: safeParseNative(activeMandate.managedAmount),
-    goal: activeMandate.goal,
-    risk: activeMandate.riskProfile,
-  }) : null, [activeMandate, snapshot])
+  const currentExecutionPlan = useMemo(() => activeMandate && snapshot ? buildPortfolioPlan({ snapshot, managedAmount: safeParseNative(activeMandate.managedAmount), goal: activeMandate.goal, risk: activeMandate.riskProfile }) : null, [activeMandate, snapshot])
 
   const runPolicyCheck = useCallback(async (mandateId: string, silent = false) => {
     const mandate = mandates.find((item) => item.id === mandateId)
@@ -435,9 +413,9 @@ function App() {
       const decision = buildDecision(plan, result)
       setMandates((current) => current.map((item) => item.id === mandateId ? { ...item, decisions: [decision, ...item.decisions] } : item))
       await refreshSnapshot()
-      if (!silent) setNotice(plan.action === 'HOLD' ? 'Policy check complete. Allocation remains inside the approved band.' : result?.execution?.status === 'CONFIRMED' ? 'Bounded rebalance confirmed on BNB Testnet.' : 'Policy check completed, but execution did not confirm.')
+      if (!silent) setNotice(plan.action === 'HOLD' ? 'Strategy review complete. No live Swap action is required.' : result?.execution?.status === 'CONFIRMED' ? 'Bounded PancakeSwap route confirmed on BNB Testnet.' : 'Strategy review completed, but the live route did not confirm.')
     } catch (error) {
-      if (!silent) setNotice(error instanceof Error ? error.message : 'Policy check failed.')
+      if (!silent) setNotice(error instanceof Error ? error.message : 'Strategy review failed.')
     } finally {
       runtimeBusy.current = false
       setCheckingId('')
@@ -446,9 +424,7 @@ function App() {
 
   useEffect(() => {
     if (!activeMandate || activeMandate.status !== 'Active' || !runtimeMandateIds.includes(activeMandate.id)) return
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void runPolicyCheck(activeMandate.id, true)
-    }, 60_000)
+    const interval = window.setInterval(() => { if (document.visibilityState === 'visible') void runPolicyCheck(activeMandate.id, true) }, 60_000)
     return () => window.clearInterval(interval)
   }, [activeMandate, runPolicyCheck, runtimeMandateIds])
 
@@ -464,38 +440,44 @@ function App() {
     if (!altana.address) return
     const latestSnapshot = await refreshSnapshot()
     if (!latestSnapshot) throw new Error('Portfolio data is unavailable.')
-    const plan = buildPortfolioPlan({ snapshot: latestSnapshot, managedAmount: safeParseNative(draft.amount), goal: draft.goal, risk: draft.risk })
-    const proof = await altana.activatePortfolio(draft.duration, plan)
+    const executionPlan = buildPortfolioPlan({ snapshot: latestSnapshot, managedAmount: safeParseNative(draft.amount), goal: draft.goal, risk: draft.risk })
+    const strategy = buildStrategyPlan({ goal: draft.goal, risk: draft.risk, liquidityNeed: draft.liquidityNeed, horizonDays: draft.duration })
+    const proof = await altana.activatePortfolio(draft.duration, executionPlan)
     const id = crypto.randomUUID()
     runtimeSessions.current.set(id, proof.session)
     setRuntimeMandateIds((current) => [...current, id])
-    const decision = buildDecision(plan, proof)
+    const decision = buildDecision(executionPlan, proof)
     const goalName = goalOptions.find((goal) => goal.id === draft.goal)?.name ?? 'Managed portfolio'
+    const strategyAllocations = Object.fromEntries(strategy.sleeves.map((sleeve) => [sleeve.id, sleeve.allocationBps])) as Record<StrategySleeveId, number>
     const mandate: Mandate = {
       id,
-      name: `${goalName} mandate`,
+      name: `${goalName} strategy`,
       goal: draft.goal,
       riskProfile: draft.risk,
       managedAmount: draft.amount,
       duration: draft.duration,
+      liquidityNeed: draft.liquidityNeed,
+      strategyAllocations,
+      modelYieldBps: strategy.modelYieldBps,
+      strategyRiskScore: strategy.riskScore,
       status: 'Active',
       createdAt: new Date().toISOString(),
       chainId: 97,
       smartWallet: proof.session.walletAddress,
       sessionPublicKey: proof.session.publicKey,
       expiry: proof.session.expiry,
-      targetStableBps: Number(plan.targetStableBps),
-      driftBandBps: Number(plan.driftBandBps),
-      maxSlippageBps: Number(plan.maxSlippageBps),
-      dailyNativeCap: formatNative(plan.dailyNativeCap),
-      dailyStableCap: formatStable(plan.dailyStableCap),
+      targetStableBps: Number(executionPlan.targetStableBps),
+      driftBandBps: Number(executionPlan.driftBandBps),
+      maxSlippageBps: Number(executionPlan.maxSlippageBps),
+      dailyNativeCap: formatNative(executionPlan.dailyNativeCap),
+      dailyStableCap: formatStable(executionPlan.dailyStableCap),
       grantTxHash: proof.grant.transactionHash,
       decisions: [decision],
     }
     setMandates((current) => [mandate, ...current])
     await refreshSnapshot()
     setView('overview')
-    setNotice(proof.execution?.status === 'CONFIRMED' ? 'Mandate activated and initial rebalance confirmed.' : plan.action === 'HOLD' ? 'Mandate activated. Allocation is already inside the approved band.' : 'Mandate activated. Review the decision log for execution details.')
+    setNotice(proof.execution?.status === 'CONFIRMED' ? 'Strategy activated and its first live Swap route confirmed.' : executionPlan.action === 'HOLD' ? 'Strategy activated. No initial Swap is required.' : 'Strategy activated. Review Activity for live execution details.')
   }
 
   async function revokeMandate(id: string) {
@@ -509,8 +491,6 @@ function App() {
       setRuntimeMandateIds((current) => current.filter((item) => item !== id))
       setMandates((current) => current.map((item) => item.id === id ? { ...item, status: 'Revoked', revokeTxHash: result.transactionHash } : item))
       setNotice('Policy revoked onchain. The runtime can no longer act on this wallet.')
-    } catch {
-      // The Altana hook exposes the exact operation error.
     } finally {
       setRevokingId('')
     }
@@ -521,23 +501,20 @@ function App() {
   }
 
   return <div className="app-shell">
-    <header className="app-header">
-      <div className="app-header-inner">
-        <button className="header-brand" onClick={() => setView('overview')}><span className="brand-mark"><BarChart3 size={19} /></span><span><strong>MandateFi</strong><small>AI Asset Manager</small></span></button>
-        <nav className="top-navigation">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => setView(item.id)}><Icon size={16} /><span>{item.label}</span>{item.id === 'decisions' && mandates.some((mandate) => mandate.decisions.length) && <b>{mandates.reduce((sum, mandate) => sum + mandate.decisions.length, 0)}</b>}</button> })}</nav>
-        <div className="header-actions"><span className="header-network"><i className={wallet.isTargetNetwork ? 'online' : ''} /> BNB Testnet</span><button className={wallet.isConnected ? 'wallet-button connected' : 'wallet-button'} disabled={wallet.status === 'connecting'} onClick={() => wallet.isConnected && !wallet.isTargetNetwork ? void wallet.switchNetwork() : !wallet.isConnected ? void wallet.connect() : undefined}><Wallet size={17} />{wallet.status === 'connecting' ? 'Connecting…' : wallet.account ? shortAddress(wallet.account) : 'Connect wallet'}</button><button ref={mobileMenuButton} className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></button></div>
-      </div>
-      <nav className={`mobile-navigation ${menuOpen ? 'open' : ''}`}><div><strong>Navigate</strong><button ref={mobileCloseButton} className="icon-button" onClick={closeMobileMenu} aria-label="Close menu"><X size={18} /></button></div>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => { setView(item.id); closeMobileMenu() }}><Icon size={18} /><span>{item.label}</span></button> })}<aside><ShieldCheck size={17} /><span><strong>{activeMandate ? activeMandate.name : 'Owner-controlled by default'}</strong><small>{activeMandate ? `${activeMandate.managedAmount} tBNB · ${riskProfiles[activeMandate.riskProfile].name}` : 'Passkey admin and revocable scope'}</small></span></aside></nav>
+    <header className="app-header"><div className="app-header-inner">
+      <button className="header-brand" onClick={() => setView('overview')}><span className="brand-mark"><BarChart3 size={19} /></span><span><strong>MandateFi</strong><small>AI DeFi Manager</small></span></button>
+      <nav className="top-navigation">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => setView(item.id)}><Icon size={16} /><span>{item.label}</span>{item.id === 'decisions' && mandates.some((mandate) => mandate.decisions.length) && <b>{mandates.reduce((sum, mandate) => sum + mandate.decisions.length, 0)}</b>}</button> })}</nav>
+      <div className="header-actions"><span className="header-network"><i className={wallet.isTargetNetwork ? 'online' : ''} /> BNB Testnet</span><button className={wallet.isConnected ? 'wallet-button connected' : 'wallet-button'} disabled={wallet.status === 'connecting'} onClick={() => wallet.isConnected && !wallet.isTargetNetwork ? void wallet.switchNetwork() : !wallet.isConnected ? void wallet.connect() : undefined}><Wallet size={17} />{wallet.status === 'connecting' ? 'Connecting...' : wallet.account ? shortAddress(wallet.account) : 'Connect wallet'}</button><button ref={mobileMenuButton} className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></button></div>
+    </div>
+    <nav className={`mobile-navigation ${menuOpen ? 'open' : ''}`}><div><strong>Navigate</strong><button ref={mobileCloseButton} className="icon-button" onClick={closeMobileMenu} aria-label="Close menu"><X size={18} /></button></div>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => { setView(item.id); closeMobileMenu() }}><Icon size={18} /><span>{item.label}</span></button> })}<aside><ShieldCheck size={17} /><span><strong>{activeMandate ? activeMandate.name : 'Owner-controlled by default'}</strong><small>{activeMandate ? `${activeMandate.managedAmount} tBNB · ${riskProfiles[activeMandate.riskProfile].name}` : 'Passkey admin and revocable scope'}</small></span></aside></nav>
     </header>
     <button className={`navigation-scrim ${menuOpen ? 'visible' : ''}`} onClick={closeMobileMenu} aria-label="Close navigation" />
-    <main className="main-area" inert={menuOpen ? true : undefined} aria-hidden={menuOpen ? true : undefined}>
-      <div className="page-content">
-        {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} plan={currentPlan} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
-        {view === 'create' && <MandateWizard snapshot={snapshot} snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} altanaAddress={altana.address} altanaBalance={altana.balance} altanaFunded={altana.hasMinimumBalance} altanaStage={altana.stage} altanaError={altana.error} isPasskeySupported={altana.isPasskeySupported} onConnect={() => void wallet.connect()} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={() => void fundAltanaWallet().catch(() => undefined)} onStart={startMandate} onCancel={() => setView('overview')} />}
-        {view === 'decisions' && <DecisionLog mandates={mandates} />}
-        {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onCreate={() => setView('create')} />}
-      </div>
-    </main>
+    <main className="main-area" inert={menuOpen ? true : undefined} aria-hidden={menuOpen ? true : undefined}><div className="page-content">
+      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} executionPlan={currentExecutionPlan} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
+      {view === 'create' && <MandateWizard snapshot={snapshot} snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} altanaAddress={altana.address} altanaBalance={altana.balance} altanaFunded={altana.hasMinimumBalance} altanaStage={altana.stage} altanaError={altana.error} isPasskeySupported={altana.isPasskeySupported} onConnect={() => void wallet.connect()} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={() => void fundAltanaWallet().catch(() => undefined)} onStart={startMandate} onCancel={() => setView('overview')} />}
+      {view === 'decisions' && <DecisionLog mandates={mandates} />}
+      {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onCreate={() => setView('create')} />}
+    </div></main>
     {snapshotError && <div className="toast error-toast"><AlertTriangle size={17} /><span>{snapshotError}</span><button onClick={() => void refreshSnapshot()} aria-label="Retry portfolio data"><RefreshCw size={15} /></button></div>}
     {notice && <div className="toast"><CircleCheck size={17} /><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15} /></button></div>}
     {(wallet.error || altana.error) && view !== 'create' && <div className="toast error-toast"><AlertTriangle size={17} /><span>{wallet.error || altana.error}</span><button onClick={() => { wallet.clearError(); altana.clearError() }} aria-label="Dismiss error"><X size={15} /></button></div>}

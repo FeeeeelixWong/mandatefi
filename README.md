@@ -1,137 +1,129 @@
 # MandateFi
 
-> A non-custodial AI portfolio manager that can rebalance only the capital, protocols, methods, and time window its owner approves.
+> An owner-controlled AI DeFi portfolio manager for PancakeSwap.
 
 [![BNB Smart Chain](https://img.shields.io/badge/BNB_Smart_Chain-Testnet-F3BA2F)](https://www.bnbchain.org/en/hackathons/smart-money-era)
-[![Status](https://img.shields.io/badge/status-working_MVP-177653)](#build-status)
+[![Status](https://img.shields.io/badge/status-working_MVP-177653)](#execution-coverage)
 [![License](https://img.shields.io/badge/license-MIT-111827)](LICENSE)
 
 **Live product:** https://feeeeelixwong.github.io/mandatefi/
 
-MandateFi turns a user's investment intent into a deterministic, revocable onchain mandate. The owner chooses how much capital to manage, an objective, a risk profile, and a duration. MandateFi calculates an allocation, previews the exact first action, asks for passkey approval, and then monitors the portfolio without taking custody of the owner's keys.
+MandateFi lets an owner assign capital, choose an outcome, set risk and liquidity preferences, and approve a revocable mandate. Its strategy engine then constructs a portfolio across four sleeves: liquid reserve, market exposure, liquidity yield, and farm/earn positions.
 
-The current BSC Testnet MVP manages a two-asset portfolio of **tBNB and BUSD** through PancakeSwap V2. Its scope is deliberately narrow so the full product loop is inspectable and repeatable.
+PancakeSwap is the execution venue, not the strategy itself. A simple tBNB/BUSD Swap is the first live adapter used to prove scoped execution on BSC Testnet. Liquidity, Farms, and Earn are represented as separate strategy actions with honest coverage labels until their adapters are complete.
 
-## The Product Loop
+## Product Logic
 
-1. **Set capital** - choose the maximum tBNB value the mandate may manage.
-2. **Choose intent** - select a goal, risk profile, and policy duration.
-3. **Review the plan** - inspect target allocation, drift band, action cap, live quote, minimum output, and protocol scope.
-4. **Approve once** - create or recover an Altana passkey wallet and grant an expiring session.
-5. **Let the policy work** - MandateFi reads balances, evaluates drift, and submits only permitted rebalances.
-6. **Stay in control** - inspect every HOLD or trade decision, pause local automation, or revoke the session onchain.
-
-## Risk Profiles
-
-The AI cannot invent or loosen these limits. Goal selection adjusts the stablecoin target, while the risk profile defines the execution envelope.
-
-| Profile | Base BUSD target | Drift band | Max slippage | Max single action | Daily turnover cap |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Conservative | 70% | ±5% | 0.5% | 25% | 35% |
-| Balanced | 45% | ±8% | 1.0% | 35% | 50% |
-| Growth | 20% | ±10% | 1.5% | 45% | 70% |
-
-`Preserve capital` adds 10 percentage points to the stable target. `Maximise growth` subtracts 10 points. Targets are clamped between 10% and 85% BUSD.
-
-## Deterministic Decision Engine
-
-For every check, MandateFi reads tBNB and BUSD balances plus a fresh PancakeSwap quote, reserves `0.0015 tBNB` for gas, and calculates the current stable allocation inside the owner-selected managed amount.
-
-```text
-lower bound = target stable % - drift band
-upper bound = target stable % + drift band
-
-current stable % < lower bound  -> BUY_STABLE
-current stable % > upper bound  -> BUY_NATIVE
-otherwise                       -> HOLD
+```mermaid
+flowchart LR
+  O["Owner sets capital, goal, risk, liquidity, and term"] --> A["AI strategy engine"]
+  A --> C["Portfolio construction"]
+  C --> R["Liquid reserve"]
+  C --> M["Market exposure"]
+  C --> L["Liquidity yield"]
+  C --> E["Farm and earn"]
+  R --> G["Mandate guardrails"]
+  M --> G
+  L --> G
+  E --> G
+  G --> X["PancakeSwap execution adapters"]
+  X --> S["Swap: live"]
+  X --> P["Liquidity: owner approval"]
+  X --> F["Farms and Earn: adapter planned"]
+  S --> B["BNB Smart Chain Testnet"]
+  P --> B
+  F --> B
+  O --> V["Pause or revoke"]
+  V --> G
 ```
 
-Action size is the smallest of the allocation deficit or surplus, the risk profile's single-action cap, and the available balance. A trade is built only after a live quote is available, and `amountOutMin` is derived from the approved slippage limit.
+The engine does not merely wait for one BNB/BUSD ratio to cross a band. It:
 
-Every evaluation creates an owner-visible decision record containing the inputs, rationale, projected allocation, quote, minimum output, state, and transaction link when applicable. HOLD is evidence too: it proves the policy evaluated the portfolio and intentionally did nothing.
+1. Converts the owner's preferences into a four-sleeve allocation.
+2. Applies hard limits for liquid reserve, LP exposure, position size, slippage, impermanent loss, turnover, expiry, and leverage.
+3. Builds an ordered action queue across the relevant PancakeSwap modules.
+4. Reviews portfolio drift and opportunity quality on a schedule.
+5. Executes only through a completed adapter and only inside the approved mandate.
+6. Holds or requests approval when an action is unnecessary, unsupported, or outside policy.
+
+## Strategy Sleeves
+
+| Sleeve | Purpose | PancakeSwap tool | Example inputs |
+| --- | --- | --- | --- |
+| Liquid reserve | Withdrawals, gas, and defensive reallocation | Swap | Stable allocation, withdrawal need, gas reserve |
+| Market exposure | Diversified spot exposure | Swap | Asset approval, volatility, slippage, position cap |
+| Liquidity yield | Fee-generating LP positions | Infinity Liquidity | Depth, volume, range, fee tier, impermanent-loss limit |
+| Farm and earn | Incentives and single-token yield | Farms and Earn | Emissions, lock terms, exit liquidity, gas-adjusted return |
+
+The strategy model is deterministic for the same inputs. The displayed model APY is a scenario estimate used for comparison, not a live quote or guaranteed return.
+
+## Example Allocations
+
+| Profile | Liquid reserve | Market exposure | Liquidity yield | Farm and earn |
+| --- | ---: | ---: | ---: | ---: |
+| Conservative | 50% | 15% | 20% | 15% |
+| Balanced | 25% | 30% | 30% | 15% |
+| Growth | 10% | 45% | 35% | 10% |
+
+Goal, liquidity access, and time horizon adjust these baselines. Every result is normalized to 100% and rechecked against the selected profile's limits.
+
+## Owner Guardrails
+
+The strategy cannot loosen its own permissions. Depending on the selected profile, MandateFi enforces:
+
+- a minimum liquid reserve;
+- maximum total LP exposure;
+- maximum single-position size;
+- slippage and impermanent-loss limits;
+- a daily turnover cap;
+- an owner-selected expiry;
+- no leverage;
+- owner approval for actions without a live autonomous adapter.
+
+The live Altana session currently permits only the reviewed PancakeSwap V2 Swap methods and BUSD approval required by that execution path. Assets remain in the passkey-controlled smart wallet, and the owner can revoke the session onchain.
+
+## Execution Coverage
+
+| Capability | Coverage | What this build proves |
+| --- | --- | --- |
+| AI strategy composition | **Live** | Generates four-sleeve allocations, actions, model risk, and guardrails |
+| PancakeSwap quote and bounded Swap | **Live on BSC Testnet** | Reads balances and quotes, calculates minimum output, and executes through a scoped Altana session |
+| Infinity liquidity position | **Owner approval required** | Strategy sizing and risk gates are visible; autonomous adapter is intentionally not claimed |
+| Farms position | **Adapter planned** | Eligibility and policy inputs are modeled; no live staking claim |
+| Earn and reward compounding | **Adapter planned** | Gas threshold and schedule are modeled; no live compounding claim |
+| Pause and onchain revoke | **Live** | Owner can stop the local runtime or revoke the scoped session |
+
+This separation is deliberate: the UI shows the intended full product without presenting planned integrations as already operational.
 
 ## Two-Layer Safety Model
 
 | Layer | Enforces | Cannot do |
 | --- | --- | --- |
-| Deterministic policy engine | Goal, target allocation, drift band, action size, slippage, gas reserve | Sign, broadcast, or expand authority |
-| Altana session policy | Allowed contracts, allowed methods, token/native daily caps, expiry, owner revoke | Access the passkey or call an unapproved target |
-
-The current dynamic session permits only:
-
-- PancakeSwap V2 `swapExactETHForTokens`
-- BUSD `approve`
-- PancakeSwap V2 `swapExactTokensForETH`
-- risk-derived daily tBNB and BUSD caps
-- an owner-selected expiry
-
-Assets remain in the passkey-controlled smart wallet. MandateFi never receives the owner's private key, and the strategy cannot modify its own mandate.
-
-## Architecture
-
-```mermaid
-flowchart LR
-  O["Owner"] --> I["Capital, goal, risk, duration"]
-  I --> E["Deterministic policy engine"]
-  E --> P["Plan and live PancakeSwap quote"]
-  P --> K["Passkey approval"]
-  K --> S["Scoped Altana session"]
-  S --> X["PancakeSwap V2"]
-  X --> B["BNB Smart Chain Testnet"]
-  B --> W["Passkey smart wallet"]
-  B --> D["Decision log and receipts"]
-  O --> R["Pause or revoke"]
-  R --> S
-```
-
-Primary implementation boundaries:
-
-- `src/domain/portfolio.ts` - deterministic allocation and action sizing
-- `src/integrations/altana.ts` - balances, quotes, permissions, grant, execution, and revoke
-- `src/hooks/useAltanaWallet.ts` - wallet lifecycle and safe UI states
-- `src/App.tsx` - onboarding, dashboard, policy, and decision-log journeys
+| Strategy and policy engine | Allocation, action ordering, reserve, LP, position, slippage, IL, turnover, and approval limits | Sign, broadcast, or expand authority |
+| Altana session policy | Allowed contracts, allowed methods, spend caps, expiry, and revoke | Access the owner passkey or call an unapproved target |
 
 ## Public BSC Testnet Evidence
-
-These transactions prove the passkey wallet and scoped-session lifecycle used by MandateFi:
 
 | Evidence | Result | Explorer |
 | --- | --- | --- |
 | Altana smart wallet | `0x2cd25c624f1a9e75c2991db6f8636f712c38914a` | [View wallet](https://testnet.bscscan.com/address/0x2cd25c624f1a9e75c2991db6f8636f712c38914a) |
 | Test-gas funding | `0.01 tBNB` confirmed | [View transaction](https://testnet.bscscan.com/tx/0xd06ce74431c7b33c1d8299e1c073f39da727fde034f56841862e103631ffc70b) |
 | Passkey admin and scoped session grant | Confirmed in Altana KeyStore | [View transaction](https://testnet.bscscan.com/tx/0x726ed597395ef065e84ac93c1cbbbbadbed6680f690e77c12c86e440cdb7e263) |
-| Session-key verification execution | Confirmed with zero user-call value | [View transaction](https://testnet.bscscan.com/tx/0xfd00b2341d4366840f0125ba0279c50ef0aaf8d7f522d9658332fdf14cf5dc3a) |
+| Session-key verification execution | Confirmed | [View transaction](https://testnet.bscscan.com/tx/0xfd00b2341d4366840f0125ba0279c50ef0aaf8d7f522d9658332fdf14cf5dc3a) |
 
-The dynamic two-way portfolio rebalance is implemented and testable from the product. A fresh public swap receipt for this exact build remains an operator step and is not represented here as already completed.
+These receipts prove the wallet and scoped-session lifecycle. A new owner-authorized Swap receipt for this exact build remains an operator step and is not represented as already completed.
 
-## Runtime Boundary
+## Architecture Boundaries
 
-The hackathon deployment is a static browser application. A granted session signer is held only in memory, and the app evaluates the portfolio every 60 seconds while the tab is active and visible. Reloading the page intentionally discards that signer; the existing onchain grant remains revocable, but continuing automation requires a new owner-approved runtime.
+- `src/domain/strategy.ts` builds the multi-sleeve strategy and hard guardrails.
+- `src/domain/portfolio.ts` evaluates the currently live liquid-reserve Swap path.
+- `src/integrations/altana.ts` reads balances and quotes, builds permissions, grants sessions, executes, and revokes.
+- `src/hooks/useAltanaWallet.ts` manages the passkey wallet lifecycle and safe UI states.
+- `src/App.tsx` provides portfolio, strategy creation, activity, and guardrail journeys.
 
-A production deployment would move the same deterministic evaluator and scoped session into a secure always-on executor or enclave. It would not broaden the onchain permission set. See [the production plan](docs/INTEGRATION_PLAN.md) and [the BSC Testnet runbook](docs/ALTANA_RUNBOOK.md).
+The hackathon deployment is a static browser app. The scoped session signer stays only in memory, and the local evaluator runs while the tab is active. A production deployment would move the same deterministic engine to a secure always-on executor without broadening the owner-approved policy.
 
-## Track Alignment
-
-| Track | Contribution |
-| --- | --- |
-| Smart Money | Converts human investment intent into explainable, bounded onchain asset management |
-| PancakeSwap | Uses live two-way quotes and bounded BNB/BUSD swaps with policy-derived slippage and spend caps |
-| Altana integration | Uses a passkey smart wallet, scoped session methods, expiry, and owner-controlled revoke |
-
-## Build Status
-
-| Capability | Status |
-| --- | --- |
-| Capital, goal, risk, and duration onboarding | Complete |
-| Deterministic BNB/BUSD portfolio planner | Complete and unit-tested |
-| Live BSC Testnet tBNB/BUSD balances | Complete |
-| Live PancakeSwap two-way quote and minimum output | Complete |
-| Dynamic Altana method and spend permissions | Complete |
-| Initial rebalance execution and decision receipt | Complete in product flow |
-| Dashboard, decision log, pause, and onchain revoke | Complete |
-| Responsive desktop and mobile experience | Complete |
-| Public receipt for this exact dynamic build | Pending one owner-authorized Testnet run |
-| Secure always-on production executor | Production milestone |
+See [the production integration plan](docs/INTEGRATION_PLAN.md) and [the BSC Testnet runbook](docs/ALTANA_RUNBOOK.md).
 
 ## Run Locally
 

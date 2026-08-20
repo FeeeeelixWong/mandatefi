@@ -27,6 +27,11 @@
   --blue-soft: #e4fbfd;
   --coral: #ed4b9e;
   --coral-soft: #fdeaf4;
+  --line-strong: #d7d1df;
+  --strategy-reserve: #1fc7d4;
+  --strategy-market: #7645d9;
+  --strategy-liquidity: #31d0aa;
+  --strategy-earn: #f0b90b;
 }
 
 * { box-sizing: border-box; }
@@ -36,4 +41,5 @@ button, input, select { font: inherit; letter-spacing: 0; }
 h1, h2, h3, .header-brand strong { font-family: Kanit, Inter, ui-sans-serif, sans-serif; letter-spacing: 0; }
 button { color: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid rgba(118,69,217,.38); outline-offset: 2px; }
 #root { min-height: 100vh; }
