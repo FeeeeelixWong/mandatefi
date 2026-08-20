@@ -43,3 +43,15 @@ If registration succeeds but the immediate verification call cannot produce evid
 | Altana KeyStore Controller | `0xb530D1971f5453F3359518343F05D0AedFfF7e12` |
 
 The SDK uses the Altana BSC Testnet relay at `https://testnet-relay.altana.network` and public chain ID `97`.
+
+## Verified Reference Run
+
+The following public run was completed from the deployed MandateFi product on 20 August 2026:
+
+| Step | Transaction |
+| --- | --- |
+| Fund smart wallet `0x2cd25c624f1a9e75c2991db6f8636f712c38914a` with `0.01 tBNB` | [`0xd06ce7...ffc70b`](https://testnet.bscscan.com/tx/0xd06ce74431c7b33c1d8299e1c073f39da727fde034f56841862e103631ffc70b) |
+| Register the passkey admin and expiring session in Altana KeyStore | [`0x726ed5...7e263`](https://testnet.bscscan.com/tx/0x726ed597395ef065e84ac93c1cbbbbadbed6680f690e77c12c86e440cdb7e263) |
+| Execute the session-scoped zero-value KeyStore verification | [`0xfd00b2...5dc3a`](https://testnet.bscscan.com/tx/0xfd00b2341d4366840f0125ba0279c50ef0aaf8d7f522d9658332fdf14cf5dc3a) |
+
+Post-run RPC verification returned two active public KeyStore entries and two account keys: one permanent super-admin passkey and one non-admin session expiring at `2026-09-19T13:16:07Z`.

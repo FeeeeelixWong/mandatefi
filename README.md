@@ -10,7 +10,7 @@ MandateFi is an agent marketplace for the **BNB Chain Smart Money Era Hackathon*
 
 **Prototype:** https://feeeeelixwong.github.io/mandatefi/
 
-> **Data notice:** strategy outcomes remain clearly labeled scenario data. Wallet/network state and the ERC-8004 registry strip are live. The Altana passkey wallet and grant/verify/revoke runtime are implemented as user-triggered BSC Testnet operations; a funded user run is still required before publishing transaction evidence. Strategy protocol transactions remain a separate milestone.
+> **Data notice:** strategy outcomes remain clearly labeled scenario data. Wallet/network state and the ERC-8004 registry strip are live. The Altana passkey wallet, public KeyStore grant, and session-key verification have been executed on BSC Testnet with public receipts. Strategy protocol transactions remain a separate milestone.
 
 ## ✦ Product Journey
 
@@ -41,6 +41,19 @@ Agent identity + capital cap + contract allowlist + expiry + owner revoke
 The current integration registers an Altana session key in the public KeyStore. Its executable scope is intentionally narrow: `isValidKey(address,bytes32)` on the configured KeyStore. The verification call transfers zero value, while the session has a native fee allowance capped at `0.003 tBNB/day` so Altana can pay for execution gas. No token or protocol spend permission is granted. This produces a safe proof of grant, session execution, expiry, and owner revoke before strategy-specific protocol adapters are enabled.
 
 The injected wallet only funds the smart wallet with test gas. The Altana administrator is a device passkey, and neither MandateFi nor the strategy agent receives the owner's private key.
+
+### Verified BSC Testnet Run
+
+The public evidence below was produced through the live MandateFi interface on 20 August 2026:
+
+| Evidence | Result | Explorer |
+| --- | --- | --- |
+| Altana smart wallet | `0x2cd25c624f1a9e75c2991db6f8636f712c38914a` | [View wallet](https://testnet.bscscan.com/address/0x2cd25c624f1a9e75c2991db6f8636f712c38914a) |
+| Test-gas funding | `0.01 tBNB` confirmed | [View transaction](https://testnet.bscscan.com/tx/0xd06ce74431c7b33c1d8299e1c073f39da727fde034f56841862e103631ffc70b) |
+| Passkey admin + scoped session grant | Confirmed in Altana KeyStore | [View transaction](https://testnet.bscscan.com/tx/0x726ed597395ef065e84ac93c1cbbbbadbed6680f690e77c12c86e440cdb7e263) |
+| Session-key verification execution | Confirmed, zero user-call value | [View transaction](https://testnet.bscscan.com/tx/0xfd00b2341d4366840f0125ba0279c50ef0aaf8d7f522d9658332fdf14cf5dc3a) |
+
+An independent RPC read returns two active KeyStore entries for this wallet: the passkey-controlled root authority and a non-admin session expiring at `2026-09-19T13:16:07Z`. This matches the account's two onchain key records and proves the session is publicly verifiable rather than UI-only state.
 
 ## ⑂ Architecture
 
@@ -82,8 +95,9 @@ See [the integration plan](docs/INTEGRATION_PLAN.md) for contract and API bounda
 | 8004scan identity API | ✅ Live read-only |
 | BNB Agent Studio agent runtime | ⏳ Next |
 | Altana passkey smart wallet | ✅ Implemented |
-| Altana grant, session execute, revoke | ✅ Implemented; user-triggered |
-| Published BSC Testnet transaction evidence | ⏳ Funded owner run required |
+| Altana grant and session execute | ✅ Verified on BSC Testnet |
+| Altana owner revoke | ✅ Implemented; user-triggered |
+| Published BSC Testnet transaction evidence | ✅ Public receipts linked above |
 | Strategy protocol execution | ⏳ Next adapter milestone |
 | Advantage Report measurements | ⏳ Template ready |
 
