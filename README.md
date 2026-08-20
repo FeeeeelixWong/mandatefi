@@ -8,6 +8,8 @@
 
 MandateFi is an agent marketplace for the **BNB Chain Smart Money Era Hackathon**. It helps a user move through the full decision journey: discover an agent, understand its evidence, compare alternatives, and grant only the authority that agent needs.
 
+**Prototype:** https://feeeeelixwong.github.io/mandatefi/
+
 > **Data notice:** the current catalog and performance values are clearly labeled scenario data. Real 8004scan identities, BSC Testnet transactions, and Altana sessions are integration milestones, not completed claims.
 
 ## ✦ Product Journey
