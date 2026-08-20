@@ -1,0 +1,30 @@
+:root {
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #14211d;
+  background: #f2f5f3;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --ink: #14211d;
+  --muted: #63716c;
+  --line: #dce4e0;
+  --surface: #ffffff;
+  --soft: #f6f8f7;
+  --sidebar: #11211c;
+  --mint: #15996d;
+  --mint-soft: #dff5ea;
+  --amber: #d78a16;
+  --amber-soft: #fff0cf;
+  --blue: #3478ce;
+  --blue-soft: #e4effc;
+  --coral: #d95e55;
+  --coral-soft: #fbe7e5;
+}
+
+* { box-sizing: border-box; }
+html { min-width: 320px; background: #f2f5f3; }
+body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; }
+button, input, select { font: inherit; letter-spacing: 0; }
+button { color: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+#root { min-height: 100vh; }
+
