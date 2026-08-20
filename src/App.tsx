@@ -122,8 +122,8 @@ function EmptyPortfolio({ onCreate }: { onCreate: () => void }) {
   return <div className="launch-page">
     <section className="launch-intro">
       <span className="product-kicker"><Sparkles size={15} /> Non-custodial AI asset manager</span>
-      <h1>Put your onchain capital<br />on a clear mandate.</h1>
-      <p>Set the amount, outcome and risk. MandateFi turns them into a revocable policy and rebalances through PancakeSwap only when the portfolio leaves your approved range.</p>
+      <h1>AI manages your onchain portfolio.<br />You set the rules.</h1>
+      <p>Choose how much to manage and how much risk to take. MandateFi rebalances through PancakeSwap within a revocable policy that you control.</p>
     </section>
     <section className="launch-workspace" aria-label="Example AI mandate">
       <div className="launch-card">
