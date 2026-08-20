@@ -1,28 +1,36 @@
 :root {
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #14211d;
-  background: #f2f5f3;
+  font-family: Kanit, Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #280d5f;
+  background: #f5f7ff;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --ink: #14211d;
-  --muted: #63716c;
-  --line: #dce4e0;
-  --app-bg: #f2f5f3;
+  --ink: #280d5f;
+  --muted: #7a6eaa;
+  --line: #e7e3eb;
+  --app-bg: #f5f7ff;
   --surface: #ffffff;
-  --soft: #f6f8f7;
-  --sidebar: #11211c;
-  --mint: #15996d;
-  --mint-soft: #dff5ea;
-  --amber: #d78a16;
-  --amber-soft: #fff0cf;
-  --blue: #3478ce;
-  --blue-soft: #e4effc;
-  --coral: #d95e55;
-  --coral-soft: #fbe7e5;
+  --soft: #f2eff8;
+  --sidebar: #ffffff;
+  --purple: #7645d9;
+  --purple-dark: #452a7a;
+  --purple-soft: #eeeaf4;
+  --cyan: #1fc7d4;
+  --cyan-dark: #0098a1;
+  --cyan-soft: #e4fbfd;
+  --yellow: #f0b90b;
+  --yellow-soft: #fff4d6;
+  --mint: #31d0aa;
+  --mint-soft: #e8fbf6;
+  --amber: #ffb237;
+  --amber-soft: #fff4d6;
+  --blue: #1fc7d4;
+  --blue-soft: #e4fbfd;
+  --coral: #ed4b9e;
+  --coral-soft: #fdeaf4;
 }
 
 * { box-sizing: border-box; }
-html { min-width: 320px; background: #f2f5f3; }
+html { min-width: 320px; background: #f5f7ff; }
 body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; }
 button, input, select { font: inherit; letter-spacing: 0; }
 button { color: inherit; }
