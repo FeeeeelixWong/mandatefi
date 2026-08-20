@@ -12,6 +12,7 @@ import { useAltanaWallet, type AltanaStage } from './hooks/useAltanaWallet'
 import { useInjectedWallet } from './hooks/useInjectedWallet'
 import { BSC_TESTNET_EXPLORER_URL } from './lib/chains'
 import { shortAddress } from './lib/wallet'
+import type { AltanaMandateProof, AltanaStrategyProof } from './integrations/altana'
 import type { Agent, AgentCategory, Mandate } from './types'
 import './App.css'
 
@@ -67,7 +68,7 @@ const altanaStageCopy: Record<AltanaStage, string> = {
   recovering: 'Recovering passkey wallet…',
   funding: 'Waiting for funding transaction…',
   granting: 'Registering session in Altana KeyStore…',
-  executing: 'Verifying session with an onchain call…',
+  executing: 'Executing the session-scoped onchain action…',
   revoking: 'Revoking session onchain…',
   error: 'Action required',
 }
@@ -106,7 +107,7 @@ function AgentCard({ agent, compared, onCompare, onOpen, onActivate }: {
       </div>
       <p className="agent-tagline">{agent.tagline}</p>
       <div className="agent-proof-row">
-        <span className="verified-label"><BadgeCheck size={15} /> ERC-8004-ready demo</span>
+        <span className="verified-label"><BadgeCheck size={15} /> {agent.strategyMode ? 'Live Testnet strategy' : 'ERC-8004-ready demo'}</span>
         <RiskBadge risk={agent.risk} />
       </div>
       <div className="performance-panel">
@@ -142,7 +143,7 @@ function DetailDrawer({ agent, onClose, onActivate }: { agent: Agent; onClose: (
         <div className="drawer-content">
           <div className="identity-strip">
             <div><BadgeCheck size={17} /><span>Identity preview</span><strong>{agent.identity}</strong></div>
-            <div><Zap size={17} /><span>Agent Studio</span><strong>Integration queued</strong></div>
+            <div><Zap size={17} /><span>Execution</span><strong>{agent.strategyMode ? 'Live on BSC Testnet' : 'Integration queued'}</strong></div>
           </div>
           <section className="drawer-section"><h3>What it does</h3><p>{agent.description}</p></section>
           <section className="drawer-section">
@@ -192,6 +193,23 @@ function ActivationModal({
   const [budget, setBudget] = useState(250)
   const [duration, setDuration] = useState(7)
   const [protocols, setProtocols] = useState(agent.protocols)
+  const [strategyQuote, setStrategyQuote] = useState<{ expected: string; minimum: string } | null>(null)
+  const [quoteError, setQuoteError] = useState('')
+  const isSafeRebalance = agent.strategyMode === 'safe-rebalance'
+  useEffect(() => {
+    if (!isSafeRebalance) return
+    let active = true
+    void import('./integrations/altana').then(async ({ formatStrategyToken, quoteSafeRebalance }) => {
+      const quote = await quoteSafeRebalance()
+      if (active) setStrategyQuote({
+        expected: formatStrategyToken(quote.quotedOut),
+        minimum: formatStrategyToken(quote.minimumOut),
+      })
+    }).catch((error: unknown) => {
+      if (active) setQuoteError(error instanceof Error ? error.message : 'Live quote unavailable.')
+    })
+    return () => { active = false }
+  }, [isSafeRebalance])
   function toggleProtocol(protocol: string) {
     setProtocols((current) => current.includes(protocol) ? current.filter((item) => item !== protocol) : [...current, protocol])
   }
@@ -203,19 +221,24 @@ function ActivationModal({
         <div className="modal-header"><div><span className="eyebrow">Activate {agent.name}</span><h2>{step === 1 ? 'Define the mandate' : step === 2 ? 'Review authority' : 'Ready to register'}</h2></div><button className="icon-button" disabled={altanaBusy} onClick={onClose} aria-label="Close activation"><X size={19} /></button></div>
         <div className="stepper" aria-label={`Step ${step} of 3`}>{[1, 2, 3].map((item) => <span key={item} className={item <= step ? 'active' : ''}>{item < step ? <Check size={14} /> : item}</span>)}</div>
         {step === 1 && <div className="modal-body">
-          <label className="field-label">Strategy capital policy<div className="money-input"><span>$</span><input type="number" min="10" value={budget} onChange={(event) => setBudget(Number(event.target.value))} /></div><small>Recorded as the strategy-level budget. Token-specific onchain limits arrive with the protocol execution adapter.</small></label>
+          {isSafeRebalance ? <div className="strategy-preview">
+            <div className="strategy-preview-head"><span>Live Testnet strategy</span><strong>Safe Treasury Rebalance</strong></div>
+            <div className="strategy-swap"><strong>0.001 tBNB</strong><ArrowRight size={18} /><strong>{strategyQuote ? `≈ ${strategyQuote.expected} BUSD` : 'Fetching BUSD quote…'}</strong></div>
+            <div className="strategy-guards"><span>1% max slippage</span><span>10 min deadline</span><span>Smart-wallet recipient</span></div>
+            {quoteError && <small className="wallet-error">{quoteError}</small>}
+          </div> : <label className="field-label">Strategy capital policy<div className="money-input"><span>$</span><input type="number" min="10" value={budget} onChange={(event) => setBudget(Number(event.target.value))} /></div><small>Recorded as the strategy-level budget for this catalog mandate.</small></label>}
           <label className="field-label">Permission expires<select value={duration} onChange={(event) => setDuration(Number(event.target.value))}><option value={1}>After 24 hours</option><option value={7}>After 7 days</option><option value={30}>After 30 days</option></select></label>
-          <fieldset className="protocol-fieldset"><legend>Strategy protocol policy</legend>{agent.protocols.map((protocol) => <label key={protocol}><input type="checkbox" checked={protocols.includes(protocol)} onChange={() => toggleProtocol(protocol)} /><span><Check size={14} /></span>{protocol}</label>)}</fieldset>
+          <fieldset className="protocol-fieldset"><legend>Strategy protocol policy</legend>{agent.protocols.map((protocol) => <label key={protocol}><input type="checkbox" checked={protocols.includes(protocol)} disabled={isSafeRebalance} onChange={() => toggleProtocol(protocol)} /><span><Check size={14} /></span>{protocol}</label>)}</fieldset>
           <div className="callout"><LockKeyhole size={18} /><span>Your wallet keeps custody. The agent receives only scoped, revocable authority.</span></div>
         </div>}
         {step === 2 && <div className="modal-body">
-          <div className="review-list"><div><span>Agent</span><strong>{agent.name}</strong></div><div><span>Strategy budget</span><strong>${budget.toLocaleString()}</strong></div><div><span>Expiry</span><strong>{duration} day{duration > 1 ? 's' : ''}</strong></div><div><span>Protocol policy</span><strong>{protocols.join(', ')}</strong></div><div><span>Network</span><strong>BNB Smart Chain Testnet</strong></div></div>
-          <div className="simulation-result live"><ShieldCheck size={22} /><div><strong>Safe verification scope</strong><span>This release registers one public Altana session limited to KeyStore `isValidKey`. The verification call sends zero value, while native gas is capped at 0.003 tBNB per day. Strategy protocol transactions remain the next adapter milestone.</span></div></div>
+          <div className="review-list"><div><span>Agent</span><strong>{agent.name}</strong></div><div><span>{isSafeRebalance ? 'Execution amount' : 'Strategy budget'}</span><strong>{isSafeRebalance ? '0.001 tBNB' : `$${budget.toLocaleString()}`}</strong></div>{isSafeRebalance && <div><span>Minimum received</span><strong>{strategyQuote ? `${strategyQuote.minimum} BUSD` : 'Refreshing at execution'}</strong></div>}<div><span>Expiry</span><strong>{duration} day{duration > 1 ? 's' : ''}</strong></div><div><span>Protocol policy</span><strong>{protocols.join(', ')}</strong></div><div><span>Network</span><strong>BNB Smart Chain Testnet</strong></div></div>
+          {isSafeRebalance ? <div className="simulation-result live"><ShieldCheck size={22} /><div><strong>Bounded execution scope</strong><span>Altana enforces one PancakeSwap V2 router and one swap method, a 0.004 tBNB daily native cap, and expiry. MandateFi refreshes the quote immediately before execution, pins the tBNB→BUSD path and smart-wallet recipient, and rejects output below 99% of quote.</span></div></div> : <div className="simulation-result"><ShieldCheck size={22} /><div><strong>Verification-only scope</strong><span>This catalog agent receives only the zero-value Altana KeyStore verification method. It cannot call a strategy protocol or move assets.</span></div></div>}
         </div>}
         {step === 3 && <div className="modal-body final-step">
           <div className="final-icon"><Fingerprint size={30} /></div>
-          <h3>Prepare the onchain owner account</h3>
-          <p>The injected wallet supplies test gas. A device passkey controls the Altana smart wallet and authorizes every grant or revoke.</p>
+          <h3>{isSafeRebalance ? 'Authorize the bounded swap' : 'Prepare the onchain owner account'}</h3>
+          <p>{isSafeRebalance ? 'Your passkey registers the scoped Altana session. The generated session then executes one 0.001 tBNB PancakeSwap transaction and records the receipt.' : 'The injected wallet supplies test gas. A device passkey controls the Altana smart wallet and authorizes every grant or revoke.'}</p>
           <div className="setup-checklist">
             <div className={account && isTargetNetwork ? 'complete' : ''}><span>{account && isTargetNetwork ? <Check size={15} /> : <Wallet size={15} />}</span><div><strong>Funding wallet</strong><small>{account ? `${shortAddress(account)} · ${isTargetNetwork ? 'BSC Testnet' : 'wrong network'}` : 'Not connected'}</small></div></div>
             <div className={altanaAddress ? 'complete' : ''}><span>{altanaAddress ? <Check size={15} /> : <KeyRound size={15} />}</span><div><strong>Passkey smart wallet</strong><small>{altanaAddress ? shortAddress(altanaAddress) : 'Not created'}</small></div></div>
@@ -230,7 +253,7 @@ function ActivationModal({
           {!isPasskeySupported && <span className="wallet-error">This browser does not expose WebAuthn passkeys.</span>}
           {(walletError || altanaError) && <span className="wallet-error">{walletError || altanaError}</span>}
         </div>}
-        <div className="modal-footer">{step > 1 ? <button className="secondary-button" disabled={altanaBusy} onClick={() => setStep(step - 1)}>Back</button> : <span />}{step < 3 ? <button className="primary-button large" disabled={step === 1 && protocols.length === 0} onClick={() => setStep(step + 1)}>Continue <ChevronRight size={17} /></button> : <button className="primary-button large" disabled={!readyToRegister || altanaBusy} onClick={() => void onConfirm(budget, duration, protocols)}>{altanaBusy ? <LoaderCircle className="spin" size={16} /> : <KeyRound size={16} />} {altanaBusy ? altanaStageCopy[altanaStage] : 'Register onchain'}</button>}</div>
+        <div className="modal-footer">{step > 1 ? <button className="secondary-button" disabled={altanaBusy} onClick={() => setStep(step - 1)}>Back</button> : <span />}{step < 3 ? <button className="primary-button large" disabled={(step === 1 && protocols.length === 0) || (isSafeRebalance && !strategyQuote)} onClick={() => setStep(step + 1)}>Continue <ChevronRight size={17} /></button> : <button className="primary-button large" disabled={!readyToRegister || altanaBusy} onClick={() => void onConfirm(isSafeRebalance ? 0.001 : budget, duration, protocols)}>{altanaBusy ? <LoaderCircle className="spin" size={16} /> : <KeyRound size={16} />} {altanaBusy ? altanaStageCopy[altanaStage] : isSafeRebalance ? 'Authorize & execute' : 'Register onchain'}</button>}</div>
       </div>
     </div>
   )
@@ -252,7 +275,10 @@ function CompareView({ selected, onOpen, onClear }: { selected: Agent[]; onOpen:
 }
 
 function MandatesView({ mandates, revokingId, onRevoke }: { mandates: Mandate[]; revokingId: string; onRevoke: (id: string) => void }) {
-  return <div><div className="view-title-row"><div><span className="eyebrow">Owner control</span><h1>My mandates</h1></div><span className="live-status"><i className="online" /> Altana onchain</span></div>{mandates.length === 0 ? <div className="empty-state"><div className="empty-icon"><ShieldCheck size={26} /></div><h2>No onchain mandates</h2><p>Activate an agent to register a public, scoped Altana session on BSC Testnet.</p></div> : <div className="mandate-list">{mandates.map((mandate) => <article key={mandate.id} className="mandate-row-wrap"><div className="mandate-row"><div className="mandate-icon"><Bot size={20} /></div><div className="mandate-main"><strong>{mandate.agentName}</strong><span>{mandate.protocols.join(' · ')}</span></div><div><span>Strategy budget</span><strong>${mandate.budget.toLocaleString()}</strong></div><div><span>Expires</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div><div><span>Status</span><strong className={mandate.status === 'Active' ? 'status-active' : 'status-revoked'}>{mandate.status}</strong></div><button className="danger-button" disabled={mandate.status === 'Revoked' || revokingId === mandate.id} onClick={() => onRevoke(mandate.id)}>{revokingId === mandate.id ? <LoaderCircle className="spin" size={14} /> : null}{revokingId === mandate.id ? 'Revoking' : 'Revoke'}</button></div><div className="mandate-evidence"><span><KeyRound size={14} /> Smart wallet {shortAddress(mandate.smartWallet)} · verification {(mandate.verificationState ?? (mandate.verificationTxHash ? 'CONFIRMED' : 'UNAVAILABLE')).toLowerCase()}</span>{mandate.grantTxHash && <a href={altanaExplorerTx(mandate.grantTxHash) ?? '#'} target="_blank" rel="noreferrer">Grant tx <ExternalLink size={12} /></a>}{mandate.verificationTxHash && <a href={altanaExplorerTx(mandate.verificationTxHash) ?? '#'} target="_blank" rel="noreferrer">Session execution <ExternalLink size={12} /></a>}{mandate.revokeTxHash && <a href={altanaExplorerTx(mandate.revokeTxHash) ?? '#'} target="_blank" rel="noreferrer">Revoke tx <ExternalLink size={12} /></a>}</div></article>)}</div>}</div>
+  return <div><div className="view-title-row"><div><span className="eyebrow">Owner control</span><h1>My mandates</h1></div><span className="live-status"><i className="online" /> Altana onchain</span></div>{mandates.length === 0 ? <div className="empty-state"><div className="empty-icon"><ShieldCheck size={26} /></div><h2>No onchain mandates</h2><p>Activate an agent to register a public, scoped Altana session on BSC Testnet.</p></div> : <div className="mandate-list">{mandates.map((mandate) => {
+    const executionState = mandate.strategyState ?? mandate.verificationState ?? (mandate.strategyTxHash || mandate.verificationTxHash ? 'CONFIRMED' : 'UNAVAILABLE')
+    return <article key={mandate.id} className="mandate-row-wrap"><div className="mandate-row"><div className="mandate-icon"><Bot size={20} /></div><div className="mandate-main"><strong>{mandate.agentName}</strong><span>{mandate.protocols.join(' · ')}</span></div><div><span>{mandate.strategyId ? 'Testnet execution' : 'Strategy budget'}</span><strong>{mandate.strategyId ? `${mandate.inputAmount} ${mandate.inputAsset}` : `$${mandate.budget.toLocaleString()}`}</strong></div><div><span>Expires</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div><div><span>Status</span><strong className={mandate.status === 'Active' ? 'status-active' : 'status-revoked'}>{mandate.status}</strong></div><button className="danger-button" disabled={mandate.status === 'Revoked' || revokingId === mandate.id} onClick={() => onRevoke(mandate.id)}>{revokingId === mandate.id ? <LoaderCircle className="spin" size={14} /> : null}{revokingId === mandate.id ? 'Revoking' : 'Revoke'}</button></div><div className="mandate-evidence"><span><KeyRound size={14} /> Smart wallet {shortAddress(mandate.smartWallet)} · {mandate.strategyId ? `received ${mandate.outputReceived ?? 'pending'} ${mandate.outputAsset ?? 'BUSD'}` : `verification ${executionState.toLowerCase()}`}</span>{mandate.grantTxHash && <a href={altanaExplorerTx(mandate.grantTxHash) ?? '#'} target="_blank" rel="noreferrer">Grant tx <ExternalLink size={12} /></a>}{mandate.strategyTxHash && <a href={altanaExplorerTx(mandate.strategyTxHash) ?? '#'} target="_blank" rel="noreferrer">Swap tx <ExternalLink size={12} /></a>}{mandate.verificationTxHash && <a href={altanaExplorerTx(mandate.verificationTxHash) ?? '#'} target="_blank" rel="noreferrer">Session execution <ExternalLink size={12} /></a>}{mandate.revokeTxHash && <a href={altanaExplorerTx(mandate.revokeTxHash) ?? '#'} target="_blank" rel="noreferrer">Revoke tx <ExternalLink size={12} /></a>}</div></article>
+  })}</div>}</div>
 }
 
 function ActivityView() {
@@ -297,7 +323,11 @@ function App() {
   async function confirmMandate(budget: number, duration: number, protocols: string[]) {
     if (!activationAgent) return
     try {
-      const proof = await altana.activate(duration)
+      const strategyId = activationAgent.strategyMode
+      const proof = await altana.activate(duration, strategyId)
+      const strategyProof = strategyId ? proof as AltanaStrategyProof : null
+      const verificationProof = strategyId ? null : proof as AltanaMandateProof
+      const { formatStrategyToken } = await import('./integrations/altana')
       setMandates((current) => [{
         id: crypto.randomUUID(),
         agentId: activationAgent.id,
@@ -312,15 +342,27 @@ function App() {
         sessionPublicKey: proof.session.publicKey,
         expiry: proof.session.expiry,
         grantTxHash: proof.grant.transactionHash,
-        verificationTxHash: proof.verification?.transactionHash,
-        verificationState: proof.verification?.status ?? 'UNAVAILABLE',
-        verificationError: proof.verificationError,
+        verificationTxHash: verificationProof?.verification?.transactionHash,
+        verificationState: verificationProof?.verification?.status ?? (strategyProof ? undefined : 'UNAVAILABLE'),
+        verificationError: verificationProof?.verificationError,
+        strategyId,
+        strategyTxHash: strategyProof?.execution?.transactionHash,
+        strategyState: strategyProof?.execution?.status ?? (strategyProof ? 'UNAVAILABLE' : undefined),
+        strategyError: strategyProof?.executionError,
+        inputAmount: strategyProof ? formatStrategyToken(strategyProof.quote.amountIn) : undefined,
+        inputAsset: strategyProof ? 'tBNB' : undefined,
+        quotedOutput: strategyProof ? formatStrategyToken(strategyProof.quote.quotedOut) : undefined,
+        minimumOutput: strategyProof ? formatStrategyToken(strategyProof.quote.minimumOut) : undefined,
+        outputReceived: strategyProof?.outputReceived !== undefined ? formatStrategyToken(strategyProof.outputReceived) : undefined,
+        outputAsset: strategyProof ? strategyProof.quote.outputSymbol : undefined,
       }, ...current])
       setActivationAgent(null)
       setSelectedAgent(null)
-      setNotice(proof.verification?.status === 'CONFIRMED'
-        ? `${activationAgent.name} session registered and verified on BSC Testnet.`
-        : `${activationAgent.name} session registered. Verification evidence is unavailable; the mandate remains revocable.`)
+      setNotice(strategyProof?.execution?.status === 'CONFIRMED'
+        ? `${activationAgent.name} executed the bounded PancakeSwap rebalance on BSC Testnet.`
+        : verificationProof?.verification?.status === 'CONFIRMED'
+          ? `${activationAgent.name} session registered and verified on BSC Testnet.`
+          : `${activationAgent.name} session registered. Execution evidence is unavailable; the mandate remains revocable.`)
       setView('mandates')
     } catch {
       // The hook keeps the detailed, user-visible failure state in the modal.

@@ -171,6 +171,16 @@
 .simulation-result strong { font-size: 10px; }
 .simulation-result span { color: #587269; font-size: 8px; }
 .simulation-result.live { border-color: #91cbb2; background: #eaf8f1; }
+.strategy-preview { padding: 14px; border: 1px solid #9bcdb8; border-radius: 6px; background: #f2faf6; display: grid; gap: 12px; }
+.strategy-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.strategy-preview-head span { padding: 4px 6px; border-radius: 4px; color: #176747; background: #dff3e9; font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.strategy-preview-head strong { font-size: 11px; }
+.strategy-swap { min-height: 46px; padding: 0 12px; border: 1px solid #d7e7df; border-radius: 5px; background: #fff; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; }
+.strategy-swap strong { min-width: 0; font-size: 14px; }
+.strategy-swap strong:last-child { text-align: right; color: #176747; }
+.strategy-swap svg { color: #7b8882; }
+.strategy-guards { display: flex; flex-wrap: wrap; gap: 6px; }
+.strategy-guards span { padding: 5px 7px; border: 1px solid #cfe1d8; border-radius: 4px; color: #4f655c; background: #fff; font-size: 8px; font-weight: 700; }
 .final-step { min-height: 230px; place-items: center; align-content: center; text-align: center; }
 .final-icon { width: 62px; height: 62px; border-radius: 50%; display: grid; place-items: center; color: #176747; background: #e6f6ee; }
 .final-step h3 { margin: 0; font-size: 17px; }
@@ -285,4 +295,7 @@
   .category-strip button { min-height: 48px; }
   .agent-card { padding: 14px; }
   .metric-grid dt, .metric-grid small { font-size: 7px; }
+  .strategy-swap { grid-template-columns: 1fr; padding: 10px 12px; }
+  .strategy-swap svg { transform: rotate(90deg); }
+  .strategy-swap strong:last-child { text-align: left; }
 }

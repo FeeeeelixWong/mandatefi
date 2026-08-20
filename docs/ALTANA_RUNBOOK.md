@@ -2,29 +2,45 @@
 
 ## What This Proves
 
-The current MandateFi integration proves the complete authority lifecycle without moving strategy assets:
+MandateFi now supports two authority lifecycles. The Safe Treasury Rebalance path proves a bounded strategy action:
 
 1. A device passkey controls an Altana smart wallet.
 2. The owner registers a public, expiring session in Altana KeyStore.
-3. The session executes a BSC Testnet call to `isValidKey(address,bytes32)`.
-4. The owner revokes the session with the passkey.
-5. Grant, execution, and revoke receipts link to BscScan.
+3. MandateFi fetches a fresh PancakeSwap V2 quote for `0.001 tBNB → BUSD`.
+4. The session executes `swapExactETHForTokens` with 1% maximum slippage and a ten-minute deadline.
+5. BUSD is returned to the Altana smart wallet and the before/after balance delta is recorded.
+6. The owner revokes the session with the passkey.
+7. Grant, swap, and revoke receipts link to BscScan.
 
-The session has one allowed selector. Its verification call transfers zero value, and its only spend allowance is a `0.003 tBNB/day` native fee cap for gas. PancakeSwap, Venus, and Lista calls are not enabled until their Testnet addresses, selectors, assets, and token-specific limits are pinned.
+Catalog-only agents keep the earlier verification profile: one `isValidKey(address,bytes32)` selector, zero call value, and a `0.003 tBNB/day` native fee cap.
+
+## Safe Treasury Rebalance Policy
+
+| Constraint | Value | Enforcement |
+| --- | --- | --- |
+| Network | BSC Testnet, chain `97` | Altana client configuration |
+| Router | `0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3` | Altana call permission |
+| Method | `swapExactETHForTokens(uint256,address[],address,uint256)` | Altana call permission |
+| Daily native cap | `0.004 tBNB` | Altana spend permission |
+| Per-run amount | `0.001 tBNB` | MandateFi executor |
+| Path | WBNB `0xae13...a7cd` → BUSD `0x7886...F2A7` | MandateFi executor |
+| Recipient | The activating Altana smart wallet | MandateFi executor |
+| Slippage | 1%; `amountOutMin = quote × 99%` | PancakeSwap transaction calldata |
+| Quote lifetime | 10 minutes | PancakeSwap transaction deadline |
 
 ## Browser Flow
 
 1. Open MandateFi over HTTPS or `localhost` in a passkey-capable browser.
 2. Connect an injected EVM wallet and switch to BNB Smart Chain Testnet (`97`).
-3. Select an agent and complete the policy form.
+3. Select **Range Pilot**, inspect the live quote and policy, and continue.
 4. Create a passkey smart wallet, or recover an existing MandateFi passkey.
 5. Fund the displayed smart-wallet address with `0.01 tBNB` through the connected wallet.
-6. Select **Register onchain** and approve the passkey prompt.
-7. Wait for the Altana grant and session verification to confirm.
-8. Open **My mandates** and inspect both transaction links.
+6. Select **Authorize & execute** and approve the passkey prompt.
+7. Wait for the Altana grant and bounded PancakeSwap swap to confirm.
+8. Open **My mandates** and inspect the grant, swap, and BUSD received.
 9. Select **Revoke**, approve the passkey prompt, and inspect the revoke transaction.
 
-If registration succeeds but the immediate verification call cannot produce evidence, MandateFi still persists the live grant and keeps **Revoke** available. This prevents a partially completed activation from becoming an invisible authorization.
+If registration succeeds but the immediate swap cannot produce evidence, MandateFi still persists the live grant and keeps **Revoke** available. This prevents a partially completed activation from becoming an invisible authorization.
 
 ## Custody Boundary
 

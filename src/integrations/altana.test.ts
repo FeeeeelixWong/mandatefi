@@ -3,9 +3,13 @@ import {
   ALTANA_CHAIN_ID,
   ALTANA_KEYSTORE,
   ALTANA_NATIVE_FEE_CAP,
+  PANCAKE_V2_ROUTER,
+  SAFE_REBALANCE_NATIVE_CAP,
   altanaClient,
+  buildSafeRebalancePermissions,
   buildVerificationPermissions,
   grantAndVerifyAltanaMandate,
+  minimumOutputFor,
   type AltanaWalletProfile,
 } from './altana'
 
@@ -51,5 +55,25 @@ describe('Altana verification mandate', () => {
     expect(result.grant).toBe(grant)
     expect(result.verification).toBeUndefined()
     expect(result.verificationError).toBe('relay unavailable')
+  })
+})
+
+describe('Safe Treasury Rebalance mandate', () => {
+  it('pins the session to one PancakeSwap router method and native cap', () => {
+    expect(buildSafeRebalancePermissions()).toEqual({
+      calls: [{
+        to: PANCAKE_V2_ROUTER,
+        signature: 'swapExactETHForTokens(uint256,address[],address,uint256)',
+      }],
+      spend: [{
+        limit: SAFE_REBALANCE_NATIVE_CAP,
+        period: 'day',
+      }],
+    })
+  })
+
+  it('derives a deterministic 1% minimum output', () => {
+    expect(minimumOutputFor(1_000_000n)).toBe(990_000n)
+    expect(minimumOutputFor(445_735_144_932_801_459n)).toBe(441_277_793_483_473_444n)
   })
 })

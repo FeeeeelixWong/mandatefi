@@ -32,6 +32,7 @@ export interface Agent {
   sparkline: number[]
   description: string
   safeguards: string[]
+  strategyMode?: 'safe-rebalance'
 }
 
 export interface Mandate {
@@ -52,4 +53,14 @@ export interface Mandate {
   verificationState?: 'CONFIRMED' | 'PENDING' | 'FAILED' | 'UNAVAILABLE'
   verificationError?: string
   revokeTxHash?: `0x${string}`
+  strategyId?: 'safe-rebalance'
+  strategyTxHash?: `0x${string}`
+  strategyState?: 'CONFIRMED' | 'PENDING' | 'FAILED' | 'UNAVAILABLE'
+  strategyError?: string
+  inputAmount?: string
+  inputAsset?: string
+  quotedOutput?: string
+  minimumOutput?: string
+  outputReceived?: string
+  outputAsset?: string
 }

@@ -33,7 +33,9 @@ Replace every scenario-only element in the prototype with inspectable BNB Smart 
 6. ✅ Implement a session-signed verification call and explorer evidence links.
 7. ✅ Implement passkey-authorized revoke and persistence of the revoke receipt.
 8. Run the funded browser flow and publish its grant, execute, and revoke transaction hashes.
-9. Pin verified PancakeSwap/Venus/Lista contract addresses and token-specific spend limits before enabling strategy execution.
+9. ✅ Pin the first strategy adapter to PancakeSwap V2 Testnet: router `0x9Ac64...e5c3`, `swapExactETHForTokens` only, `0.001 tBNB` per run, `0.004 tBNB/day`, 1% slippage, and ten-minute deadline.
+10. Capture the first user-authorized public swap receipt and BUSD balance delta.
+11. Pin verified Venus/Lista contract addresses and token-specific spend limits before enabling those strategy families.
 
 ## Phase 3: Strategy Proof
 

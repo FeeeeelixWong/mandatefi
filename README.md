@@ -10,16 +10,17 @@ MandateFi is an agent marketplace for the **BNB Chain Smart Money Era Hackathon*
 
 **Prototype:** https://feeeeelixwong.github.io/mandatefi/
 
-> **Data notice:** strategy outcomes remain clearly labeled scenario data. Wallet/network state and the ERC-8004 registry strip are live. The Altana passkey wallet, public KeyStore grant, and session-key verification have been executed on BSC Testnet with public receipts. Strategy protocol transactions remain a separate milestone.
+> **Data notice:** catalog performance outcomes remain clearly labeled scenario data. Wallet/network state and the ERC-8004 registry strip are live. The Altana passkey wallet, public KeyStore grant, and session-key verification have public BSC Testnet receipts. **Range Pilot now includes a real bounded PancakeSwap V2 Testnet execution path**; its first public swap receipt is the final operator step.
 
 ## ✦ Product Journey
 
 1. **Discover** agents across all four required strategy categories.
 2. **Understand** outcomes, risk, cost, protocols, and safeguards.
 3. **Compare** up to three agents with a consistent metric model.
-4. **Activate** a public Altana session with a passkey and explicit expiry.
-5. **Verify** the session through a zero-value KeyStore call on BSC Testnet.
-6. **Control** active mandates from one place and revoke them onchain.
+4. **Preview** a fresh Testnet quote, minimum output, deadline, and recipient.
+5. **Activate** a public Altana session with a passkey and explicit expiry.
+6. **Execute** Range Pilot's bounded `0.001 tBNB → BUSD` PancakeSwap action, or use a zero-value verification scope for catalog-only agents.
+7. **Control** active mandates from one place and revoke them onchain.
 
 ## ◫ Marketplace Coverage
 
@@ -38,7 +39,14 @@ Every activation is expressed as a revocable mandate:
 Agent identity + capital cap + contract allowlist + expiry + owner revoke
 ```
 
-The current integration registers an Altana session key in the public KeyStore. Its executable scope is intentionally narrow: `isValidKey(address,bytes32)` on the configured KeyStore. The verification call transfers zero value, while the session has a native fee allowance capped at `0.003 tBNB/day` so Altana can pay for execution gas. No token or protocol spend permission is granted. This produces a safe proof of grant, session execution, expiry, and owner revoke before strategy-specific protocol adapters are enabled.
+MandateFi exposes two intentionally separate authority profiles:
+
+| Profile | Onchain call scope | Value scope | Product use |
+| --- | --- | --- | --- |
+| **Safe Treasury Rebalance** | PancakeSwap V2 Testnet router, `swapExactETHForTokens` only | `0.004 tBNB/day` native cap; each product run sends exactly `0.001 tBNB` | Live Range Pilot execution |
+| **Verification only** | Altana KeyStore, `isValidKey(address,bytes32)` only | `0.003 tBNB/day` native fee cap; user call sends zero value | Safe catalog-agent activation proof |
+
+For Range Pilot, MandateFi reads a fresh PancakeSwap quote immediately before both review and execution, calculates `amountOutMin` at 99% of quote, uses a ten-minute deadline, pins the route to Testnet WBNB → BUSD, and sends output back to the Altana smart wallet. Altana enforces the router, method, daily native cap, and expiry onchain. The path, recipient, per-run amount, quote, and deadline are deterministically constructed by the MandateFi executor; they are not misrepresented as calldata constraints enforced by the current Altana permission schema.
 
 The injected wallet only funds the smart wallet with test gas. The Altana administrator is a device passkey, and neither MandateFi nor the strategy agent receives the owner's private key.
 
@@ -64,8 +72,8 @@ flowchart LR
   C -. "identity and activity" .-> E["8004scan"]
   M --> P["Mandate policy builder"]
   P --> K["Altana Keystore session"]
-  K -. "planned protocol adapter" .-> A["Selected strategy agent"]
-  A -. "planned execution" .-> D["PancakeSwap / Venus / Lista"]
+  K --> A["Scoped strategy session"]
+  A --> D["PancakeSwap V2 Testnet"]
   D --> B["BNB Smart Chain"]
   B --> R["Receipts and owner revoke state"]
   R --> M
@@ -80,7 +88,7 @@ See [the integration plan](docs/INTEGRATION_PLAN.md) for contract and API bounda
 | Main Agent Marketplace | Four equally deep categories and a discover-to-activate journey | Live catalog data and working activation |
 | Altana | Passkey-controlled smart wallet with scoped calls, gas cap, expiry, and revoke | KeyStore registration and real session-key transaction |
 | TermiX | Marketplace that helps users select agents by value | Completed [Agent Advantage Report](docs/AGENT_ADVANTAGE_REPORT.md) |
-| PancakeSwap | Rebalancing and grid agents tied to trader/LP outcomes | Real Testnet execution or verifiable simulation |
+| PancakeSwap | Safe Treasury Rebalance with a fresh quote, minimum output, deadline, and bounded spend | First public Range Pilot swap receipt |
 
 ## Build Status
 
@@ -98,7 +106,8 @@ See [the integration plan](docs/INTEGRATION_PLAN.md) for contract and API bounda
 | Altana grant and session execute | ✅ Verified on BSC Testnet |
 | Altana owner revoke | ✅ Implemented; user-triggered |
 | Published BSC Testnet transaction evidence | ✅ Public receipts linked above |
-| Strategy protocol execution | ⏳ Next adapter milestone |
+| Safe Treasury Rebalance adapter | ✅ Implemented with live PancakeSwap quote |
+| First public PancakeSwap session transaction | ⏳ One user-authorized Testnet run |
 | Advantage Report measurements | ⏳ Template ready |
 
 The UI keeps live identity data visually separate from the simulated strategy catalog so evaluators can identify which claims are currently backed by external systems. The main boundaries are `src/hooks/useInjectedWallet.ts`, `src/services/erc8004.ts`, and `src/integrations/altana.ts`.

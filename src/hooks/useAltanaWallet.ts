@@ -106,12 +106,14 @@ export function useAltanaWallet() {
     }
   }, [profile, refreshBalance])
 
-  const activate = useCallback(async (durationDays: number) => {
+  const activate = useCallback(async (durationDays: number, strategyMode?: 'safe-rebalance') => {
     if (!profile) throw new Error('Create or recover the Altana wallet first.')
     setError('')
     try {
-      const { grantAndVerifyAltanaMandate } = await import('../integrations/altana')
-      const result = await grantAndVerifyAltanaMandate(profile, durationDays, setStage)
+      const { grantAndExecuteSafeRebalance, grantAndVerifyAltanaMandate } = await import('../integrations/altana')
+      const result = strategyMode === 'safe-rebalance'
+        ? await grantAndExecuteSafeRebalance(profile, durationDays, setStage)
+        : await grantAndVerifyAltanaMandate(profile, durationDays, setStage)
       await refreshBalance(profile)
       setStage('idle')
       return result
