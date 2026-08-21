@@ -8,6 +8,7 @@ import {
   selectLiquidityOpportunity,
   type PancakeResearchSnapshot,
 } from '../integrations/pancakeResearch.js'
+import type { PancakeMarketSnapshot } from '../integrations/pancakeMarket.js'
 
 export type SpecialistAgentId = 'market' | 'liquidity' | 'farms' | 'earn' | 'execution-cost'
 export type AgentDataStatus = 'READY' | 'STALE' | 'UNAVAILABLE'
@@ -86,6 +87,7 @@ type CommitteeContext = {
   signals?: ProtocolSignals
   executionCost?: ExecutionCostEstimate | null
   pancakeResearch?: PancakeResearchSnapshot | null
+  pancakeMarket?: PancakeMarketSnapshot | null
 }
 
 function freshnessStatus(observedAt: string | undefined, nowMs: number, staleAfterMinutes: number): AgentDataStatus {
@@ -103,6 +105,27 @@ function compactUsd(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(value)
 }
 
+function exactUsd(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: value < 10 ? 4 : 2,
+  }).format(value)
+}
+
+function combinedMarketStatus(
+  snapshotObservedAt: string | undefined,
+  marketObservedAt: string | undefined,
+  nowMs: number,
+): AgentDataStatus {
+  const portfolioStatus = freshnessStatus(snapshotObservedAt, nowMs, 15)
+  const officialPriceStatus = freshnessStatus(marketObservedAt, nowMs, 5)
+  if (portfolioStatus === 'UNAVAILABLE' || officialPriceStatus === 'UNAVAILABLE') return 'UNAVAILABLE'
+  if (portfolioStatus === 'STALE' || officialPriceStatus === 'STALE') return 'STALE'
+  return 'READY'
+}
+
 function pairRiskCostBps(pair: string) {
   const symbols = pair.toUpperCase().split('/')
   const stables = new Set(['USDT', 'USDC'])
@@ -118,11 +141,15 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
   const signals = context.signals ?? {}
   const plan = context.executionPlan
   const research = context.pancakeResearch ?? null
+  const market = context.pancakeMarket ?? null
   const liquidityOpportunity = research ? selectLiquidityOpportunity(research, context.strategy.riskProfile) : null
   const farmOpportunity = research ? selectFarmOpportunity(research, context.strategy.riskProfile) : null
   const earnOpportunity = research ? selectEarnOpportunity(research) : null
   const driftBps = Math.abs(Number(plan.currentStableBps - plan.targetStableBps))
-  const marketStatus = freshnessStatus(context.snapshot?.updatedAt, nowMs, 15)
+  const portfolioMarketStatus = freshnessStatus(context.snapshot?.updatedAt, nowMs, 15)
+  const officialPriceStatus = freshnessStatus(market?.observedAt, nowMs, 5)
+  const marketStatus = combinedMarketStatus(context.snapshot?.updatedAt, market?.observedAt, nowMs)
+  const stablecoinDepeg = (market?.stablecoinMaxDeviationBps ?? 0) >= 100
   const liquidityStatus = liquidityOpportunity
     ? freshnessStatus(research?.liquidity.observedAt, nowMs, 35)
     : signals.lpRangeDistanceBps === undefined && signals.impermanentLossBps === undefined && signals.liquidityChangeBps === undefined
@@ -148,19 +175,31 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
       name: 'Market analyst',
       remit: 'Spot price, reserve drift, volatility and depeg surveillance',
       cadenceMinutes: 5,
-      dataAsOf: context.snapshot?.updatedAt,
+      dataAsOf: market?.observedAt,
       status: marketStatus,
-      stance: marketStatus !== 'READY' ? 'BLOCK' : plan.action === 'HOLD' ? 'NEUTRAL' : 'SUPPORT',
-      confidence: marketStatus === 'READY' ? 92 : 20,
+      stance: marketStatus !== 'READY' || stablecoinDepeg ? 'BLOCK' : plan.action === 'HOLD' ? 'NEUTRAL' : 'SUPPORT',
+      confidence: marketStatus === 'READY' ? 94 : marketStatus === 'STALE' ? 45 : 20,
       headline: marketStatus === 'READY'
-        ? plan.action === 'HOLD' ? 'Reserve allocation remains inside its approved band.' : `${driftBps / 100}% reserve drift requires review.`
-        : 'Live market snapshot is missing or stale.',
-      findings: context.snapshot ? [
-        `PancakeSwap spot quote: ${Number(context.snapshot.priceStablePerNative) / 1e18} BUSD per tBNB.`,
-        `Reserve: ${Number(plan.currentStableBps) / 100}% current vs ${Number(plan.targetStableBps) / 100}% target.`,
-      ] : [],
-      missingInputs: marketStatus === 'READY' ? [] : ['Fresh wallet balances and PancakeSwap spot quote'],
-      sourceLabel: 'PancakeSwap testnet quote',
+        ? stablecoinDepeg
+          ? `Stablecoin deviation reached ${(market?.stablecoinMaxDeviationBps ?? 0) / 100}%; autonomous execution is blocked.`
+          : plan.action === 'HOLD' ? 'Official market prices and reserve allocation remain inside policy.' : `${driftBps / 100}% reserve drift requires review.`
+        : 'Official PancakeSwap market evidence or the execution snapshot is missing or stale.',
+      findings: [
+        ...(market ? [
+          `Official USD prices: BNB ${exactUsd(market.pricesUsd.bnb)} · CAKE ${exactUsd(market.pricesUsd.cake)}.`,
+          `Stablecoins: USDT ${exactUsd(market.pricesUsd.usdt)} · USDC ${exactUsd(market.pricesUsd.usdc)} · max deviation ${market.stablecoinMaxDeviationBps} bps.`,
+        ] : []),
+        ...(context.snapshot ? [
+          `BSC Testnet execution quote: ${Number(context.snapshot.priceStablePerNative) / 1e18} BUSD per tBNB.`,
+          `Reserve: ${Number(plan.currentStableBps) / 100}% current vs ${Number(plan.targetStableBps) / 100}% target.`,
+        ] : []),
+      ],
+      missingInputs: [
+        ...(officialPriceStatus === 'READY' ? [] : ['Fresh BNB, CAKE, USDT and USDC prices from the PancakeSwap Price API SDK']),
+        ...(portfolioMarketStatus === 'READY' ? [] : ['Fresh BSC Testnet wallet balances and executable router quote']),
+      ],
+      sourceLabel: market ? 'PancakeSwap Price API SDK' : undefined,
+      sourceUrl: market?.sourceUrl,
       estimatedGrossBenefitBps: null,
       estimatedRiskCostBps: null,
     }, generatedAt),
@@ -284,6 +323,7 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
   const netBenefitBps = grossBenefitBps !== null && executionCostBps !== null ? grossBenefitBps - riskCostBps - executionCostBps : null
   const costGatePassed = plan.action === 'HOLD' || (
     marketStatus === 'READY' &&
+    !stablecoinDepeg &&
     costStatus === 'READY' &&
     (executionCostBps ?? Number.POSITIVE_INFINITY) <= context.strategy.guardrails.maximumExecutionCostBps
   )

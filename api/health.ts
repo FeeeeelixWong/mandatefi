@@ -12,6 +12,7 @@ export default function handler(request: ApiRequest, response: ApiResponse) {
     deepseekConfigured: Boolean(process.env.DEEPSEEK_API_KEY),
     specialistModel: process.env.DEEPSEEK_SPECIALIST_MODEL ?? 'deepseek-v4-flash',
     managerModel: process.env.DEEPSEEK_MANAGER_MODEL ?? 'deepseek-v4-pro',
+    marketPriceProvider: 'PancakeSwap Price API SDK',
     auditPersistence: process.env.DATABASE_URL ? 'postgres' : 'vercel-log',
   })
 }

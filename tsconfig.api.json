@@ -13,5 +13,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["api/**/*.ts", "src/domain/**/*.ts", "src/integrations/pancakeResearch.ts"]
+  "include": ["api/**/*.ts", "src/domain/**/*.ts", "src/integrations/pancakeResearch.ts", "src/integrations/pancakeMarket.ts"]
 }

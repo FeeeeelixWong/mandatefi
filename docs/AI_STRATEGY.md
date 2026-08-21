@@ -39,7 +39,7 @@ flowchart LR
 | Mandate expiry | Within 48 hours | Review renewal or safe unwind |
 | Owner request | Manual review | Evaluate immediately |
 
-The current live browser snapshot supplies schedule, owner, expiry, liquid-reserve drift, PancakeSwap testnet quotes, and BSC gas inputs. A separate scheduled mainnet research snapshot supplies verified LP, Farm, and Earn opportunities. Each input has its own timestamp and freshness window; stale inputs downgrade the relevant specialist rather than being silently reused.
+The current live browser snapshot supplies schedule, owner, expiry, liquid-reserve drift, PancakeSwap testnet quotes, and BSC gas inputs. A Vercel market endpoint uses the official PancakeSwap Price API SDK for BNB, CAKE, USDT, and USDC prices; the Market agent requires both this mainnet snapshot and the execution-network snapshot to be fresh. A separate scheduled mainnet research snapshot supplies verified LP, Farm, and Earn opportunities. Each input has its own timestamp and freshness window; stale inputs downgrade the relevant specialist rather than being silently reused.
 
 ## Specialist agents
 
@@ -47,7 +47,7 @@ The committee deliberately separates research from portfolio judgment:
 
 | Agent | Primary responsibility | Freshness window |
 | --- | --- | ---: |
-| Market analyst | Spot state, balances, drift, volatility and depeg risk | 15 minutes |
+| Market analyst | Official Price API spot state, balances, drift and stablecoin depeg risk | 5 minutes |
 | LP analyst | Pool depth, fee APR, range state and impermanent loss | 20 minutes |
 | Farm analyst | Net incentives, emissions, locks and exit liquidity | 45 minutes |
 | Earn analyst | Vault yield, rewards and compounding economics | 90 minutes |
@@ -66,6 +66,7 @@ This build intentionally separates networks:
 | Plane | Network | Purpose |
 | --- | --- | --- |
 | Opportunity research | BNB Chain mainnet | Rank real PancakeSwap LP, Farm, and Earn opportunities |
+| Live market prices | BNB Chain mainnet | Read BNB, CAKE, USDT, and USDC USD prices through the official PancakeSwap SDK |
 | Demonstration execution | BNB Smart Chain Testnet | Prove scoped Swap execution, gas review, session limits, and revocation |
 
 A mainnet opportunity cannot authorize a testnet or mainnet transaction. Any executable action must be reconstructed from a fresh execution-network snapshot, priced again, supported by a reviewed adapter, and pass the deterministic mandate gate.

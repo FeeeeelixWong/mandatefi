@@ -4,6 +4,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
+    "api/market/prices.ts": {
+      "maxDuration": 30
+    },
     "api/strategy/review.ts": {
       "maxDuration": 120
     }

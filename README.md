@@ -66,13 +66,13 @@ The engine does not merely wait for one BNB/BUSD ratio to cross a band. It:
 
 | Specialist | Cadence | Decision evidence |
 | --- | ---: | --- |
-| Market analyst | 5 minutes | Spot quote, wallet balances, reserve drift, volatility and depeg state |
+| Market analyst | 5 minutes | Official BNB, CAKE, USDT and USDC prices, testnet execution quote, balances, reserve drift and depeg state |
 | LP analyst | 10 minutes | Pool depth, fee APR, range health and impermanent loss |
 | Farm analyst | 30 minutes | Net incentives, emissions decay, locks and exit liquidity |
 | Earn analyst | 60 minutes | Vault APY, accrued rewards, compounding threshold and withdrawal terms |
 | Execution cost analyst | Per action / 1 minute | Live gas, slippage reserve, route price impact and exit friction |
 
-Each specialist is a separate DeepSeek request, and the portfolio manager is a sixth request that acts as committee chair. It may aggregate the reports, but it cannot silently replace missing evidence. LP, Farm, and Earn agents rank verified mainnet opportunities from a scheduled PancakeSwap research snapshot. The execution-cost agent separately reviews BSC gas and route costs for an actionable testnet Swap. Research data never grants transaction authority.
+Each specialist is a separate DeepSeek request, and the portfolio manager is a sixth request that acts as committee chair. It may aggregate the reports, but it cannot silently replace missing evidence. The Market agent reads BNB, CAKE, USDT, and USDC USD prices through the official [PancakeSwap Price API SDK](https://developer.pancakeswap.finance/sdks/price-api-sdk); a missing or older-than-five-minute snapshot fails the autonomous execution gate closed. LP, Farm, and Earn agents rank verified mainnet opportunities from a scheduled PancakeSwap research snapshot. The execution-cost agent separately reviews BSC gas and route costs for an actionable testnet Swap. Research data never grants transaction authority.
 
 The Vercel backend keeps the DeepSeek key server-side, validates every model response with Zod, hashes every input, and records the model, prompt version, run ID, and final output. If one specialist fails, only that report falls back to the deterministic engine. If the manager fails, the complete review safely falls back without broadening execution authority.
 
@@ -170,8 +170,10 @@ These receipts prove the wallet and scoped-session lifecycle. A new owner-author
 - `src/domain/assetManagerPrompt.ts` defines the versioned expert role and strict typed recommendation schema.
 - `src/domain/strategyOrchestrator.ts` accepts a validated DeepSeek recommendation, applies deterministic fallback when needed, and always runs the adapter-aware execution gate.
 - `src/integrations/pancakeResearch.ts` validates the scheduled research snapshot and selects risk-aware LP, Farm, and Earn candidates.
+- `src/integrations/pancakeMarket.ts` validates the live official PancakeSwap price snapshot consumed by the Market agent.
 - `src/integrations/agentReview.ts` serializes the live portfolio safely and invokes the Vercel agent runtime.
 - `api/strategy/review.ts` fans out five DeepSeek specialists, invokes the manager, hashes inputs, and persists the audit event.
+- `api/market/prices.ts` calls the official PancakeSwap Price API SDK server-side, validates positive BNB/CAKE/stablecoin prices, and caches the result for 30 seconds.
 - `scripts/refresh-pancake-research.mjs` assembles the official-data snapshot from PancakeSwap Explorer, MasterChef V3, Syrup Pool configuration, and BNB Chain RPC evidence.
 - `src/integrations/altana.ts` reads balances and quotes, builds permissions, grants sessions, executes, and revokes.
 - `src/hooks/useAltanaWallet.ts` manages the passkey wallet lifecycle and safe UI states.

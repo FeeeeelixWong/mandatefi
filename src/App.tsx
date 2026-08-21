@@ -37,6 +37,7 @@ import {
   fetchPancakeResearch,
   type PancakeResearchSnapshot,
 } from './integrations/pancakeResearch'
+import { fetchPancakeMarket, type PancakeMarketSnapshot } from './integrations/pancakeMarket'
 import { requestDeepSeekReview } from './integrations/agentReview'
 import type { DecisionRecord, Mandate } from './types'
 import './App.css'
@@ -372,11 +373,12 @@ function AboutPage({ onCreate }: { onCreate: () => void }) {
   </div>
 }
 
-function PortfolioOverview({ mandate, snapshot, executionPlan, pancakeResearch, loading, runtimeAvailable, checking, onCreate, onCheck, onOpenPolicies }: {
+function PortfolioOverview({ mandate, snapshot, executionPlan, pancakeResearch, pancakeMarket, loading, runtimeAvailable, checking, onCreate, onCheck, onOpenPolicies }: {
   mandate: Mandate | null
   snapshot: PortfolioSnapshot | null
   executionPlan: PortfolioPlan | null
   pancakeResearch: PancakeResearchSnapshot | null
+  pancakeMarket: PancakeMarketSnapshot | null
   loading: boolean
   runtimeAvailable: boolean
   checking: boolean
@@ -391,7 +393,7 @@ function PortfolioOverview({ mandate, snapshot, executionPlan, pancakeResearch, 
   const recommendationTitle = latest?.expertAction ? latest.expertAction.replaceAll('_', ' ') : executionPlan ? executionActionLabel(executionPlan.action) : 'Reading portfolio'
   const gateStatus = latest?.gateStatus ?? (executionPlan?.action === 'HOLD' ? 'HOLD' : 'PENDING REVIEW')
   const liveFallbackCommittee = executionPlan
-    ? buildInvestmentCommittee({ strategy, executionPlan, snapshot, pancakeResearch })
+    ? buildInvestmentCommittee({ strategy, executionPlan, snapshot, pancakeResearch, pancakeMarket })
     : null
   const committee: InvestmentCommittee | null = latest?.committee ?? liveFallbackCommittee
   return <div className="dashboard-page">
@@ -539,6 +541,7 @@ function App() {
   const [snapshotLoading, setSnapshotLoading] = useState(false)
   const [snapshotError, setSnapshotError] = useState('')
   const [pancakeResearch, setPancakeResearch] = useState<PancakeResearchSnapshot | null>(null)
+  const [pancakeMarket, setPancakeMarket] = useState<PancakeMarketSnapshot | null>(null)
   const [notice, setNotice] = useState('')
   const [revokingId, setRevokingId] = useState('')
   const [checkingId, setCheckingId] = useState('')
@@ -602,6 +605,22 @@ function App() {
     return () => { window.clearTimeout(initialRefresh); window.clearInterval(interval) }
   }, [refreshPancakeResearch])
 
+  const refreshPancakeMarket = useCallback(async () => {
+    try {
+      const market = await fetchPancakeMarket()
+      setPancakeMarket(market)
+      return market
+    } catch {
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    const initialRefresh = window.setTimeout(() => { void refreshPancakeMarket() }, 0)
+    const interval = window.setInterval(() => { void refreshPancakeMarket() }, 60_000)
+    return () => { window.clearTimeout(initialRefresh); window.clearInterval(interval) }
+  }, [refreshPancakeMarket])
+
   const activeMandate = mandates.find((mandate) => mandate.status !== 'Revoked') ?? null
   const currentExecutionPlan = useMemo(() => {
     if (!activeMandate || !snapshot) return null
@@ -621,8 +640,9 @@ function App() {
     runtimeBusy.current = true
     setCheckingId(mandateId)
     try {
-      const nextSnapshot = await refreshSnapshot()
+      const [nextSnapshot, refreshedMarket] = await Promise.all([refreshSnapshot(), refreshPancakeMarket()])
       if (!nextSnapshot) throw new Error('Portfolio data is unavailable.')
+      const latestMarket = refreshedMarket ?? pancakeMarket
       const strategy = planForMandate(mandate)
       const plan = buildPortfolioPlan({
         snapshot: nextSnapshot,
@@ -640,7 +660,7 @@ function App() {
       } catch {
         // The committee records missing cost evidence and the risk gate fails closed.
       }
-      const committee = buildInvestmentCommittee({ strategy, executionPlan: plan, snapshot: nextSnapshot, executionCost, pancakeResearch })
+      const committee = buildInvestmentCommittee({ strategy, executionPlan: plan, snapshot: nextSnapshot, executionCost, pancakeResearch, pancakeMarket: latestMarket })
       const review = await orchestrateWithAgentRuntime({
         source,
         mandate: {
@@ -682,7 +702,7 @@ function App() {
       runtimeBusy.current = false
       setCheckingId('')
     }
-  }, [mandates, pancakeResearch, refreshSnapshot])
+  }, [mandates, pancakeMarket, pancakeResearch, refreshPancakeMarket, refreshSnapshot])
 
   useEffect(() => {
     if (!activeMandate || activeMandate.status !== 'Active' || !runtimeMandateIds.includes(activeMandate.id)) return
@@ -700,8 +720,9 @@ function App() {
 
   async function startMandate(draft: MandateDraft) {
     if (!altana.address) return
-    const latestSnapshot = await refreshSnapshot()
+    const [latestSnapshot, refreshedMarket] = await Promise.all([refreshSnapshot(), refreshPancakeMarket()])
     if (!latestSnapshot) throw new Error('Portfolio data is unavailable.')
+    const latestMarket = refreshedMarket ?? pancakeMarket
     const strategy = buildStrategyPlan({ goal: draft.goal, risk: draft.risk, liquidityNeed: draft.liquidityNeed, horizonDays: draft.duration })
     const executionPlan = buildPortfolioPlan({
       snapshot: latestSnapshot,
@@ -718,7 +739,7 @@ function App() {
     } catch {
       // Activation can still register the mandate, but execution remains deferred.
     }
-    const committee = buildInvestmentCommittee({ strategy, executionPlan, snapshot: latestSnapshot, executionCost, pancakeResearch })
+    const committee = buildInvestmentCommittee({ strategy, executionPlan, snapshot: latestSnapshot, executionCost, pancakeResearch, pancakeMarket: latestMarket })
     const review = await orchestrateWithAgentRuntime({
       source: 'ACTIVATION',
       mandate: {
@@ -801,7 +822,7 @@ function App() {
     </header>
     <button className={`navigation-scrim ${menuOpen ? 'visible' : ''}`} onClick={closeMobileMenu} aria-label="Close navigation" />
     <main className="main-area" inert={menuOpen ? true : undefined} aria-hidden={menuOpen ? true : undefined}><div className="page-content">
-      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
+      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
       {view === 'create' && <MandateWizard snapshot={snapshot} snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} altanaAddress={altana.address} altanaBalance={altana.balance} altanaFunded={altana.hasMinimumBalance} altanaStage={altana.stage} altanaError={altana.error} isPasskeySupported={altana.isPasskeySupported} onConnect={() => void wallet.connect()} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={() => void fundAltanaWallet().catch(() => undefined)} onStart={startMandate} onCancel={() => setView('overview')} />}
       {view === 'decisions' && <DecisionLog mandates={mandates} />}
       {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onCreate={() => setView('create')} />}
