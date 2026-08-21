@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, AlertTriangle, ArrowDownUp, ArrowRight, BarChart3, Bot, BrainCircuit,
-  BookOpen, Check, ChevronRight, CircleCheck, CircleDollarSign,
+  BookOpen, Check, ChevronRight, CircleCheck,
   ExternalLink, Fingerprint, Fuel, Gauge, KeyRound, Layers3, LayoutDashboard,
   Leaf, LoaderCircle, Menu, Pause, Play, Plus, RefreshCw, Route, Search,
   Settings2, ShieldCheck, TrendingUp, Vault, Wallet, Waves, Workflow, X,
@@ -208,11 +208,18 @@ function ProductHome({ onCreate }: { onCreate: () => void }) {
 }
 
 const aboutAgents = [
-  { name: 'Market analyst', remit: 'Tracks prices, reserve drift, volatility, and depeg risk.', icon: BarChart3 },
-  { name: 'LP analyst', remit: 'Ranks pool depth, fee APR, range health, and impermanent loss.', icon: Waves },
-  { name: 'Farm analyst', remit: 'Checks emissions, incentive decay, locks, and exit liquidity.', icon: Layers3 },
-  { name: 'Earn analyst', remit: 'Reviews vault yield, rewards, withdrawal terms, and compounding.', icon: Leaf },
-  { name: 'Cost analyst', remit: 'Prices gas, slippage, price impact, and route friction before action.', icon: Fuel },
+  { name: 'Market', signal: 'Price + risk', icon: BarChart3 },
+  { name: 'Pools', signal: 'Liquidity + IL', icon: Waves },
+  { name: 'Farms', signal: 'Rewards + locks', icon: Layers3 },
+  { name: 'Earn', signal: 'Yield + exits', icon: Leaf },
+  { name: 'Costs', signal: 'Gas + slippage', icon: Fuel },
+] as const
+
+const aboutCoverage = [
+  { name: 'Swap', status: 'Live', detail: 'Auto-execute', icon: ArrowDownUp, tone: 'live' },
+  { name: 'Liquidity', status: 'Approval', detail: 'Owner confirms', icon: Waves, tone: 'approval' },
+  { name: 'Farms', status: 'Next', detail: 'Adapter planned', icon: Layers3, tone: 'planned' },
+  { name: 'Earn', status: 'Next', detail: 'Adapter planned', icon: Leaf, tone: 'planned' },
 ] as const
 
 const aboutFaqs = [
@@ -239,60 +246,51 @@ function AboutPage({ onCreate }: { onCreate: () => void }) {
     <header className="about-intro">
       <div>
         <span className="eyebrow">Product guide</span>
-        <h1>AI judgment.<br />Owner authority.</h1>
+        <h1>You set the rules.<br />AI runs the strategy.</h1>
       </div>
       <div className="about-intro-copy">
-        <p>MandateFi is an owner-controlled AI portfolio manager for PancakeSwap. It researches opportunities, proposes a typed portfolio action, and executes only inside an explicit, revocable mandate.</p>
+        <p>One mandate. Five specialists. No custody.</p>
         <button className="primary-button" onClick={onCreate}>Build a strategy <ArrowRight size={16} /></button>
       </div>
     </header>
 
-    <section className="about-status" aria-label="Product boundaries">
-      <div><Search size={18} /><span><small>Research</small><strong>BNB Chain mainnet</strong><b>15 min snapshots</b></span></div>
-      <div><Workflow size={18} /><span><small>Decision</small><strong>Five-agent committee</strong><b>Typed recommendations</b></span></div>
-      <div><ShieldCheck size={18} /><span><small>Authority</small><strong>Owner mandate</strong><b>Scoped and revocable</b></span></div>
-      <div><CircleDollarSign size={18} /><span><small>Execution</small><strong>BSC Testnet</strong><b>Swap adapter live</b></span></div>
-    </section>
-
     <section className="about-section about-workflow">
-      <div className="about-section-heading"><span className="eyebrow">Operating model</span><h2>From intent to bounded execution</h2><p>The model decides what may be useful. Deterministic policy decides what is allowed.</p></div>
+      <div className="about-section-heading"><span className="eyebrow">How it works</span><h2>Four steps</h2></div>
       <div className="about-flow" aria-label="MandateFi operating workflow">
-        <article><span>01</span><div><strong>Define the mandate</strong><p>The owner sets capital, goal, risk, liquidity need, term, and hard limits.</p></div></article>
+        <article><span><Settings2 size={20} /></span><div><strong>Set mandate</strong><p>Goal · risk · limits</p></div></article>
         <ChevronRight size={18} />
-        <article><span>02</span><div><strong>Collect evidence</strong><p>Independent specialists inspect markets, yield, liquidity, and execution cost.</p></div></article>
+        <article><span><BrainCircuit size={20} /></span><div><strong>AI analyzes</strong><p>Five specialists</p></div></article>
         <ChevronRight size={18} />
-        <article><span>03</span><div><strong>Recommend an action</strong><p>The portfolio manager resolves dissent and returns one schema-validated action.</p></div></article>
+        <article><span><ShieldCheck size={20} /></span><div><strong>Policy checks</strong><p>Allow · hold · block</p></div></article>
         <ChevronRight size={18} />
-        <article><span>04</span><div><strong>Enforce and execute</strong><p>The policy gate holds, blocks, requests approval, or calls a reviewed adapter.</p></div></article>
+        <article><span><Route size={20} /></span><div><strong>PancakeSwap</strong><p>Execute · record</p></div></article>
       </div>
     </section>
 
-    <section className="about-section">
-      <div className="about-section-heading"><span className="eyebrow">Investment committee</span><h2>Specialists report independently</h2><p>Missing or stale evidence stays visible. The portfolio manager cannot silently replace it.</p></div>
-      <div className="about-agent-grid">{aboutAgents.map((agent) => { const Icon = agent.icon; return <article key={agent.name}><Icon size={19} /><strong>{agent.name}</strong><p>{agent.remit}</p></article> })}</div>
+    <section className="about-section about-team">
+      <div className="about-section-heading"><span className="eyebrow">AI team</span><h2>Five signals.<br />One decision.</h2></div>
+      <div className="agent-decision-map">
+        <div className="about-agent-grid">{aboutAgents.map((agent) => { const Icon = agent.icon; return <article key={agent.name}><Icon size={20} /><strong>{agent.name}</strong><span>{agent.signal}</span></article> })}</div>
+        <div className="agent-merge" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+        <div className="manager-decision"><BrainCircuit size={24} /><span><small>Portfolio manager</small><strong>Hold · Rebalance · Ask owner</strong></span></div>
+      </div>
     </section>
 
     <section className="about-section about-boundary">
-      <div className="about-section-heading"><span className="eyebrow">Trust boundary</span><h2>Research is not authority</h2><p>Every execution must be reconstructed and priced on its execution network.</p></div>
+      <div className="about-section-heading"><span className="eyebrow">Control</span><h2>AI advises.<br />Rules decide.</h2></div>
       <div className="boundary-grid">
-        <article><header><Search size={18} /><div><span>Research plane</span><strong>Find the opportunity</strong></div></header><ul><li>Official PancakeSwap pool data</li><li>MasterChef V3 farm verification</li><li>Active Syrup Pool configuration</li><li>Risk-aware opportunity ranking</li></ul><footer>Cannot sign or broadcast</footer></article>
-        <article><header><ShieldCheck size={18} /><div><span>Execution plane</span><strong>Prove the permission</strong></div></header><ul><li>Fresh wallet and route snapshot</li><li>Gas, slippage, and impact check</li><li>Method and spend-cap enforcement</li><li>Owner approval or live adapter</li></ul><footer>Cannot expand its own scope</footer></article>
+        <article className="boundary-can"><header><CircleCheck size={20} /><strong>AI can</strong></header><div><span><Search size={18} />Scan</span><span><BarChart3 size={18} />Compare</span><span><Workflow size={18} />Recommend</span></div></article>
+        <article className="boundary-cannot"><header><X size={20} /><strong>AI cannot</strong></header><div><span><Vault size={18} />Hold funds</span><span><KeyRound size={18} />Bypass rules</span><span><Plus size={18} />Raise limits</span></div></article>
       </div>
     </section>
 
     <section className="about-section about-coverage">
-      <div className="about-section-heading"><span className="eyebrow">Current coverage</span><h2>What is live today</h2><p>Research and execution coverage are deliberately labeled separately.</p></div>
-      <div className="coverage-table" role="table" aria-label="MandateFi execution coverage">
-        <div role="row"><span role="columnheader">Module</span><span role="columnheader">Research</span><span role="columnheader">Execution</span></div>
-        <div role="row"><strong role="cell">Swap</strong><span role="cell">Live quote</span><b role="cell" className="coverage coverage-live">Live executor</b></div>
-        <div role="row"><strong role="cell">Liquidity</strong><span role="cell">Live mainnet ranking</span><b role="cell" className="coverage coverage-approval-required">Owner approval</b></div>
-        <div role="row"><strong role="cell">Farms</strong><span role="cell">Live PID and rewards</span><b role="cell" className="coverage coverage-adapter-planned">Adapter planned</b></div>
-        <div role="row"><strong role="cell">Earn</strong><span role="cell">Live pool and APR</span><b role="cell" className="coverage coverage-adapter-planned">Adapter planned</b></div>
-      </div>
+      <div className="about-section-heading"><span className="eyebrow">Today</span><h2>Execution coverage</h2></div>
+      <div className="coverage-cards" aria-label="MandateFi execution coverage">{aboutCoverage.map((module) => { const Icon = module.icon; return <article key={module.name}><Icon size={22} /><span><strong>{module.name}</strong><small>{module.detail}</small></span><b className={`coverage-${module.tone}`}>{module.status}</b></article> })}</div>
     </section>
 
     <section className="about-section about-faq">
-      <div className="about-section-heading"><span className="eyebrow">FAQ</span><h2>Common questions</h2><p>Clear answers about custody, authority, data, and execution.</p></div>
+      <div className="about-section-heading"><span className="eyebrow">FAQ</span><h2>Questions</h2></div>
       <div className="faq-list">{aboutFaqs.map((faq) => <details key={faq.question}><summary><span>{faq.question}</span><ChevronRight size={17} /></summary><p>{faq.answer}</p></details>)}</div>
     </section>
   </div>
