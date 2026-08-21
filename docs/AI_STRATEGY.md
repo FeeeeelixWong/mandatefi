@@ -39,7 +39,7 @@ flowchart LR
 | Mandate expiry | Within 48 hours | Review renewal or safe unwind |
 | Owner request | Manual review | Evaluate immediately |
 
-The current live browser snapshot supplies schedule, owner, expiry, liquid-reserve drift, PancakeSwap quotes, and BSC gas inputs. LP, yield, and protocol event fields are defined in the specialist contracts and report `UNAVAILABLE` until production market-data adapters provide fresh evidence.
+The current live browser snapshot supplies schedule, owner, expiry, liquid-reserve drift, PancakeSwap testnet quotes, and BSC gas inputs. A separate scheduled mainnet research snapshot supplies verified LP, Farm, and Earn opportunities. Each input has its own timestamp and freshness window; stale inputs downgrade the relevant specialist rather than being silently reused.
 
 ## Specialist agents
 
@@ -55,9 +55,22 @@ The committee deliberately separates research from portfolio judgment:
 
 Every report has a status, stance, confidence, evidence timestamp, findings, missing inputs, and gross/risk estimates. The portfolio manager sees dissent and missing data; the deterministic gate still retains final authority.
 
+## Research and execution boundary
+
+The research plane runs every 15 minutes in the GitHub Pages workflow. It uses an address allowlist, official PancakeSwap Explorer data, MasterChef V3 onchain emissions, active Syrup Pool configuration, and BNB Chain RPC reads. The browser validates the generated JSON with Zod before any specialist may use it.
+
+This build intentionally separates networks:
+
+| Plane | Network | Purpose |
+| --- | --- | --- |
+| Opportunity research | BNB Chain mainnet | Rank real PancakeSwap LP, Farm, and Earn opportunities |
+| Demonstration execution | BNB Smart Chain Testnet | Prove scoped Swap execution, gas review, session limits, and revocation |
+
+A mainnet opportunity cannot authorize a testnet or mainnet transaction. Any executable action must be reconstructed from a fresh execution-network snapshot, priced again, supported by a reviewed adapter, and pass the deterministic mandate gate.
+
 ## Expert prompt contract
 
-`src/domain/assetManagerPrompt.ts` defines prompt version `mandatefi.asset-manager.v2`. It instructs the portfolio manager to chair independent specialist reports and optimize risk-adjusted net returns while accounting for gas, price impact, slippage, lock duration, liquidity, and impermanent loss.
+`src/domain/assetManagerPrompt.ts` defines prompt version `mandatefi.asset-manager.v3`. It instructs the portfolio manager to chair independent specialist reports and optimize risk-adjusted net returns while accounting for gas, price impact, slippage, lock duration, liquidity, and impermanent loss. It also treats mainnet research as discovery evidence only, requires execution-network revalidation, and forbids interpreting annualized short-window APR as a forecast.
 
 The response must be strict JSON containing:
 

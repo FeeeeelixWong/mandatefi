@@ -39,6 +39,7 @@ export type StrategyGuardrails = {
 }
 
 export type StrategyPlan = {
+  riskProfile: RiskProfileId
   sleeves: StrategySleeve[]
   actions: StrategyAction[]
   guardrails: StrategyGuardrails
@@ -251,6 +252,7 @@ export function buildStrategyPlan({
   const reviewIntervalHours = liquidityNeed === 'anytime' ? 4 : risk === 'growth' ? 8 : 24
 
   return {
+    riskProfile: risk,
     sleeves,
     actions,
     guardrails,

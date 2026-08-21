@@ -72,7 +72,20 @@ The engine does not merely wait for one BNB/BUSD ratio to cross a band. It:
 | Earn analyst | 60 minutes | Vault APY, accrued rewards, compounding threshold and withdrawal terms |
 | Execution cost analyst | Per action / 1 minute | Live gas, slippage reserve, route price impact and exit friction |
 
-The portfolio manager is a committee chair, not an oracle. It may aggregate these reports, but it cannot silently replace missing evidence. In this static MVP, market and execution-cost reports are live for the Swap path; LP, Farm, and Earn reports declare themselves unavailable until their production data adapters are connected.
+The portfolio manager is a committee chair, not an oracle. It may aggregate these reports, but it cannot silently replace missing evidence. LP, Farm, and Earn agents rank verified mainnet opportunities from a scheduled PancakeSwap research snapshot. The execution-cost agent separately revalidates BSC gas and route costs for an actionable testnet Swap. Research data never grants transaction authority.
+
+### PancakeSwap Research Plane
+
+The deploy workflow refreshes `public/data/pancake-research.json` every 15 minutes because PancakeSwap Explorer does not expose a browser-CORS endpoint. The refresh job:
+
+1. Queries official PancakeSwap Explorer data for an address-allowlisted token universe.
+2. Rejects pools below the minimum TVL threshold.
+3. Verifies active Farm PIDs and CAKE emissions against MasterChef V3 on BNB Chain mainnet.
+4. Verifies the active CAKE-to-USDT Syrup Pool configuration and onchain stake balance.
+5. Publishes a timestamped, schema-validated snapshot with source links.
+6. Selects candidates conservatively by the owner's risk profile, liquidity, token quality, and observed yield.
+
+Displayed APRs are short-window annualized observations, not forecasts or guaranteed returns. Before any future LP, Farm, or Earn execution, MandateFi must revalidate pool state and execution costs on the execution network.
 
 ## Strategy Sleeves
 
@@ -116,12 +129,12 @@ The live Altana session currently permits only the reviewed PancakeSwap V2 Swap 
 | Capability | Coverage | What this build proves |
 | --- | --- | --- |
 | AI strategy composition | **Live** | Generates four-sleeve allocations, actions, model risk, and guardrails |
-| Multi-agent investment committee | **Live with honest data states** | Produces five independent reports, timestamps evidence, and refuses to invent unavailable protocol data |
+| Multi-agent investment committee | **Live with verified research** | Produces five independent reports; LP, Farm, and Earn rank timestamped official PancakeSwap opportunities |
 | Expert prompt and trigger orchestration | **Live with deterministic fallback** | Uses a versioned committee prompt contract, typed response schema, event triggers, action cooldowns, and a deterministic execution gate |
 | PancakeSwap quote and bounded Swap | **Live on BSC Testnet** | Reads balances, live gas and route quotes; calculates cost and minimum output; executes through a scoped Altana session |
-| Infinity liquidity position | **Owner approval required** | Strategy sizing and risk gates are visible; autonomous adapter is intentionally not claimed |
-| Farms position | **Adapter planned** | Eligibility and policy inputs are modeled; no live staking claim |
-| Earn and reward compounding | **Adapter planned** | Gas threshold and schedule are modeled; no live compounding claim |
+| Infinity liquidity position | **Research live; owner approval required** | Mainnet pools are ranked; autonomous liquidity execution is intentionally not claimed |
+| Farms position | **Research live; adapter planned** | Active MasterChef PIDs and emissions are verified; no live staking claim |
+| Earn and reward compounding | **Research live; adapter planned** | Active Syrup Pool yield and TVL are verified; no live compounding claim |
 | Pause and onchain revoke | **Live** | Owner can stop the local runtime or revoke the scoped session |
 
 This separation is deliberate: the UI shows the intended full product without presenting planned integrations as already operational.
@@ -152,6 +165,8 @@ These receipts prove the wallet and scoped-session lifecycle. A new owner-author
 - `src/domain/investmentCommittee.ts` builds specialist reports, tracks data freshness, and calculates cost-adjusted committee consensus.
 - `src/domain/assetManagerPrompt.ts` defines the versioned expert role and strict typed recommendation schema.
 - `src/domain/strategyOrchestrator.ts` applies deterministic fallback judgment and the adapter-aware execution gate.
+- `src/integrations/pancakeResearch.ts` validates the scheduled research snapshot and selects risk-aware LP, Farm, and Earn candidates.
+- `scripts/refresh-pancake-research.mjs` assembles the official-data snapshot from PancakeSwap Explorer, MasterChef V3, Syrup Pool configuration, and BNB Chain RPC evidence.
 - `src/integrations/altana.ts` reads balances and quotes, builds permissions, grants sessions, executes, and revokes.
 - `src/hooks/useAltanaWallet.ts` manages the passkey wallet lifecycle and safe UI states.
 - `src/App.tsx` provides portfolio, strategy creation, activity, and guardrail journeys.

@@ -3,7 +3,7 @@ import type { InvestmentCommittee } from './investmentCommittee'
 import type { PortfolioPlan } from './portfolio'
 import type { StrategyPlan } from './strategy'
 
-export const ASSET_MANAGER_PROMPT_VERSION = 'mandatefi.asset-manager.v2'
+export const ASSET_MANAGER_PROMPT_VERSION = 'mandatefi.asset-manager.v3'
 
 export const expertActionSchema = z.enum([
   'HOLD',
@@ -84,6 +84,9 @@ Non-negotiable rules:
 - You recommend actions only. The deterministic policy gate makes the final execution decision.
 - Treat each specialist report as independent evidence. Never invent missing LP, Farm, Earn, or cost data.
 - Resolve disagreement explicitly and prefer HOLD when the relevant specialist is stale or unavailable.
+- Treat mainnet research snapshots as opportunity discovery only. They never authorize execution on another network.
+- Revalidate pool state, wallet state, gas, price impact, slippage, and adapter coverage on the execution network immediately before any action.
+- Treat short-window annualized APR as an observed signal, never as a forecast or guaranteed return.
 
 Allowed actions:
 HOLD, SWAP, ADD_LIQUIDITY, REMOVE_LIQUIDITY, STAKE_FARM, UNSTAKE_FARM, HARVEST, COMPOUND, EMERGENCY_EXIT, PAUSE.

@@ -1,6 +1,13 @@
 import type { PortfolioPlan, PortfolioSnapshot } from './portfolio'
 import type { StrategyPlan } from './strategy'
 import type { ProtocolSignals } from './triggerEngine'
+import {
+  protocolLabel,
+  selectEarnOpportunity,
+  selectFarmOpportunity,
+  selectLiquidityOpportunity,
+  type PancakeResearchSnapshot,
+} from '../integrations/pancakeResearch'
 
 export type SpecialistAgentId = 'market' | 'liquidity' | 'farms' | 'earn' | 'execution-cost'
 export type AgentDataStatus = 'READY' | 'STALE' | 'UNAVAILABLE'
@@ -33,6 +40,8 @@ export type SpecialistReport = {
   headline: string
   findings: string[]
   missingInputs: string[]
+  sourceLabel?: string
+  sourceUrl?: string
   estimatedGrossBenefitBps: number | null
   estimatedRiskCostBps: number | null
 }
@@ -60,6 +69,7 @@ type CommitteeContext = {
   snapshot?: PortfolioSnapshot | null
   signals?: ProtocolSignals
   executionCost?: ExecutionCostEstimate | null
+  pancakeResearch?: PancakeResearchSnapshot | null
 }
 
 function freshnessStatus(observedAt: string | undefined, nowMs: number, staleAfterMinutes: number): AgentDataStatus {
@@ -73,13 +83,45 @@ function report(input: Omit<SpecialistReport, 'generatedAt'>, generatedAt: strin
   return { ...input, generatedAt }
 }
 
+function compactUsd(value: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(value)
+}
+
+function pairRiskCostBps(pair: string) {
+  const symbols = pair.toUpperCase().split('/')
+  const stables = new Set(['USDT', 'USDC'])
+  if (symbols.every((symbol) => stables.has(symbol))) return 35
+  if (symbols.includes('CAKE')) return 650
+  if (symbols.some((symbol) => stables.has(symbol))) return 300
+  return 475
+}
+
 export function buildInvestmentCommittee(context: CommitteeContext): InvestmentCommittee {
   const nowMs = context.nowMs ?? Date.now()
   const generatedAt = new Date(nowMs).toISOString()
   const signals = context.signals ?? {}
   const plan = context.executionPlan
+  const research = context.pancakeResearch ?? null
+  const liquidityOpportunity = research ? selectLiquidityOpportunity(research, context.strategy.riskProfile) : null
+  const farmOpportunity = research ? selectFarmOpportunity(research, context.strategy.riskProfile) : null
+  const earnOpportunity = research ? selectEarnOpportunity(research) : null
   const driftBps = Math.abs(Number(plan.currentStableBps - plan.targetStableBps))
   const marketStatus = freshnessStatus(context.snapshot?.updatedAt, nowMs, 15)
+  const liquidityStatus = liquidityOpportunity
+    ? freshnessStatus(research?.liquidity.observedAt, nowMs, 35)
+    : signals.lpRangeDistanceBps === undefined && signals.impermanentLossBps === undefined && signals.liquidityChangeBps === undefined
+      ? 'UNAVAILABLE'
+      : freshnessStatus(signals.liquidityObservedAt, nowMs, 20)
+  const farmStatus = farmOpportunity
+    ? freshnessStatus(research?.farms.observedAt, nowMs, 50)
+    : signals.currentNetYieldBps === undefined
+      ? 'UNAVAILABLE'
+      : freshnessStatus(signals.farmObservedAt, nowMs, 45)
+  const earnStatus = earnOpportunity
+    ? freshnessStatus(research?.earn.observedAt, nowMs, 90)
+    : signals.earnNetYieldBps === undefined
+      ? 'UNAVAILABLE'
+      : freshnessStatus(signals.earnObservedAt, nowMs, 90)
   const costStatus = plan.action === 'HOLD'
     ? 'READY'
     : freshnessStatus(context.executionCost?.observedAt, nowMs, 2)
@@ -102,6 +144,7 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
         `Reserve: ${Number(plan.currentStableBps) / 100}% current vs ${Number(plan.targetStableBps) / 100}% target.`,
       ] : [],
       missingInputs: marketStatus === 'READY' ? [] : ['Fresh wallet balances and PancakeSwap spot quote'],
+      sourceLabel: 'PancakeSwap testnet quote',
       estimatedGrossBenefitBps: null,
       estimatedRiskCostBps: null,
     }, generatedAt),
@@ -110,48 +153,82 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
       name: 'LP analyst',
       remit: 'Pool depth, fee APR, range health and impermanent loss',
       cadenceMinutes: 10,
-      dataAsOf: signals.liquidityObservedAt,
-      status: signals.lpRangeDistanceBps === undefined && signals.impermanentLossBps === undefined && signals.liquidityChangeBps === undefined ? 'UNAVAILABLE' : freshnessStatus(signals.liquidityObservedAt, nowMs, 20),
-      stance: signals.impermanentLossBps !== undefined && signals.impermanentLossBps >= context.strategy.guardrails.maximumImpermanentLossBps ? 'BLOCK' : 'NEUTRAL',
-      confidence: signals.lpRangeDistanceBps === undefined ? 35 : 84,
-      headline: signals.lpRangeDistanceBps === undefined ? 'No live Infinity position telemetry is connected.' : 'Infinity range and IL telemetry reviewed.',
+      dataAsOf: research?.liquidity.observedAt ?? signals.liquidityObservedAt,
+      status: liquidityStatus,
+      stance: liquidityStatus !== 'READY'
+        ? 'CAUTION'
+        : signals.impermanentLossBps !== undefined && signals.impermanentLossBps >= context.strategy.guardrails.maximumImpermanentLossBps
+          ? 'BLOCK'
+          : liquidityOpportunity ? 'SUPPORT' : 'NEUTRAL',
+      confidence: liquidityStatus === 'READY' ? 88 : liquidityStatus === 'STALE' ? 45 : 25,
+      headline: liquidityOpportunity
+        ? `${liquidityOpportunity.pair} ${protocolLabel(liquidityOpportunity.protocol)} · ${liquidityOpportunity.feeAprBps / 100}% fee APR.`
+        : signals.lpRangeDistanceBps === undefined ? 'No verified LP opportunity or position telemetry is available.' : 'LP range and IL telemetry reviewed.',
       findings: [
+        ...(liquidityOpportunity ? [
+          `${compactUsd(liquidityOpportunity.tvlUsd)} TVL · ${compactUsd(liquidityOpportunity.volumeUsd24h)} 24h volume.`,
+          `${liquidityOpportunity.feeTierBps ?? 0} bps pool fee tier.`,
+        ] : []),
         ...(signals.lpRangeDistanceBps === undefined ? [] : [`Range distance: ${signals.lpRangeDistanceBps / 100}%.`]),
         ...(signals.impermanentLossBps === undefined ? [] : [`Impermanent loss: ${signals.impermanentLossBps / 100}%.`]),
       ],
-      missingInputs: signals.lpRangeDistanceBps === undefined ? ['Infinity positions, pool liquidity, fee APR and range state'] : [],
-      estimatedGrossBenefitBps: signals.lpFeeAprBps ?? null,
-      estimatedRiskCostBps: signals.impermanentLossBps ?? null,
+      missingInputs: liquidityOpportunity || signals.lpRangeDistanceBps !== undefined ? [] : ['Verified pool liquidity, fee APR and range state'],
+      sourceLabel: liquidityOpportunity ? 'PancakeSwap Explorer' : undefined,
+      sourceUrl: liquidityOpportunity?.link,
+      estimatedGrossBenefitBps: liquidityOpportunity?.feeAprBps ?? signals.lpFeeAprBps ?? null,
+      estimatedRiskCostBps: liquidityOpportunity ? pairRiskCostBps(liquidityOpportunity.pair) : signals.impermanentLossBps ?? null,
     }, generatedAt),
     report({
       agentId: 'farms',
       name: 'Farm analyst',
       remit: 'Net incentives, emissions decay, lock terms and exit liquidity',
       cadenceMinutes: 30,
-      dataAsOf: signals.farmObservedAt,
-      status: signals.currentNetYieldBps === undefined ? 'UNAVAILABLE' : freshnessStatus(signals.farmObservedAt, nowMs, 45),
-      stance: signals.currentNetYieldBps !== undefined && signals.bestAlternativeNetYieldBps !== undefined && signals.currentNetYieldBps < signals.bestAlternativeNetYieldBps ? 'CAUTION' : 'NEUTRAL',
-      confidence: signals.currentNetYieldBps === undefined ? 30 : 80,
-      headline: signals.currentNetYieldBps === undefined ? 'No live Universal Farms opportunity feed is connected.' : 'Farm rewards were compared after known costs.',
-      findings: signals.currentNetYieldBps === undefined ? [] : [`Current net yield: ${signals.currentNetYieldBps / 100}%.`],
-      missingInputs: signals.currentNetYieldBps === undefined ? ['Farm APR, emissions, lock duration and exit liquidity'] : [],
-      estimatedGrossBenefitBps: signals.currentNetYieldBps ?? null,
-      estimatedRiskCostBps: signals.farmRiskCostBps ?? null,
+      dataAsOf: research?.farms.observedAt ?? signals.farmObservedAt,
+      status: farmStatus,
+      stance: farmStatus !== 'READY'
+        ? 'CAUTION'
+        : signals.currentNetYieldBps !== undefined && signals.bestAlternativeNetYieldBps !== undefined && signals.currentNetYieldBps < signals.bestAlternativeNetYieldBps
+          ? 'CAUTION'
+          : farmOpportunity ? 'SUPPORT' : 'NEUTRAL',
+      confidence: farmStatus === 'READY' ? 86 : farmStatus === 'STALE' ? 42 : 22,
+      headline: farmOpportunity
+        ? `${farmOpportunity.pair} · ${farmOpportunity.totalAprBps / 100}% gross Farm APR.`
+        : signals.currentNetYieldBps === undefined ? 'No verified active Farm matches this risk mandate.' : 'Farm rewards were compared after known costs.',
+      findings: farmOpportunity ? [
+        `${farmOpportunity.feeAprBps / 100}% fees + ${farmOpportunity.rewardAprBps / 100}% CAKE rewards.`,
+        `${compactUsd(farmOpportunity.tvlUsd)} TVL · MasterChef PID ${farmOpportunity.pid}.`,
+      ] : signals.currentNetYieldBps === undefined ? [] : [`Current net yield: ${signals.currentNetYieldBps / 100}%.`],
+      missingInputs: farmOpportunity || signals.currentNetYieldBps !== undefined ? [] : ['Active farm emissions, APR and exit liquidity'],
+      sourceLabel: farmOpportunity ? 'MasterChef V3 + Explorer' : undefined,
+      sourceUrl: farmOpportunity?.link,
+      estimatedGrossBenefitBps: farmOpportunity?.totalAprBps ?? signals.currentNetYieldBps ?? null,
+      estimatedRiskCostBps: farmOpportunity ? pairRiskCostBps(farmOpportunity.pair) + 75 : signals.farmRiskCostBps ?? null,
     }, generatedAt),
     report({
       agentId: 'earn',
       name: 'Earn analyst',
       remit: 'Vault APY, reward accrual, compounding threshold and withdrawal terms',
       cadenceMinutes: 60,
-      dataAsOf: signals.earnObservedAt,
-      status: signals.earnNetYieldBps === undefined ? 'UNAVAILABLE' : freshnessStatus(signals.earnObservedAt, nowMs, 90),
-      stance: signals.earnNetYieldBps === undefined ? 'NEUTRAL' : signals.pendingRewardsValueBps !== undefined && signals.pendingRewardsValueBps < context.strategy.guardrails.minimumNetBenefitBps ? 'CAUTION' : 'SUPPORT',
-      confidence: signals.earnNetYieldBps === undefined ? 30 : 80,
-      headline: signals.earnNetYieldBps === undefined ? 'No live CAKE Earn vault feed is connected.' : 'Earn yield and compounding threshold reviewed.',
-      findings: signals.earnNetYieldBps === undefined ? [] : [`Current net vault yield: ${signals.earnNetYieldBps / 100}%.`],
-      missingInputs: signals.earnNetYieldBps === undefined ? ['Earn vault APY, rewards, lock and withdrawal state'] : [],
-      estimatedGrossBenefitBps: signals.earnNetYieldBps ?? null,
-      estimatedRiskCostBps: signals.earnRiskCostBps ?? null,
+      dataAsOf: research?.earn.observedAt ?? signals.earnObservedAt,
+      status: earnStatus,
+      stance: earnStatus !== 'READY'
+        ? 'CAUTION'
+        : signals.pendingRewardsValueBps !== undefined && signals.pendingRewardsValueBps < context.strategy.guardrails.minimumNetBenefitBps
+          ? 'CAUTION'
+          : earnOpportunity ? 'SUPPORT' : 'NEUTRAL',
+      confidence: earnStatus === 'READY' ? 84 : earnStatus === 'STALE' ? 40 : 20,
+      headline: earnOpportunity
+        ? `${earnOpportunity.stakeSymbol} → ${earnOpportunity.earnSymbol} · ${earnOpportunity.rewardAprBps / 100}% reward APR.`
+        : signals.earnNetYieldBps === undefined ? 'No verified active Earn pool is available.' : 'Earn yield and compounding threshold reviewed.',
+      findings: earnOpportunity ? [
+        `${compactUsd(earnOpportunity.tvlUsd)} TVL · ${earnOpportunity.withdrawal}.`,
+        'APR excludes CAKE price risk and execution costs.',
+      ] : signals.earnNetYieldBps === undefined ? [] : [`Current net vault yield: ${signals.earnNetYieldBps / 100}%.`],
+      missingInputs: earnOpportunity || signals.earnNetYieldBps !== undefined ? [] : ['Active Earn APY, rewards and withdrawal state'],
+      sourceLabel: earnOpportunity ? 'PancakeSwap Syrup Pools' : undefined,
+      sourceUrl: earnOpportunity?.link,
+      estimatedGrossBenefitBps: earnOpportunity?.rewardAprBps ?? signals.earnNetYieldBps ?? null,
+      estimatedRiskCostBps: earnOpportunity ? 450 : signals.earnRiskCostBps ?? null,
     }, generatedAt),
     report({
       agentId: 'execution-cost',
@@ -171,6 +248,7 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
         context.executionCost.note,
       ] : [],
       missingInputs: costStatus === 'READY' ? [] : ['Fresh BSC gas price and PancakeSwap route quote'],
+      sourceLabel: context.executionCost ? 'BSC RPC + PancakeSwap quote' : undefined,
       estimatedGrossBenefitBps: null,
       estimatedRiskCostBps: context.executionCost?.totalCostBps ?? null,
     }, generatedAt),
@@ -179,9 +257,13 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
   const readyAgents = reports.filter((item) => item.status === 'READY').length
   const staleAgents = reports.filter((item) => item.status === 'STALE').length
   const unavailableAgents = reports.filter((item) => item.status === 'UNAVAILABLE').length
-  const grossCandidates = reports.flatMap((item) => item.estimatedGrossBenefitBps === null ? [] : [item.estimatedGrossBenefitBps])
-  const grossBenefitBps = grossCandidates.length ? Math.max(...grossCandidates) : null
-  const riskCostBps = reports.reduce((total, item) => total + (item.agentId === 'execution-cost' ? 0 : item.estimatedRiskCostBps ?? 0), 0)
+  const opportunityReports = reports.filter((item) => item.estimatedGrossBenefitBps !== null)
+  const bestOpportunity = opportunityReports.sort((a, b) =>
+    ((b.estimatedGrossBenefitBps ?? 0) - (b.estimatedRiskCostBps ?? 0)) -
+    ((a.estimatedGrossBenefitBps ?? 0) - (a.estimatedRiskCostBps ?? 0)),
+  )[0]
+  const grossBenefitBps = bestOpportunity?.estimatedGrossBenefitBps ?? null
+  const riskCostBps = bestOpportunity?.estimatedRiskCostBps ?? 0
   const executionCostBps = plan.action === 'HOLD' ? 0 : context.executionCost?.totalCostBps ?? null
   const netBenefitBps = grossBenefitBps !== null && executionCostBps !== null ? grossBenefitBps - riskCostBps - executionCostBps : null
   const costGatePassed = plan.action === 'HOLD' || (
@@ -205,7 +287,7 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
     costGatePassed,
     dissentingAgents,
     summary: plan.action === 'HOLD'
-      ? 'The committee found no mandate breach requiring execution.'
+      ? research ? 'No mandate breach requires execution; specialists continue ranking verified PancakeSwap opportunities.' : 'The committee found no mandate breach requiring execution.'
       : costGatePassed
         ? 'Market evidence and live execution costs are inside the mandate cost ceiling.'
         : 'The committee withheld execution because cost evidence is missing, stale, or above the mandate ceiling.',

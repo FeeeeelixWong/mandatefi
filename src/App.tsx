@@ -29,6 +29,10 @@ import { useInjectedWallet } from './hooks/useInjectedWallet'
 import { BSC_TESTNET_EXPLORER_URL } from './lib/chains'
 import { shortAddress } from './lib/wallet'
 import type { AltanaPortfolioProof, PortfolioRebalanceQuote } from './integrations/altana'
+import {
+  fetchPancakeResearch,
+  type PancakeResearchSnapshot,
+} from './integrations/pancakeResearch'
 import type { DecisionRecord, Mandate } from './types'
 import './App.css'
 
@@ -202,10 +206,11 @@ function ProductHome({ onCreate }: { onCreate: () => void }) {
   </div>
 }
 
-function PortfolioOverview({ mandate, snapshot, executionPlan, loading, runtimeAvailable, checking, onCreate, onCheck, onOpenPolicies }: {
+function PortfolioOverview({ mandate, snapshot, executionPlan, pancakeResearch, loading, runtimeAvailable, checking, onCreate, onCheck, onOpenPolicies }: {
   mandate: Mandate | null
   snapshot: PortfolioSnapshot | null
   executionPlan: PortfolioPlan | null
+  pancakeResearch: PancakeResearchSnapshot | null
   loading: boolean
   runtimeAvailable: boolean
   checking: boolean
@@ -219,14 +224,16 @@ function PortfolioOverview({ mandate, snapshot, executionPlan, loading, runtimeA
   const managedValue = executionPlan?.managedValue ?? safeParseNative(mandate.managedAmount)
   const recommendationTitle = latest?.expertAction ? latest.expertAction.replaceAll('_', ' ') : executionPlan ? executionActionLabel(executionPlan.action) : 'Reading portfolio'
   const gateStatus = latest?.gateStatus ?? (executionPlan?.action === 'HOLD' ? 'HOLD' : 'PENDING REVIEW')
-  const committee: InvestmentCommittee | null = latest?.committee ?? (executionPlan ? buildInvestmentCommittee({ strategy, executionPlan, snapshot }) : null)
+  const committee: InvestmentCommittee | null = executionPlan
+    ? buildInvestmentCommittee({ strategy, executionPlan, snapshot, pancakeResearch })
+    : latest?.committee ?? null
   return <div className="dashboard-page">
     <div className="page-title-row"><div><span className="eyebrow">Managed strategy</span><h1>{mandate.name}</h1><p>{strategy.summary} Capital remains in the passkey smart wallet.</p></div><div className="title-actions"><button className="secondary-button" onClick={onOpenPolicies}><Settings2 size={16} /> Guardrails</button><button className="primary-button" disabled={checking || mandate.status !== 'Active'} onClick={onCheck}>{checking ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run live review</button></div></div>
     <section className="portfolio-hero-panel"><div className="portfolio-value-block"><span>Capital under mandate</span><strong>{loading ? 'Refreshing...' : `${formatNative(managedValue)} tBNB`}</strong><small>BNB Testnet portfolio proof</small></div><Metric label="Model yield" value={`${formatBps(strategy.modelYieldBps)} APY`} detail="Scenario estimate, not a live quote" /><Metric label="Strategy risk" value={`${strategy.riskScore}/10`} detail={`${riskProfiles[mandate.riskProfile].name} mandate`} /><Metric label="Next review" value={strategy.reviewCadence} detail={runtimeAvailable ? 'Local executor online' : 'Owner approval required'} /></section>
     <div className="dashboard-layout">
       <section className="workspace-panel allocation-panel"><header className="panel-header"><div><span>AI portfolio construction</span><h2>Where the capital works</h2></div><span className="status-chip active"><i /> Active mandate</span></header><StrategyBar plan={strategy} /><div className="sleeve-grid">{strategy.sleeves.map((sleeve) => <article key={sleeve.id}><div className={`sleeve-icon sleeve-${sleeve.id}`}>{sleeve.id === 'reserve' ? <Vault size={18} /> : sleeve.id === 'market' ? <TrendingUp size={18} /> : sleeve.id === 'liquidity' ? <Waves size={18} /> : <Leaf size={18} />}</div><span>{sleeve.name}</span><strong>{formatBps(sleeve.allocationBps)}</strong><p>{sleeve.purpose}</p><small>{toolNames[sleeve.tool]}</small></article>)}</div></section>
       <aside className="workspace-panel ai-panel"><header className="panel-header"><div><span>Latest expert review</span><h2>{recommendationTitle}</h2></div><BrainCircuit size={23} /></header>{(latest || executionPlan) && <><p>{latest?.rationale ?? executionPlan?.rationale}</p>{latest?.triggers?.length ? <div className="trigger-chips" aria-label="Active review triggers">{latest.triggers.map((trigger) => <span key={trigger}>{trigger.replaceAll('_', ' ')}</span>)}</div> : <div className="trigger-chips"><span>NO ACTIVE EVENT RISK</span></div>}<div className="ai-signals"><div><span>Portfolio data</span><strong>{snapshot ? 'Live snapshot' : 'Waiting'}</strong></div><div><span>Review source</span><strong>{latest?.reviewSource ?? 'Awaiting review'}</strong></div><div><span>Confidence</span><strong>{latest?.confidence !== undefined ? `${latest.confidence}%` : '—'}</strong></div><div><span>Risk gate</span><strong>{gateStatus.replaceAll('_', ' ')}</strong></div></div><div className={`ai-decision ${latest?.gateStatus === 'AUTO_EXECUTE' ? 'trade' : 'hold'}`}>{latest?.gateStatus === 'AUTO_EXECUTE' ? <ArrowDownUp size={17} /> : <CircleCheck size={17} />}<span>{latest?.gateStatus === 'AUTO_EXECUTE' && executionPlan ? `${executionPlan.inputAsset} to ${executionPlan.outputAsset} adapter authorised` : latest?.gateStatus === 'APPROVAL_REQUIRED' ? 'Waiting for explicit owner approval' : latest?.gateStatus === 'BLOCKED' ? 'Recommendation blocked until its adapter is live' : latest?.gateStatus === 'DEFERRED' ? 'Execution delayed by the cooldown policy' : 'No automatic action authorised'}</span></div></>}</aside>
-      {committee && <section className="workspace-panel committee-panel"><header className="panel-header"><div><span>Investment committee</span><h2>Five specialists, one bounded decision</h2></div><span className="coverage-note">{committee.readyAgents}/5 current</span></header><div className="committee-summary"><div><span>Committee view</span><strong>{committee.summary}</strong></div><div><span>Execution cost</span><strong>{committee.executionCostBps === null ? 'Awaiting quote' : formatBps(committee.executionCostBps)}</strong></div><div><span>Cost ceiling</span><strong>{formatBps(strategy.guardrails.maximumExecutionCostBps)}</strong></div><div><span>Net benefit</span><strong>{committee.netBenefitBps === null ? 'Not measurable' : formatBps(committee.netBenefitBps)}</strong></div></div><div className="committee-grid">{committee.reports.map((report) => <article key={report.agentId}><div className="committee-agent-icon">{report.agentId === 'market' ? <BarChart3 size={17} /> : report.agentId === 'liquidity' ? <Waves size={17} /> : report.agentId === 'farms' ? <Layers3 size={17} /> : report.agentId === 'earn' ? <Leaf size={17} /> : <Fuel size={17} />}</div><div className="committee-agent-head"><strong>{report.name}</strong><span className={`agent-status agent-${report.status.toLowerCase()}`}>{report.status}</span></div><p>{report.headline}</p><small>Checks every {report.cadenceMinutes < 60 ? `${report.cadenceMinutes} min` : `${report.cadenceMinutes / 60} hr`}</small></article>)}</div></section>}
+      {committee && <section className="workspace-panel committee-panel"><header className="panel-header"><div><span>Investment committee</span><h2>Five specialists, one bounded decision</h2></div><span className="coverage-note">{committee.readyAgents}/5 current · Mainnet research</span></header><div className="committee-summary"><div><span>Committee view</span><strong>{committee.summary}</strong></div><div><span>Execution cost</span><strong>{committee.executionCostBps === null ? 'Run live review' : formatBps(committee.executionCostBps)}</strong></div><div><span>Cost ceiling</span><strong>{formatBps(strategy.guardrails.maximumExecutionCostBps)}</strong></div><div><span>Best observed signal</span><strong>{committee.grossBenefitBps === null ? 'Not measurable' : formatBps(committee.grossBenefitBps - committee.riskCostBps)}</strong><small>24h annualized snapshot, not a forecast</small></div></div><div className="committee-grid">{committee.reports.map((report) => <article key={report.agentId}><div className="committee-agent-icon">{report.agentId === 'market' ? <BarChart3 size={17} /> : report.agentId === 'liquidity' ? <Waves size={17} /> : report.agentId === 'farms' ? <Layers3 size={17} /> : report.agentId === 'earn' ? <Leaf size={17} /> : <Fuel size={17} />}</div><div className="committee-agent-head"><strong>{report.name}</strong><span className={`agent-status agent-${report.status.toLowerCase()}`}>{report.status}</span></div><p>{report.headline}</p>{report.findings[0] && <span className="committee-evidence">{report.findings[0]}</span>}<footer><small>Every {report.cadenceMinutes < 60 ? `${report.cadenceMinutes} min` : `${report.cadenceMinutes / 60} hr`}</small>{report.sourceUrl && <a href={report.sourceUrl} target="_blank" rel="noreferrer">{report.sourceLabel ?? 'Source'} <ExternalLink size={10} /></a>}</footer></article>)}</div></section>}
       <section className="workspace-panel action-panel"><header className="panel-header"><div><span>Execution plan</span><h2>PancakeSwap action queue</h2></div><span className="coverage-note">1 live · 3 staged</span></header><div className="action-queue">{strategy.actions.map((action) => <article key={action.id}><span className="action-order">{action.order}</span><div className="action-copy"><div><strong>{action.title}</strong><span>{toolNames[action.tool]}</span></div><p>{action.detail}</p></div><div className="action-meta"><strong>{formatBps(action.allocationBps)}</strong><span className={`coverage coverage-${action.coverage.toLowerCase().replace('_', '-')}`}>{coverageLabel(action.coverage)}</span></div></article>)}</div></section>
       <aside className="workspace-panel policy-panel"><header className="panel-header"><div><span>Hard limits</span><h2>What AI cannot cross</h2></div><ShieldCheck size={22} /></header><dl className="policy-facts"><div><dt>Minimum liquid reserve</dt><dd>{formatBps(strategy.guardrails.minimumReserveBps)}</dd></div><div><dt>Maximum LP exposure</dt><dd>{formatBps(strategy.guardrails.maximumLiquidityBps)}</dd></div><div><dt>Single position cap</dt><dd>{formatBps(strategy.guardrails.maximumSinglePositionBps)}</dd></div><div><dt>Execution cost ceiling</dt><dd>{formatBps(strategy.guardrails.maximumExecutionCostBps)}</dd></div><div><dt>Leverage</dt><dd>Blocked</dd></div></dl>{latest && <div className="latest-proof"><span>Latest onchain proof</span><strong>{latest.state.replace('_', ' ')}</strong>{latest.transactionHash ? <a href={txUrl(latest.transactionHash)} target="_blank" rel="noreferrer">View transaction <ExternalLink size={12} /></a> : <small>No transaction required</small>}</div>}</aside>
     </div>
@@ -354,7 +361,7 @@ function DecisionLog({ mandates }: { mandates: Mandate[] }) {
 }
 
 function Policies({ mandates, revokingId, onPause, onRevoke, onCreate }: { mandates: Mandate[]; revokingId: string; onPause: (id: string) => void; onRevoke: (id: string) => void; onCreate: () => void }) {
-  return <div className="list-page"><div className="page-title-row"><div><span className="eyebrow">Owner control</span><h1>Guardrails</h1><p>AI strategy selection is flexible. Triggers, execution adapters, position limits, expiry, and revocation remain deterministic.</p></div><button className="primary-button" onClick={onCreate}><Plus size={16} /> New strategy</button></div>{mandates.length === 0 ? <div className="simple-empty"><ShieldCheck size={26} /><h2>No active mandates</h2><p>Create a strategy to register a scoped session on BNB Testnet.</p></div> : <><section className="trigger-policy-band"><header><BrainCircuit size={20} /><div><strong>When the manager wakes up</strong><span>One-minute monitoring scans these conditions. It does not trade by itself.</span></div><b>Prompt v1</b></header><div><span><RefreshCw size={15} /><strong>Schedule</strong><small>4h, 8h, or daily</small></span><span><BarChart3 size={15} /><strong>Allocation drift</strong><small>Outside approved band</small></span><span><Waves size={15} /><strong>LP risk</strong><small>Range edge or IL limit</small></span><span><TrendingUp size={15} /><strong>Yield change</strong><small>Net benefit improves 2.5%</small></span><span><AlertTriangle size={15} /><strong>Protocol risk</strong><small>Depeg or liquidity drop</small></span><span><Wallet size={15} /><strong>Owner events</strong><small>Cash flow, expiry, manual</small></span></div></section><div className="policy-list">{mandates.map((mandate) => { const strategy = planForMandate(mandate); return <article key={mandate.id}><div className="policy-head"><div className="policy-icon"><ShieldCheck size={20} /></div><div><strong>{mandate.name}</strong><span>{riskProfiles[mandate.riskProfile].name} · {mandate.managedAmount} tBNB</span></div><strong className={`status-${mandate.status.toLowerCase()}`}><i /> {mandate.status}</strong></div><div className="policy-details"><div><span>Review cadence</span><strong>{strategy.reviewCadence}</strong></div><div><span>Action cooldown</span><strong>{strategy.guardrails.minimumActionCooldownMinutes} minutes</strong></div><div><span>Minimum reserve</span><strong>{formatBps(strategy.guardrails.minimumReserveBps)}</strong></div><div><span>Expiry</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div></div><div className="policy-scope"><span><Check size={14} /> PancakeSwap Swap live</span><span><Check size={14} /> LP owner approval</span><span><Check size={14} /> No leverage</span><span><Check size={14} /> Typed actions only</span><span><Check size={14} /> Altana onchain caps</span></div><footer><div>{mandate.grantTxHash && <a href={txUrl(mandate.grantTxHash)} target="_blank" rel="noreferrer">Grant transaction <ExternalLink size={12} /></a>}</div><div>{mandate.status !== 'Revoked' && <button className="secondary-button" onClick={() => onPause(mandate.id)}>{mandate.status === 'Paused' ? <Play size={15} /> : <Pause size={15} />}{mandate.status === 'Paused' ? 'Resume locally' : 'Pause locally'}</button>}<button className="danger-button" disabled={mandate.status === 'Revoked' || revokingId === mandate.id} onClick={() => onRevoke(mandate.id)}>{revokingId === mandate.id ? <LoaderCircle className="spin" size={15} /> : <X size={15} />} {revokingId === mandate.id ? 'Revoking' : 'Revoke onchain'}</button></div></footer></article> })}</div></>}</div>
+  return <div className="list-page"><div className="page-title-row"><div><span className="eyebrow">Owner control</span><h1>Guardrails</h1><p>AI strategy selection is flexible. Triggers, execution adapters, position limits, expiry, and revocation remain deterministic.</p></div><button className="primary-button" onClick={onCreate}><Plus size={16} /> New strategy</button></div>{mandates.length === 0 ? <div className="simple-empty"><ShieldCheck size={26} /><h2>No active mandates</h2><p>Create a strategy to register a scoped session on BNB Testnet.</p></div> : <><section className="trigger-policy-band"><header><BrainCircuit size={20} /><div><strong>When the manager wakes up</strong><span>One-minute monitoring scans these conditions. It does not trade by itself.</span></div><b>Prompt v3</b></header><div><span><RefreshCw size={15} /><strong>Schedule</strong><small>4h, 8h, or daily</small></span><span><BarChart3 size={15} /><strong>Allocation drift</strong><small>Outside approved band</small></span><span><Waves size={15} /><strong>LP risk</strong><small>Range edge or IL limit</small></span><span><TrendingUp size={15} /><strong>Yield change</strong><small>Net benefit improves 2.5%</small></span><span><AlertTriangle size={15} /><strong>Protocol risk</strong><small>Depeg or liquidity drop</small></span><span><Wallet size={15} /><strong>Owner events</strong><small>Cash flow, expiry, manual</small></span></div></section><div className="policy-list">{mandates.map((mandate) => { const strategy = planForMandate(mandate); return <article key={mandate.id}><div className="policy-head"><div className="policy-icon"><ShieldCheck size={20} /></div><div><strong>{mandate.name}</strong><span>{riskProfiles[mandate.riskProfile].name} · {mandate.managedAmount} tBNB</span></div><strong className={`status-${mandate.status.toLowerCase()}`}><i /> {mandate.status}</strong></div><div className="policy-details"><div><span>Review cadence</span><strong>{strategy.reviewCadence}</strong></div><div><span>Action cooldown</span><strong>{strategy.guardrails.minimumActionCooldownMinutes} minutes</strong></div><div><span>Minimum reserve</span><strong>{formatBps(strategy.guardrails.minimumReserveBps)}</strong></div><div><span>Expiry</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div></div><div className="policy-scope"><span><Check size={14} /> PancakeSwap Swap live</span><span><Check size={14} /> LP owner approval</span><span><Check size={14} /> No leverage</span><span><Check size={14} /> Typed actions only</span><span><Check size={14} /> Altana onchain caps</span></div><footer><div>{mandate.grantTxHash && <a href={txUrl(mandate.grantTxHash)} target="_blank" rel="noreferrer">Grant transaction <ExternalLink size={12} /></a>}</div><div>{mandate.status !== 'Revoked' && <button className="secondary-button" onClick={() => onPause(mandate.id)}>{mandate.status === 'Paused' ? <Play size={15} /> : <Pause size={15} />}{mandate.status === 'Paused' ? 'Resume locally' : 'Pause locally'}</button>}<button className="danger-button" disabled={mandate.status === 'Revoked' || revokingId === mandate.id} onClick={() => onRevoke(mandate.id)}>{revokingId === mandate.id ? <LoaderCircle className="spin" size={15} /> : <X size={15} />} {revokingId === mandate.id ? 'Revoking' : 'Revoke onchain'}</button></div></footer></article> })}</div></>}</div>
 }
 
 function App() {
@@ -364,6 +371,7 @@ function App() {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null)
   const [snapshotLoading, setSnapshotLoading] = useState(false)
   const [snapshotError, setSnapshotError] = useState('')
+  const [pancakeResearch, setPancakeResearch] = useState<PancakeResearchSnapshot | null>(null)
   const [notice, setNotice] = useState('')
   const [revokingId, setRevokingId] = useState('')
   const [checkingId, setCheckingId] = useState('')
@@ -412,6 +420,21 @@ function App() {
     return () => { window.clearTimeout(initialRefresh); if (interval !== null) window.clearInterval(interval) }
   }, [altana.address, refreshSnapshot])
 
+  const refreshPancakeResearch = useCallback(async () => {
+    try {
+      const research = await fetchPancakeResearch()
+      setPancakeResearch(research)
+    } catch {
+      // Research agents remain explicitly unavailable when the verified snapshot cannot be loaded.
+    }
+  }, [])
+
+  useEffect(() => {
+    const initialRefresh = window.setTimeout(() => { void refreshPancakeResearch() }, 0)
+    const interval = window.setInterval(() => { void refreshPancakeResearch() }, 5 * 60_000)
+    return () => { window.clearTimeout(initialRefresh); window.clearInterval(interval) }
+  }, [refreshPancakeResearch])
+
   const activeMandate = mandates.find((mandate) => mandate.status !== 'Revoked') ?? null
   const currentExecutionPlan = useMemo(() => {
     if (!activeMandate || !snapshot) return null
@@ -450,7 +473,7 @@ function App() {
       } catch {
         // The committee records missing cost evidence and the risk gate fails closed.
       }
-      const committee = buildInvestmentCommittee({ strategy, executionPlan: plan, snapshot: nextSnapshot, executionCost })
+      const committee = buildInvestmentCommittee({ strategy, executionPlan: plan, snapshot: nextSnapshot, executionCost, pancakeResearch })
       const review = orchestrateStrategyReview({
         source,
         mandate: {
@@ -492,7 +515,7 @@ function App() {
       runtimeBusy.current = false
       setCheckingId('')
     }
-  }, [mandates, refreshSnapshot])
+  }, [mandates, pancakeResearch, refreshSnapshot])
 
   useEffect(() => {
     if (!activeMandate || activeMandate.status !== 'Active' || !runtimeMandateIds.includes(activeMandate.id)) return
@@ -528,7 +551,7 @@ function App() {
     } catch {
       // Activation can still register the mandate, but execution remains deferred.
     }
-    const committee = buildInvestmentCommittee({ strategy, executionPlan, snapshot: latestSnapshot, executionCost })
+    const committee = buildInvestmentCommittee({ strategy, executionPlan, snapshot: latestSnapshot, executionCost, pancakeResearch })
     const review = orchestrateStrategyReview({
       source: 'ACTIVATION',
       mandate: {
@@ -611,7 +634,7 @@ function App() {
     </header>
     <button className={`navigation-scrim ${menuOpen ? 'visible' : ''}`} onClick={closeMobileMenu} aria-label="Close navigation" />
     <main className="main-area" inert={menuOpen ? true : undefined} aria-hidden={menuOpen ? true : undefined}><div className="page-content">
-      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} executionPlan={currentExecutionPlan} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
+      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
       {view === 'create' && <MandateWizard snapshot={snapshot} snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} altanaAddress={altana.address} altanaBalance={altana.balance} altanaFunded={altana.hasMinimumBalance} altanaStage={altana.stage} altanaError={altana.error} isPasskeySupported={altana.isPasskeySupported} onConnect={() => void wallet.connect()} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={() => void fundAltanaWallet().catch(() => undefined)} onStart={startMandate} onCancel={() => setView('overview')} />}
       {view === 'decisions' && <DecisionLog mandates={mandates} />}
       {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onCreate={() => setView('create')} />}

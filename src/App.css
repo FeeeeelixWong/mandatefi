@@ -127,8 +127,9 @@
 .committee-summary > div + div { border-left: 1px solid var(--line); }
 .committee-summary span { color: var(--muted); font-size: 9px; }
 .committee-summary strong { overflow: hidden; font-size: 11px; line-height: 1.4; text-overflow: ellipsis; }
+.committee-summary small { color: var(--muted); font-size: 8px; line-height: 1.35; }
 .committee-grid { padding: 12px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.committee-grid article { min-width: 0; min-height: 142px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; display: grid; grid-template-columns: 30px 1fr; align-content: start; gap: 8px; }
+.committee-grid article { min-width: 0; min-height: 174px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; display: grid; grid-template-columns: 30px 1fr; align-content: start; gap: 8px; }
 .committee-agent-icon { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; color: var(--purple); background: var(--purple-soft); }
 .committee-agent-head { min-width: 0; display: grid; align-content: center; gap: 3px; }
 .committee-agent-head strong { overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -137,7 +138,11 @@
 .agent-stale { color: #8a5700; background: var(--yellow-soft); }
 .agent-unavailable { color: var(--muted); background: var(--soft); }
 .committee-grid p { min-height: 43px; margin: 2px 0 0; grid-column: 1 / -1; color: var(--muted); font-size: 9px; line-height: 1.45; }
-.committee-grid small { grid-column: 1 / -1; color: var(--purple); font-size: 8px; font-weight: 700; }
+.committee-evidence { min-height: 28px; grid-column: 1 / -1; color: var(--text); font-size: 8px; line-height: 1.45; }
+.committee-grid article footer { margin-top: auto; grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.committee-grid small { color: var(--purple); font-size: 8px; font-weight: 700; }
+.committee-grid article footer a { min-width: 0; color: var(--muted); display: inline-flex; align-items: center; gap: 3px; font-size: 8px; font-weight: 700; text-decoration: none; }
+.committee-grid article footer a:hover { color: var(--purple); }
 .coverage-note { padding: 5px 8px; border-radius: 6px; color: var(--purple) !important; background: var(--purple-soft); }
 .action-queue article { min-height: 88px; padding: 14px 20px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 12px; }
 .action-queue article:last-child { border-bottom: 0; }

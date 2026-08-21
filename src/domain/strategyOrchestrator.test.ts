@@ -75,9 +75,10 @@ describe('AI strategy orchestrator', () => {
 
   it('builds a versioned prompt that forbids leverage and arbitrary calldata', () => {
     const review = orchestrateStrategyReview({ source: 'MANUAL', nowMs, mandate, strategy, executionPlan: executionPlan('1.25') })
-    expect(review.promptVersion).toBe('mandatefi.asset-manager.v2')
+    expect(review.promptVersion).toBe('mandatefi.asset-manager.v3')
     expect(review.prompt).toContain('Never use leverage')
     expect(review.prompt).toContain('arbitrary calldata')
+    expect(review.prompt).toContain('opportunity discovery only')
     expect(review.prompt).toContain('Return strict JSON only')
   })
 
