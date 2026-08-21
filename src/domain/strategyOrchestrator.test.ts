@@ -1,0 +1,82 @@
+import { describe, expect, it } from 'vitest'
+import { parseEther } from 'viem'
+import { buildPortfolioPlan } from './portfolio'
+import { buildStrategyPlan } from './strategy'
+import { orchestrateStrategyReview } from './strategyOrchestrator'
+
+const nowMs = Date.parse('2026-08-21T12:00:00.000Z')
+const strategy = buildStrategyPlan({ goal: 'balanced-growth', risk: 'balanced', liquidityNeed: 'weekly', horizonDays: 30 })
+const mandate = {
+  goal: 'balanced-growth', riskProfile: 'balanced', managedAmount: '0.01',
+  horizonDays: 30, liquidityNeed: 'weekly', expiry: Math.floor(nowMs / 1_000) + 30 * 24 * 60 * 60,
+}
+
+function executionPlan(stableBalance: string) {
+  return buildPortfolioPlan({
+    snapshot: {
+      nativeBalance: stableBalance === '0' ? parseEther('0.0115') : parseEther('0.009'),
+      stableBalance: parseEther(stableBalance),
+      priceStablePerNative: parseEther('500'),
+      updatedAt: new Date(nowMs).toISOString(),
+    },
+    managedAmount: parseEther('0.01'), goal: 'balanced-growth', risk: 'balanced', targetReserveBps: 2_500n,
+  })
+}
+
+describe('AI strategy orchestrator', () => {
+  it('keeps the minute monitor idle when no trigger exists', () => {
+    const review = orchestrateStrategyReview({
+      source: 'MONITOR', nowMs, mandate, strategy, executionPlan: executionPlan('1.25'),
+      lastReviewAt: new Date(nowMs - 60 * 60 * 1_000).toISOString(),
+    })
+    expect(review.reviewNeeded).toBe(false)
+    expect(review.gate.status).toBe('HOLD')
+  })
+
+  it('lets a drift-triggered typed Swap pass the live adapter gate', () => {
+    const review = orchestrateStrategyReview({
+      source: 'MONITOR', nowMs, mandate, strategy, executionPlan: executionPlan('0'),
+      lastReviewAt: new Date(nowMs - 60 * 60 * 1_000).toISOString(),
+    })
+    expect(review.recommendation.action).toBe('SWAP')
+    expect(review.gate.status).toBe('AUTO_EXECUTE')
+  })
+
+  it('defers ordinary rebalancing during the mandate cooldown', () => {
+    const review = orchestrateStrategyReview({
+      source: 'MONITOR', nowMs, mandate, strategy, executionPlan: executionPlan('0'),
+      lastReviewAt: new Date(nowMs - 60 * 60 * 1_000).toISOString(),
+      lastExecutionAt: new Date(nowMs - 30 * 60 * 1_000).toISOString(),
+    })
+    expect(review.gate.status).toBe('DEFERRED')
+  })
+
+  it('requires owner approval for LP risk actions', () => {
+    const review = orchestrateStrategyReview({
+      source: 'MONITOR', nowMs, mandate, strategy, executionPlan: executionPlan('1.25'),
+      lastReviewAt: new Date(nowMs - 60 * 60 * 1_000).toISOString(),
+      signals: { impermanentLossBps: 900 },
+    })
+    expect(review.recommendation.action).toBe('REMOVE_LIQUIDITY')
+    expect(review.gate.status).toBe('APPROVAL_REQUIRED')
+  })
+
+  it('blocks every execution after the mandate expires', () => {
+    const review = orchestrateStrategyReview({
+      source: 'MONITOR', nowMs,
+      mandate: { ...mandate, expiry: Math.floor(nowMs / 1_000) - 1 },
+      strategy, executionPlan: executionPlan('0'),
+      lastReviewAt: new Date(nowMs - 60 * 60 * 1_000).toISOString(),
+    })
+    expect(review.recommendation.action).toBe('PAUSE')
+    expect(review.gate.status).toBe('BLOCKED')
+  })
+
+  it('builds a versioned prompt that forbids leverage and arbitrary calldata', () => {
+    const review = orchestrateStrategyReview({ source: 'MANUAL', nowMs, mandate, strategy, executionPlan: executionPlan('1.25') })
+    expect(review.promptVersion).toBe('mandatefi.asset-manager.v1')
+    expect(review.prompt).toContain('Never use leverage')
+    expect(review.prompt).toContain('arbitrary calldata')
+    expect(review.prompt).toContain('Return strict JSON only')
+  })
+})

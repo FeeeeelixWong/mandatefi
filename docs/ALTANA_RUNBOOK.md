@@ -21,7 +21,7 @@ This runbook does not claim that Infinity Liquidity, Farms, or Earn adapters are
 | --- | --- | --- |
 | Network | BSC Testnet, chain `97` | Wallet and Altana configuration |
 | Managed value | Owner input, capped by wallet value | Strategy and Swap evaluator |
-| Liquid-reserve target | Goal plus risk profile | Swap evaluator |
+| Liquid-reserve target | Reserve sleeve from the composed owner strategy | Swap evaluator |
 | Drift and action limits | Selected risk profile | Swap evaluator |
 | Router | PancakeSwap V2 `0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3` | Altana call permission |
 | Methods | Two Swap methods plus BUSD approval | Altana call permission |
@@ -54,7 +54,7 @@ If the grant succeeds but execution fails, MandateFi retains the public grant in
 - Only JSON-safe credential metadata and public transaction evidence are persisted.
 - The scoped session signer exists in memory for the active browser session.
 - A page reload discards that signer; the onchain policy remains revocable.
-- The current app checks the live Swap sleeve while the tab is active.
+- The current app scans triggers every minute while the tab is active, then runs the live Swap review only when a trigger is present.
 - Production continuous management and additional adapters follow `INTEGRATION_PLAN.md`.
 
 ## Verified Reference Run

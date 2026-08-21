@@ -20,7 +20,9 @@ The strategy engine can already compose a complete portfolio across reserve, spo
 | Component | Responsibility | Trust boundary |
 | --- | --- | --- |
 | Product UI | Mandate setup, strategy review, approval, status, pause, and revoke | Never stores owner or session private keys persistently |
-| Strategy engine | Deterministic allocation, opportunity scoring, and guardrails | Cannot sign, broadcast, or alter its mandate |
+| Trigger engine | Lightweight schedule, drift, event, cash-flow, and expiry scans | Cannot recommend or execute a transaction |
+| Expert model endpoint | Produces a schema-validated typed recommendation from the versioned prompt | Cannot sign, broadcast, create arbitrary calldata, or alter its mandate |
+| Strategy and risk gate | Deterministic allocation, adapter coverage, cooldown, and guardrails | Cannot sign, broadcast, or expand authority |
 | Adapter registry | Converts an approved strategy action into protocol-specific calldata | Cannot call a contract or selector outside its reviewed manifest |
 | Secure executor | Schedules checks and holds the scoped session signer in an enclave | Cannot exceed the registered Altana permissions |
 | Altana session | Enforces contracts, methods, spend caps, expiry, and revoke | Cannot access the owner passkey |
@@ -29,13 +31,14 @@ The strategy engine can already compose a complete portfolio across reserve, spo
 
 ## Portfolio Review Cycle
 
-1. Read balances, positions, rewards, prices, liquidity, fees, and exit conditions.
-2. Reject stale, missing, or divergent market inputs.
-3. Recompute the desired sleeve allocation from the immutable mandate version.
-4. Compare current positions with targets and opportunity thresholds.
-5. Produce `HOLD`, an executable adapter action, or an owner-approval request.
-6. Simulate the selected action and recheck every limit immediately before signing.
-7. Execute once, reconcile the receipt and balances, then append the decision evidence.
+1. Scan schedule, drift, market-risk, cash-flow, and expiry triggers without trading.
+2. Read balances, positions, rewards, prices, liquidity, fees, and exit conditions only when a review is triggered.
+3. Reject stale, missing, or divergent market inputs.
+4. Recompute the desired sleeve allocation from the immutable mandate version.
+5. Submit normalized inputs to the server-side, versioned expert prompt and validate its typed response.
+6. Apply the deterministic mandate, cooldown, and adapter-coverage gate.
+7. Simulate the selected action and recheck every limit immediately before signing.
+8. Execute once, reconcile the receipt and balances, then append the decision evidence.
 
 ## Production Milestones
 
@@ -61,6 +64,8 @@ The strategy engine can already compose a complete portfolio across reserve, spo
 - Model impermanent loss and range-exit probability.
 - Deduct gas and execution costs from every expected-return comparison.
 - Refuse to optimize from stale, incomplete, or unverifiable data.
+- Version model prompts and validate every response before the deterministic gate.
+- Keep model credentials and prompt execution on the server, outside the static client.
 
 ### 4. Operational safety
 

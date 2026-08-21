@@ -104,11 +104,13 @@ export function buildPortfolioPlan({
   managedAmount,
   goal,
   risk,
+  targetReserveBps,
 }: {
   snapshot: PortfolioSnapshot
   managedAmount: bigint
   goal: InvestmentGoal
   risk: RiskProfileId
+  targetReserveBps?: bigint
 }): PortfolioPlan {
   const profile = riskProfiles[risk]
   const price = snapshot.priceStablePerNative > 0n ? snapshot.priceStablePerNative : parseEther('1')
@@ -118,7 +120,7 @@ export function buildPortfolioPlan({
   const managedValue = min(managedAmount, walletValue)
   const stableInScope = min(stableValueInNative, managedValue)
   const currentStableBps = safeBps(stableInScope, managedValue)
-  const targetStableBps = targetStableBpsFor(goal, risk)
+  const targetStableBps = clamp(targetReserveBps ?? targetStableBpsFor(goal, risk), 0n, 10_000n)
   const targetStableValue = managedValue * targetStableBps / 10_000n
   const maxActionNative = managedValue * profile.maxActionBps / 10_000n
   const dailyNativeCap = managedValue * profile.dailyTurnoverBps / 10_000n

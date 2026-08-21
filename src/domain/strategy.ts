@@ -32,6 +32,7 @@ export type StrategyGuardrails = {
   maximumSlippageBps: number
   maximumImpermanentLossBps: number
   dailyTurnoverBps: number
+  minimumActionCooldownMinutes: number
   leverageAllowed: false
 }
 
@@ -41,6 +42,7 @@ export type StrategyPlan = {
   guardrails: StrategyGuardrails
   modelYieldBps: number
   riskScore: number
+  reviewIntervalHours: number
   reviewCadence: string
   summary: string
 }
@@ -90,6 +92,7 @@ const profileGuardrails: Record<RiskProfileId, StrategyGuardrails> = {
     maximumSlippageBps: 50,
     maximumImpermanentLossBps: 300,
     dailyTurnoverBps: 2_000,
+    minimumActionCooldownMinutes: 240,
     leverageAllowed: false,
   },
   balanced: {
@@ -99,6 +102,7 @@ const profileGuardrails: Record<RiskProfileId, StrategyGuardrails> = {
     maximumSlippageBps: 100,
     maximumImpermanentLossBps: 700,
     dailyTurnoverBps: 3_500,
+    minimumActionCooldownMinutes: 120,
     leverageAllowed: false,
   },
   growth: {
@@ -108,6 +112,7 @@ const profileGuardrails: Record<RiskProfileId, StrategyGuardrails> = {
     maximumSlippageBps: 150,
     maximumImpermanentLossBps: 1_200,
     dailyTurnoverBps: 5_000,
+    minimumActionCooldownMinutes: 60,
     leverageAllowed: false,
   },
 }
@@ -235,13 +240,16 @@ export function buildStrategyPlan({
     },
   ]
 
+  const reviewIntervalHours = liquidityNeed === 'anytime' ? 4 : risk === 'growth' ? 8 : 24
+
   return {
     sleeves,
     actions,
     guardrails,
     modelYieldBps,
     riskScore,
-    reviewCadence: liquidityNeed === 'anytime' ? 'Every 4 hours' : risk === 'growth' ? 'Every 8 hours' : 'Daily',
+    reviewIntervalHours,
+    reviewCadence: reviewIntervalHours === 24 ? 'Daily' : `Every ${reviewIntervalHours} hours`,
     summary: strategySummary(goal, risk),
   }
 }

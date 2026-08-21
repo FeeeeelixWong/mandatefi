@@ -26,7 +26,10 @@ flowchart LR
   M --> G
   L --> G
   E --> G
-  G --> X["PancakeSwap execution adapters"]
+  G --> T["Schedule and event triggers"]
+  T --> Q["Versioned expert recommendation"]
+  Q --> D["Deterministic risk gate"]
+  D --> X["PancakeSwap execution adapters"]
   X --> S["Swap: live"]
   X --> P["Liquidity: owner approval"]
   X --> F["Farms and Earn: adapter planned"]
@@ -42,9 +45,10 @@ The engine does not merely wait for one BNB/BUSD ratio to cross a band. It:
 1. Converts the owner's preferences into a four-sleeve allocation.
 2. Applies hard limits for liquid reserve, LP exposure, position size, slippage, impermanent loss, turnover, expiry, and leverage.
 3. Builds an ordered action queue across the relevant PancakeSwap modules.
-4. Reviews portfolio drift and opportunity quality on a schedule.
-5. Executes only through a completed adapter and only inside the approved mandate.
-6. Holds or requests approval when an action is unnecessary, unsupported, or outside policy.
+4. Scans lightweight triggers every minute and runs a full review only for schedule, drift, risk, cash-flow, expiry, or owner events.
+5. Produces a versioned, schema-validated expert recommendation before the deterministic risk gate.
+6. Executes only through a completed adapter and only inside the approved mandate.
+7. Holds, defers, blocks, or requests approval when an action is unnecessary, cooling down, unsupported, or outside policy.
 
 ## Strategy Sleeves
 
@@ -87,6 +91,7 @@ The live Altana session currently permits only the reviewed PancakeSwap V2 Swap 
 | Capability | Coverage | What this build proves |
 | --- | --- | --- |
 | AI strategy composition | **Live** | Generates four-sleeve allocations, actions, model risk, and guardrails |
+| Expert prompt and trigger orchestration | **Live with deterministic fallback** | Uses a versioned prompt contract, typed response schema, event triggers, action cooldowns, and a deterministic execution gate |
 | PancakeSwap quote and bounded Swap | **Live on BSC Testnet** | Reads balances and quotes, calculates minimum output, and executes through a scoped Altana session |
 | Infinity liquidity position | **Owner approval required** | Strategy sizing and risk gates are visible; autonomous adapter is intentionally not claimed |
 | Farms position | **Adapter planned** | Eligibility and policy inputs are modeled; no live staking claim |
@@ -117,13 +122,16 @@ These receipts prove the wallet and scoped-session lifecycle. A new owner-author
 
 - `src/domain/strategy.ts` builds the multi-sleeve strategy and hard guardrails.
 - `src/domain/portfolio.ts` evaluates the currently live liquid-reserve Swap path.
+- `src/domain/triggerEngine.ts` decides when schedule, drift, risk, cash-flow, expiry, or owner events justify a review.
+- `src/domain/assetManagerPrompt.ts` defines the versioned expert role and strict typed recommendation schema.
+- `src/domain/strategyOrchestrator.ts` applies deterministic fallback judgment and the adapter-aware execution gate.
 - `src/integrations/altana.ts` reads balances and quotes, builds permissions, grants sessions, executes, and revokes.
 - `src/hooks/useAltanaWallet.ts` manages the passkey wallet lifecycle and safe UI states.
 - `src/App.tsx` provides portfolio, strategy creation, activity, and guardrail journeys.
 
 The hackathon deployment is a static browser app. The scoped session signer stays only in memory, and the local evaluator runs while the tab is active. A production deployment would move the same deterministic engine to a secure always-on executor without broadening the owner-approved policy.
 
-See [the production integration plan](docs/INTEGRATION_PLAN.md) and [the BSC Testnet runbook](docs/ALTANA_RUNBOOK.md).
+See [the AI strategy runtime](docs/AI_STRATEGY.md), [the production integration plan](docs/INTEGRATION_PLAN.md), and [the BSC Testnet runbook](docs/ALTANA_RUNBOOK.md).
 
 ## Run Locally
 

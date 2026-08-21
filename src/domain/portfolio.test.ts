@@ -64,4 +64,22 @@ describe('portfolio policy engine', () => {
     expect(plan.amountIn).toBe(parseEther('1.75'))
     expect(plan.projectedStableBps).toBe(4_500n)
   })
+
+  it('uses the composed strategy reserve as the live execution target', () => {
+    const plan = buildPortfolioPlan({
+      snapshot: {
+        nativeBalance: parseEther('0.0115'),
+        stableBalance: 0n,
+        priceStablePerNative: parseEther('500'),
+        updatedAt: now,
+      },
+      managedAmount: parseEther('0.01'),
+      goal: 'balanced-growth',
+      risk: 'balanced',
+      targetReserveBps: 2_500n,
+    })
+
+    expect(plan.targetStableBps).toBe(2_500n)
+    expect(plan.amountIn).toBe(parseEther('0.0025'))
+  })
 })

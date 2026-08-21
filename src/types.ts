@@ -41,4 +41,10 @@ export interface DecisionRecord {
   outputReceived?: string
   outputAsset: 'tBNB' | 'BUSD'
   transactionHash?: `0x${string}`
+  reviewSource?: 'ACTIVATION' | 'MANUAL' | 'MONITOR'
+  triggers?: string[]
+  expertAction?: string
+  confidence?: number
+  gateStatus?: 'AUTO_EXECUTE' | 'APPROVAL_REQUIRED' | 'BLOCKED' | 'DEFERRED' | 'HOLD'
+  promptVersion?: string
 }
