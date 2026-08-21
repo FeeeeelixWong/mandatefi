@@ -102,6 +102,7 @@
 .about-agent-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .about-agent-grid article { min-width: 0; min-height: 108px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; display: grid; align-content: center; justify-items: center; gap: 6px; text-align: center; background: #fff; }
 .about-agent-grid svg { color: var(--purple); }
+.about-agent-grid b { color: var(--purple); font-size: 7px; font-weight: 800; text-transform: uppercase; }
 .about-agent-grid strong { font-size: 12px; }
 .about-agent-grid span { color: var(--muted); font-size: 9px; }
 .agent-merge { position: relative; height: 38px; margin: 0 9%; display: grid; grid-template-columns: repeat(5, 1fr); }
