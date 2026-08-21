@@ -12,6 +12,7 @@ type JsonCallOptions<T> = {
   user: string
   schema: z.ZodType<T>
   maxTokens?: number
+  thinking?: 'enabled' | 'disabled'
 }
 
 const responseSchema = {
@@ -51,6 +52,7 @@ export async function callDeepSeekJson<T>(options: JsonCallOptions<T>): Promise<
             { role: 'user', content: options.user },
           ],
           response_format: { type: 'json_object' },
+          thinking: options.thinking ? { type: options.thinking } : undefined,
           max_tokens: options.maxTokens ?? 1_200,
           stream: false,
         }),

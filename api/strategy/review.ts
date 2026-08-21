@@ -49,6 +49,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         user: prompt.user,
         schema: specialistJudgementOutputSchema,
         maxTokens: 900,
+        thinking: 'disabled',
       })
       return {
         agentId: report.agentId,
@@ -62,6 +63,11 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       } satisfies SpecialistJudgement
     }))
 
+    specialistResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        console.error(`DeepSeek specialist ${input.baseCommittee.reports[index]?.agentId ?? index} fell back.`, result.reason)
+      }
+    })
     const judgements = specialistResults.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
     const committee = applySpecialistJudgements(input.baseCommittee, judgements, runId)
     const portfolioPlan = deserializePortfolioPlan(input.executionPlan)
@@ -84,6 +90,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         user: managerPrompt,
         schema: expertRecommendationOutputSchema,
         maxTokens: 1_200,
+        thinking: 'enabled',
       })
       recommendation = managerResult.value
       resolvedManagerModel = managerModel

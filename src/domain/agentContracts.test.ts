@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { parseEther } from 'viem'
-import { deserializePortfolioPlan, serializePortfolioPlan, serializePortfolioSnapshot } from './agentContracts'
+import {
+  deserializePortfolioPlan,
+  serializePortfolioPlan,
+  serializePortfolioSnapshot,
+  specialistJudgementOutputSchema,
+} from './agentContracts'
 import { buildInvestmentCommittee } from './investmentCommittee'
 import { buildPortfolioPlan } from './portfolio'
 import { buildSpecialistPrompt, SPECIALIST_PROMPT_VERSION } from './specialistPrompts'
@@ -27,6 +32,17 @@ function fixture() {
 }
 
 describe('agent runtime contracts', () => {
+  it('normalizes model confidence to an integer percentage', () => {
+    const judgement = specialistJudgementOutputSchema.parse({
+      stance: 'SUPPORT',
+      confidence: 0.875,
+      headline: 'Evidence supports the mandate.',
+      findings: [],
+      missingInputs: [],
+    })
+    expect(judgement.confidence).toBe(88)
+  })
+
   it('round-trips every bigint portfolio field through JSON-safe strings', () => {
     const { executionPlan, snapshot } = fixture()
     const serialized = serializePortfolioPlan(executionPlan)

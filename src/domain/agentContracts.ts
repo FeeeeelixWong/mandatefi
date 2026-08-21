@@ -7,9 +7,14 @@ export const agentStanceSchema = z.enum(['SUPPORT', 'NEUTRAL', 'CAUTION', 'BLOCK
 export const agentDataStatusSchema = z.enum(['READY', 'STALE', 'UNAVAILABLE'])
 export const agentModelModeSchema = z.enum(['DEEPSEEK', 'DETERMINISTIC_FALLBACK'])
 
+const confidenceScoreSchema = z.number().finite().min(0).max(100).transform((value) => {
+  const percentage = value > 0 && value <= 1 ? value * 100 : value
+  return Math.round(percentage)
+})
+
 export const specialistJudgementOutputSchema = z.object({
   stance: agentStanceSchema,
-  confidence: z.number().int().min(0).max(100),
+  confidence: confidenceScoreSchema,
   headline: z.string().min(1).max(240),
   findings: z.array(z.string().min(1).max(320)).max(4),
   missingInputs: z.array(z.string().min(1).max(240)).max(4),
@@ -21,7 +26,7 @@ export const expertRecommendationOutputSchema = z.object({
     'HOLD', 'SWAP', 'ADD_LIQUIDITY', 'REMOVE_LIQUIDITY', 'STAKE_FARM',
     'UNSTAKE_FARM', 'HARVEST', 'COMPOUND', 'EMERGENCY_EXIT', 'PAUSE',
   ]),
-  confidence: z.number().int().min(0).max(100),
+  confidence: confidenceScoreSchema,
   rationale: z.string().min(1).max(600),
   expectedNetBenefitBps: z.number().int().nullable(),
   requiresApproval: z.boolean(),

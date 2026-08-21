@@ -76,6 +76,8 @@ Committee rules:
   "missingInputs": ["only inputs that are genuinely missing"]
 }
 
+Use an integer percentage from 0 to 100 for "confidence".
+
 Evidence JSON:
 ${JSON.stringify(evidence, null, 2)}`,
   }
