@@ -186,29 +186,39 @@ function ProductHome({ onCreate }: { onCreate: () => void }) {
         <div className="hero-actions"><button className="primary-button hero-button" onClick={onCreate}>Build my strategy <ArrowRight size={18} /></button><span><ShieldCheck size={16} /> No custody. No leverage. Revoke anytime.</span></div>
       </div>
       <div className="hero-workspace" aria-label="MandateFi product architecture">
-        <header><div><span>Product architecture</span><strong>From mandate to managed DeFi</strong></div><span className="network-pill"><i /> BNB Chain</span></header>
+        <header><div><span>AI operating model</span><strong>How AI manages your DeFi</strong></div><span className="network-pill"><i /> BNB Chain</span></header>
         <div className="home-architecture">
-          <section className="architecture-mandate">
-            <span className="architecture-icon"><Settings2 size={19} /></span>
-            <div><small>Owner mandate</small><strong>You set the boundaries</strong></div>
-            <div className="mandate-inputs" aria-label="Mandate inputs"><span>Capital</span><span>Goal</span><span>Risk</span><span>Liquidity</span></div>
-          </section>
+          <div className="architecture-input-grid">
+            <section className="architecture-mandate">
+              <span className="architecture-icon"><Settings2 size={19} /></span>
+              <div><small>Owner mandate</small><strong>Goals · risk · liquidity</strong></div>
+              <div className="mandate-inputs" aria-label="Mandate inputs"><span>Capital</span><span>Limits</span><span>Approval</span></div>
+            </section>
+            <section className="architecture-data">
+              <span className="architecture-icon"><Activity size={19} /></span>
+              <div><small>Live DeFi data</small><strong>Markets · yields · costs</strong></div>
+              <span className="data-status"><i /> Live</span>
+            </section>
+          </div>
 
           <div className="architecture-connector" aria-hidden="true"><span /></div>
 
           <section className="architecture-team">
-            <header><span><BrainCircuit size={17} /> 5-agent investment team</span><small>Continuous specialist analysis</small></header>
+            <header><span><BrainCircuit size={17} /> 5 AI agents reason in parallel</span><small>Observe · analyze · report</small></header>
             <div className="architecture-agent-grid">
-              {aboutAgents.map((agent, index) => { const Icon = agent.icon; return <div key={agent.name}><span><Icon size={16} /></span><b>{agent.name}</b><small>0{index + 1}</small></div> })}
+              {aboutAgents.map((agent, index) => { const Icon = agent.icon; return <div key={agent.name}><span><Icon size={16} /></span><b>{agent.name}</b><small>AI 0{index + 1}</small></div> })}
             </div>
           </section>
 
           <div className="architecture-connector" aria-hidden="true"><span /></div>
 
-          <section className="architecture-decision">
-            <span className="architecture-icon"><ShieldCheck size={19} /></span>
-            <div><small>Decision orchestrator</small><strong>Hold · Rebalance · Ask owner</strong></div>
-            <span className="guardrail-chip">Inside your guardrails</span>
+          <section className="architecture-reasoning">
+            <div className="ai-synthesis">
+              <span className="architecture-icon"><BrainCircuit size={19} /></span>
+              <div><small>AI committee synthesis</small><strong>5 reports → 1 portfolio proposal</strong></div>
+              <div className="reasoning-output" aria-label="Possible AI recommendations"><span>Hold</span><span>Rebalance</span><span>Ask owner</span></div>
+            </div>
+            <div className="architecture-policy-gate"><ShieldCheck size={18} /><span><small>Policy gate</small><strong>Code-enforced limits</strong></span></div>
           </section>
 
           <div className="architecture-connector" aria-hidden="true"><span /></div>
@@ -222,7 +232,7 @@ function ProductHome({ onCreate }: { onCreate: () => void }) {
       </div>
     </section>
     <section className="product-proof" aria-label="Product capabilities">
-      <div><BrainCircuit size={19} /><span><strong>Run a five-agent committee</strong><small>Market, LP, Farm, Earn, and cost agents report independently.</small></span></div>
+      <div><BrainCircuit size={19} /><span><strong>Run a five-agent committee</strong><small>Market, LP, Farm, Earn, and cost AI agents report independently.</small></span></div>
       <div><Layers3 size={19} /><span><strong>Compose yield</strong><small>LP, Farm, and Earn allocations sized by return, liquidity, and IL risk.</small></span></div>
       <div><ShieldCheck size={19} /><span><strong>Enforce the mandate</strong><small>Contract scope, daily turnover, expiry, and emergency revoke stay explicit.</small></span></div>
     </section>
@@ -290,11 +300,11 @@ function AboutPage({ onCreate }: { onCreate: () => void }) {
     </section>
 
     <section className="about-section about-team">
-      <div className="about-section-heading"><span className="eyebrow">5-agent team</span><h2>Five agents.<br />One decision.</h2></div>
+      <div className="about-section-heading"><span className="eyebrow">5-agent team</span><h2>Five AI agents.<br />One decision.</h2></div>
       <div className="agent-decision-map">
-        <div className="about-agent-grid">{aboutAgents.map((agent, index) => { const Icon = agent.icon; return <article key={agent.name}><Icon size={20} /><b>Agent {String(index + 1).padStart(2, '0')}</b><strong>{agent.name}</strong><span>{agent.signal}</span></article> })}</div>
+        <div className="about-agent-grid">{aboutAgents.map((agent, index) => { const Icon = agent.icon; return <article key={agent.name}><Icon size={20} /><b>AI Agent {String(index + 1).padStart(2, '0')}</b><strong>{agent.name}</strong><span>{agent.signal}</span></article> })}</div>
         <div className="agent-merge" aria-hidden="true"><i /><i /><i /><i /><i /></div>
-        <div className="manager-decision"><BrainCircuit size={24} /><span><small>Decision orchestrator</small><strong>Hold · Rebalance · Ask owner</strong></span></div>
+        <div className="manager-decision"><BrainCircuit size={24} /><span><small>AI committee synthesis</small><strong>5 reports → 1 portfolio proposal</strong></span></div>
       </div>
     </section>
 

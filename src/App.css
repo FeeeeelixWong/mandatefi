@@ -50,13 +50,16 @@
 .hero-workspace > header strong, .strategy-preview-head strong { font-size: 15px; }
 .network-pill { min-height: 28px; padding: 0 9px; border: 1px solid #d4ecdf; border-radius: 7px; display: inline-flex; align-items: center; gap: 7px; color: #157b5e !important; background: var(--mint-soft); font-size: 10px !important; font-weight: 700; }
 .home-architecture { padding: 20px 22px; display: grid; }
-.architecture-mandate, .architecture-decision { min-height: 62px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 8px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; background: #fff; }
+.architecture-input-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 8px; }
+.architecture-mandate, .architecture-data { min-height: 76px; padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 10px; background: #fff; }
 .architecture-icon { width: 38px; height: 38px; border-radius: 7px; display: grid; place-items: center; color: var(--purple); background: var(--purple-soft); }
-.architecture-mandate > div:nth-child(2), .architecture-decision > div { display: grid; gap: 2px; }
-.architecture-mandate small, .architecture-decision small, .architecture-team header small, .execution-brand small { color: var(--muted); font-size: 10px; font-weight: 650; }
-.architecture-mandate strong, .architecture-decision strong { font-size: 13px; }
-.mandate-inputs { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.architecture-mandate > div:nth-child(2), .architecture-data > div, .ai-synthesis > div:nth-child(2) { display: grid; gap: 2px; }
+.architecture-mandate small, .architecture-data small, .ai-synthesis small, .architecture-policy-gate small, .architecture-team header small, .execution-brand small { color: var(--muted); font-size: 10px; font-weight: 650; }
+.architecture-mandate strong, .architecture-data strong, .ai-synthesis strong, .architecture-policy-gate strong { font-size: 12px; }
+.mandate-inputs { grid-column: 2; display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 5px; }
 .mandate-inputs span { padding: 4px 6px; border-radius: 5px; color: var(--muted); background: var(--soft); font-size: 9px; font-weight: 700; }
+.data-status { grid-column: 2; width: fit-content; display: inline-flex; align-items: center; gap: 5px; color: #14775a; font-size: 9px; font-weight: 800; }
+.data-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 3px rgba(49,208,170,.14); }
 .architecture-connector { position: relative; height: 20px; display: grid; place-items: center; }
 .architecture-connector::before { content: ''; width: 1px; height: 100%; background: #cbbde1; }
 .architecture-connector span { position: absolute; bottom: 3px; width: 6px; height: 6px; border-right: 1px solid var(--purple); border-bottom: 1px solid var(--purple); transform: rotate(45deg); }
@@ -68,9 +71,14 @@
 .architecture-agent-grid > div > span { color: var(--purple); }
 .architecture-agent-grid b { overflow: hidden; max-width: 100%; padding: 0 3px; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .architecture-agent-grid small { position: absolute; top: 4px; right: 5px; color: #9183ad; font-size: 8px; font-weight: 800; }
-.architecture-decision { border-color: #bde5d4; background: var(--mint-soft); }
-.architecture-decision .architecture-icon { color: #14775a; background: #fff; }
-.guardrail-chip { padding: 5px 7px; border: 1px solid #b6dfce; border-radius: 6px; color: #14775a; background: #fff; font-size: 9px; font-weight: 800; }
+.architecture-reasoning { min-height: 76px; border: 1px solid #bde5d4; border-radius: 8px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(150px, .75fr); overflow: hidden; background: var(--mint-soft); }
+.ai-synthesis { min-width: 0; padding: 10px 11px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 10px; }
+.ai-synthesis .architecture-icon { color: #14775a; background: #fff; }
+.reasoning-output { grid-column: 2; display: flex; flex-wrap: wrap; gap: 5px; }
+.reasoning-output span { padding: 4px 6px; border-radius: 5px; color: #14775a; background: #fff; font-size: 9px; font-weight: 800; }
+.architecture-policy-gate { padding: 10px 12px; border-left: 1px solid #bde5d4; display: flex; align-items: center; gap: 8px; color: #14775a; background: rgba(255,255,255,.52); }
+.architecture-policy-gate > span { display: grid; gap: 2px; }
+.architecture-policy-gate strong { color: var(--ink); }
 .architecture-execution { min-height: 64px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #fbfaff; }
 .execution-brand { display: flex; align-items: center; gap: 8px; color: var(--purple); }
 .execution-brand > span { display: grid; gap: 1px; color: var(--ink); }
@@ -484,10 +492,11 @@
   .hero-actions > span { justify-content: center; }
   .hero-workspace > header, .strategy-preview-head { padding: 0 16px; }
   .home-architecture { padding: 16px; }
-  .architecture-mandate, .architecture-decision { grid-template-columns: auto minmax(0, 1fr); }
-  .mandate-inputs, .guardrail-chip { grid-column: 1 / -1; justify-content: flex-start; }
+  .architecture-input-grid { grid-template-columns: 1fr; }
   .architecture-team > header { align-items: flex-start; flex-direction: column; gap: 3px; }
   .architecture-agent-grid { grid-template-columns: repeat(5, minmax(50px, 1fr)); overflow-x: auto; padding-bottom: 3px; }
+  .architecture-reasoning { grid-template-columns: 1fr; }
+  .architecture-policy-gate { min-height: 54px; border-top: 1px solid #bde5d4; border-left: 0; }
   .architecture-execution { align-items: flex-start; flex-direction: column; }
   .execution-tools { justify-content: flex-start; }
   .strategy-allocation { padding-right: 16px; padding-left: 16px; }
