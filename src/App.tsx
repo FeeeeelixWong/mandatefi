@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, AlertTriangle, ArrowDownUp, ArrowRight, BarChart3, Bot, BrainCircuit,
-  Check, ChevronRight, CircleCheck, ExternalLink, Fingerprint, Fuel, Gauge,
-  KeyRound, Layers3, LayoutDashboard, Leaf, LoaderCircle, Menu, Pause, Play,
-  Plus, RefreshCw, Route, Settings2, ShieldCheck, TrendingUp, Vault, Wallet,
-  Waves, X,
+  BookOpen, Check, ChevronRight, CircleCheck, CircleDollarSign,
+  ExternalLink, Fingerprint, Fuel, Gauge, KeyRound, Layers3, LayoutDashboard,
+  Leaf, LoaderCircle, Menu, Pause, Play, Plus, RefreshCw, Route, Search,
+  Settings2, ShieldCheck, TrendingUp, Vault, Wallet, Waves, Workflow, X,
 } from 'lucide-react'
 import { parseEther } from 'viem'
 import type { Session } from '@altananetwork/sdk'
@@ -36,7 +36,7 @@ import {
 import type { DecisionRecord, Mandate } from './types'
 import './App.css'
 
-type View = 'overview' | 'create' | 'decisions' | 'policies'
+type View = 'overview' | 'create' | 'decisions' | 'policies' | 'about'
 type MandateDraft = {
   amount: string
   duration: number
@@ -52,6 +52,7 @@ const navItems: Array<{ id: View; label: string; icon: typeof LayoutDashboard }>
   { id: 'create', label: 'New strategy', icon: Plus },
   { id: 'decisions', label: 'Activity', icon: Activity },
   { id: 'policies', label: 'Guardrails', icon: ShieldCheck },
+  { id: 'about', label: 'About', icon: BookOpen },
 ]
 
 const altanaStageCopy: Record<AltanaStage, string> = {
@@ -202,6 +203,97 @@ function ProductHome({ onCreate }: { onCreate: () => void }) {
       <div><BrainCircuit size={19} /><span><strong>Run an investment committee</strong><small>Market, LP, Farm, Earn, and cost specialists report independently.</small></span></div>
       <div><Layers3 size={19} /><span><strong>Compose yield</strong><small>LP, Farm, and Earn allocations sized by return, liquidity, and IL risk.</small></span></div>
       <div><ShieldCheck size={19} /><span><strong>Enforce the mandate</strong><small>Contract scope, daily turnover, expiry, and emergency revoke stay explicit.</small></span></div>
+    </section>
+  </div>
+}
+
+const aboutAgents = [
+  { name: 'Market analyst', remit: 'Tracks prices, reserve drift, volatility, and depeg risk.', icon: BarChart3 },
+  { name: 'LP analyst', remit: 'Ranks pool depth, fee APR, range health, and impermanent loss.', icon: Waves },
+  { name: 'Farm analyst', remit: 'Checks emissions, incentive decay, locks, and exit liquidity.', icon: Layers3 },
+  { name: 'Earn analyst', remit: 'Reviews vault yield, rewards, withdrawal terms, and compounding.', icon: Leaf },
+  { name: 'Cost analyst', remit: 'Prices gas, slippage, price impact, and route friction before action.', icon: Fuel },
+] as const
+
+const aboutFaqs = [
+  {
+    question: 'Does MandateFi custody my assets?',
+    answer: 'No. Capital stays in the owner-controlled passkey smart wallet. MandateFi receives only scoped, expiring permissions that can be revoked onchain.',
+  },
+  {
+    question: 'Can the AI trade any asset or call any contract?',
+    answer: 'No. The model can only recommend typed actions. Contract targets, methods, spend caps, slippage, turnover, expiry, and adapter coverage are enforced outside the model.',
+  },
+  {
+    question: 'Why is research on mainnet while execution is on testnet?',
+    answer: 'Mainnet provides real PancakeSwap liquidity and yield evidence. The hackathon build proves bounded execution on BSC Testnet. Research never authorizes a transaction across networks.',
+  },
+  {
+    question: 'When will MandateFi adjust a portfolio?',
+    answer: 'A review starts after schedule, allocation drift, liquidity, yield, protocol-risk, expiry, cash-flow, or owner events. Execution proceeds only when fresh evidence and expected benefit clear every cost and policy gate.',
+  },
+] as const
+
+function AboutPage({ onCreate }: { onCreate: () => void }) {
+  return <div className="about-page">
+    <header className="about-intro">
+      <div>
+        <span className="eyebrow">Product guide</span>
+        <h1>AI judgment.<br />Owner authority.</h1>
+      </div>
+      <div className="about-intro-copy">
+        <p>MandateFi is an owner-controlled AI portfolio manager for PancakeSwap. It researches opportunities, proposes a typed portfolio action, and executes only inside an explicit, revocable mandate.</p>
+        <button className="primary-button" onClick={onCreate}>Build a strategy <ArrowRight size={16} /></button>
+      </div>
+    </header>
+
+    <section className="about-status" aria-label="Product boundaries">
+      <div><Search size={18} /><span><small>Research</small><strong>BNB Chain mainnet</strong><b>15 min snapshots</b></span></div>
+      <div><Workflow size={18} /><span><small>Decision</small><strong>Five-agent committee</strong><b>Typed recommendations</b></span></div>
+      <div><ShieldCheck size={18} /><span><small>Authority</small><strong>Owner mandate</strong><b>Scoped and revocable</b></span></div>
+      <div><CircleDollarSign size={18} /><span><small>Execution</small><strong>BSC Testnet</strong><b>Swap adapter live</b></span></div>
+    </section>
+
+    <section className="about-section about-workflow">
+      <div className="about-section-heading"><span className="eyebrow">Operating model</span><h2>From intent to bounded execution</h2><p>The model decides what may be useful. Deterministic policy decides what is allowed.</p></div>
+      <div className="about-flow" aria-label="MandateFi operating workflow">
+        <article><span>01</span><div><strong>Define the mandate</strong><p>The owner sets capital, goal, risk, liquidity need, term, and hard limits.</p></div></article>
+        <ChevronRight size={18} />
+        <article><span>02</span><div><strong>Collect evidence</strong><p>Independent specialists inspect markets, yield, liquidity, and execution cost.</p></div></article>
+        <ChevronRight size={18} />
+        <article><span>03</span><div><strong>Recommend an action</strong><p>The portfolio manager resolves dissent and returns one schema-validated action.</p></div></article>
+        <ChevronRight size={18} />
+        <article><span>04</span><div><strong>Enforce and execute</strong><p>The policy gate holds, blocks, requests approval, or calls a reviewed adapter.</p></div></article>
+      </div>
+    </section>
+
+    <section className="about-section">
+      <div className="about-section-heading"><span className="eyebrow">Investment committee</span><h2>Specialists report independently</h2><p>Missing or stale evidence stays visible. The portfolio manager cannot silently replace it.</p></div>
+      <div className="about-agent-grid">{aboutAgents.map((agent) => { const Icon = agent.icon; return <article key={agent.name}><Icon size={19} /><strong>{agent.name}</strong><p>{agent.remit}</p></article> })}</div>
+    </section>
+
+    <section className="about-section about-boundary">
+      <div className="about-section-heading"><span className="eyebrow">Trust boundary</span><h2>Research is not authority</h2><p>Every execution must be reconstructed and priced on its execution network.</p></div>
+      <div className="boundary-grid">
+        <article><header><Search size={18} /><div><span>Research plane</span><strong>Find the opportunity</strong></div></header><ul><li>Official PancakeSwap pool data</li><li>MasterChef V3 farm verification</li><li>Active Syrup Pool configuration</li><li>Risk-aware opportunity ranking</li></ul><footer>Cannot sign or broadcast</footer></article>
+        <article><header><ShieldCheck size={18} /><div><span>Execution plane</span><strong>Prove the permission</strong></div></header><ul><li>Fresh wallet and route snapshot</li><li>Gas, slippage, and impact check</li><li>Method and spend-cap enforcement</li><li>Owner approval or live adapter</li></ul><footer>Cannot expand its own scope</footer></article>
+      </div>
+    </section>
+
+    <section className="about-section about-coverage">
+      <div className="about-section-heading"><span className="eyebrow">Current coverage</span><h2>What is live today</h2><p>Research and execution coverage are deliberately labeled separately.</p></div>
+      <div className="coverage-table" role="table" aria-label="MandateFi execution coverage">
+        <div role="row"><span role="columnheader">Module</span><span role="columnheader">Research</span><span role="columnheader">Execution</span></div>
+        <div role="row"><strong role="cell">Swap</strong><span role="cell">Live quote</span><b role="cell" className="coverage coverage-live">Live executor</b></div>
+        <div role="row"><strong role="cell">Liquidity</strong><span role="cell">Live mainnet ranking</span><b role="cell" className="coverage coverage-approval-required">Owner approval</b></div>
+        <div role="row"><strong role="cell">Farms</strong><span role="cell">Live PID and rewards</span><b role="cell" className="coverage coverage-adapter-planned">Adapter planned</b></div>
+        <div role="row"><strong role="cell">Earn</strong><span role="cell">Live pool and APR</span><b role="cell" className="coverage coverage-adapter-planned">Adapter planned</b></div>
+      </div>
+    </section>
+
+    <section className="about-section about-faq">
+      <div className="about-section-heading"><span className="eyebrow">FAQ</span><h2>Common questions</h2><p>Clear answers about custody, authority, data, and execution.</p></div>
+      <div className="faq-list">{aboutFaqs.map((faq) => <details key={faq.question}><summary><span>{faq.question}</span><ChevronRight size={17} /></summary><p>{faq.answer}</p></details>)}</div>
     </section>
   </div>
 }
@@ -638,6 +730,7 @@ function App() {
       {view === 'create' && <MandateWizard snapshot={snapshot} snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} altanaAddress={altana.address} altanaBalance={altana.balance} altanaFunded={altana.hasMinimumBalance} altanaStage={altana.stage} altanaError={altana.error} isPasskeySupported={altana.isPasskeySupported} onConnect={() => void wallet.connect()} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={() => void fundAltanaWallet().catch(() => undefined)} onStart={startMandate} onCancel={() => setView('overview')} />}
       {view === 'decisions' && <DecisionLog mandates={mandates} />}
       {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onCreate={() => setView('create')} />}
+      {view === 'about' && <AboutPage onCreate={() => setView('create')} />}
     </div></main>
     {snapshotError && <div className="toast error-toast"><AlertTriangle size={17} /><span>{snapshotError}</span><button onClick={() => void refreshSnapshot()} aria-label="Retry portfolio data"><RefreshCw size={15} /></button></div>}
     {notice && <div className="toast"><CircleCheck size={17} /><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15} /></button></div>}
