@@ -27,8 +27,18 @@ flowchart LR
   L --> G
   E --> G
   G --> T["Schedule and event triggers"]
-  T --> Q["Versioned expert recommendation"]
-  Q --> D["Deterministic risk gate"]
+  T --> MA["Market analyst"]
+  T --> LP["LP analyst"]
+  T --> FA["Farm analyst"]
+  T --> EA["Earn analyst"]
+  T --> CA["Execution cost analyst"]
+  MA --> Q["Portfolio manager"]
+  LP --> Q
+  FA --> Q
+  EA --> Q
+  CA --> Q
+  Q --> VQ["Versioned typed recommendation"]
+  VQ --> D["Deterministic risk gate"]
   D --> X["PancakeSwap execution adapters"]
   X --> S["Swap: live"]
   X --> P["Liquidity: owner approval"]
@@ -46,9 +56,23 @@ The engine does not merely wait for one BNB/BUSD ratio to cross a band. It:
 2. Applies hard limits for liquid reserve, LP exposure, position size, slippage, impermanent loss, turnover, expiry, and leverage.
 3. Builds an ordered action queue across the relevant PancakeSwap modules.
 4. Scans lightweight triggers every minute and runs a full review only for schedule, drift, risk, cash-flow, expiry, or owner events.
-5. Produces a versioned, schema-validated expert recommendation before the deterministic risk gate.
-6. Executes only through a completed adapter and only inside the approved mandate.
-7. Holds, defers, blocks, or requests approval when an action is unnecessary, cooling down, unsupported, or outside policy.
+5. Runs five independent specialist reports with explicit cadence and `READY`, `STALE`, or `UNAVAILABLE` data states.
+6. Prices the proposed action with live BSC gas and PancakeSwap route quotes before the portfolio manager can recommend execution.
+7. Produces a versioned, schema-validated portfolio-manager recommendation before the deterministic risk gate.
+8. Executes only through a completed adapter and only inside the approved mandate.
+9. Holds, defers, blocks, or requests approval when an action is unnecessary, costly, cooling down, unsupported, or outside policy.
+
+## Investment Committee
+
+| Specialist | Cadence | Decision evidence |
+| --- | ---: | --- |
+| Market analyst | 5 minutes | Spot quote, wallet balances, reserve drift, volatility and depeg state |
+| LP analyst | 10 minutes | Pool depth, fee APR, range health and impermanent loss |
+| Farm analyst | 30 minutes | Net incentives, emissions decay, locks and exit liquidity |
+| Earn analyst | 60 minutes | Vault APY, accrued rewards, compounding threshold and withdrawal terms |
+| Execution cost analyst | Per action / 1 minute | Live gas, slippage reserve, route price impact and exit friction |
+
+The portfolio manager is a committee chair, not an oracle. It may aggregate these reports, but it cannot silently replace missing evidence. In this static MVP, market and execution-cost reports are live for the Swap path; LP, Farm, and Earn reports declare themselves unavailable until their production data adapters are connected.
 
 ## Strategy Sleeves
 
@@ -80,6 +104,7 @@ The strategy cannot loosen its own permissions. Depending on the selected profil
 - maximum single-position size;
 - slippage and impermanent-loss limits;
 - a daily turnover cap;
+- a risk-profile execution-cost ceiling and minimum net-benefit hurdle;
 - an owner-selected expiry;
 - no leverage;
 - owner approval for actions without a live autonomous adapter.
@@ -91,8 +116,9 @@ The live Altana session currently permits only the reviewed PancakeSwap V2 Swap 
 | Capability | Coverage | What this build proves |
 | --- | --- | --- |
 | AI strategy composition | **Live** | Generates four-sleeve allocations, actions, model risk, and guardrails |
-| Expert prompt and trigger orchestration | **Live with deterministic fallback** | Uses a versioned prompt contract, typed response schema, event triggers, action cooldowns, and a deterministic execution gate |
-| PancakeSwap quote and bounded Swap | **Live on BSC Testnet** | Reads balances and quotes, calculates minimum output, and executes through a scoped Altana session |
+| Multi-agent investment committee | **Live with honest data states** | Produces five independent reports, timestamps evidence, and refuses to invent unavailable protocol data |
+| Expert prompt and trigger orchestration | **Live with deterministic fallback** | Uses a versioned committee prompt contract, typed response schema, event triggers, action cooldowns, and a deterministic execution gate |
+| PancakeSwap quote and bounded Swap | **Live on BSC Testnet** | Reads balances, live gas and route quotes; calculates cost and minimum output; executes through a scoped Altana session |
 | Infinity liquidity position | **Owner approval required** | Strategy sizing and risk gates are visible; autonomous adapter is intentionally not claimed |
 | Farms position | **Adapter planned** | Eligibility and policy inputs are modeled; no live staking claim |
 | Earn and reward compounding | **Adapter planned** | Gas threshold and schedule are modeled; no live compounding claim |
@@ -123,6 +149,7 @@ These receipts prove the wallet and scoped-session lifecycle. A new owner-author
 - `src/domain/strategy.ts` builds the multi-sleeve strategy and hard guardrails.
 - `src/domain/portfolio.ts` evaluates the currently live liquid-reserve Swap path.
 - `src/domain/triggerEngine.ts` decides when schedule, drift, risk, cash-flow, expiry, or owner events justify a review.
+- `src/domain/investmentCommittee.ts` builds specialist reports, tracks data freshness, and calculates cost-adjusted committee consensus.
 - `src/domain/assetManagerPrompt.ts` defines the versioned expert role and strict typed recommendation schema.
 - `src/domain/strategyOrchestrator.ts` applies deterministic fallback judgment and the adapter-aware execution gate.
 - `src/integrations/altana.ts` reads balances and quotes, builds permissions, grants sessions, executes, and revokes.

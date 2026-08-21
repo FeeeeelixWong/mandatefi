@@ -3,6 +3,7 @@ import { parseEther } from 'viem'
 import { buildPortfolioPlan } from './portfolio'
 import { buildStrategyPlan } from './strategy'
 import { orchestrateStrategyReview } from './strategyOrchestrator'
+import { buildInvestmentCommittee, type ExecutionCostEstimate } from './investmentCommittee'
 
 const nowMs = Date.parse('2026-08-21T12:00:00.000Z')
 const strategy = buildStrategyPlan({ goal: 'balanced-growth', risk: 'balanced', liquidityNeed: 'weekly', horizonDays: 30 })
@@ -74,9 +75,31 @@ describe('AI strategy orchestrator', () => {
 
   it('builds a versioned prompt that forbids leverage and arbitrary calldata', () => {
     const review = orchestrateStrategyReview({ source: 'MANUAL', nowMs, mandate, strategy, executionPlan: executionPlan('1.25') })
-    expect(review.promptVersion).toBe('mandatefi.asset-manager.v1')
+    expect(review.promptVersion).toBe('mandatefi.asset-manager.v2')
     expect(review.prompt).toContain('Never use leverage')
     expect(review.prompt).toContain('arbitrary calldata')
     expect(review.prompt).toContain('Return strict JSON only')
+  })
+
+  it('defers a swap when the cost analyst rejects the route', () => {
+    const plan = executionPlan('0')
+    const executionCost: ExecutionCostEstimate = {
+      observedAt: new Date(nowMs).toISOString(), gasPriceGwei: 3, gasUnits: 260_000,
+      gasCostNative: '0.00078', gasCostBps: 780, slippageReserveBps: 100,
+      priceImpactBps: 20, exitCostBps: 0, totalCostBps: 900,
+      source: 'BSC_RPC_AND_PANCAKESWAP_QUOTE', note: 'Test estimate.',
+    }
+    const committee = buildInvestmentCommittee({
+      nowMs, strategy, executionPlan: plan,
+      snapshot: {
+        nativeBalance: parseEther('0.0115'), stableBalance: 0n,
+        priceStablePerNative: parseEther('500'), updatedAt: new Date(nowMs).toISOString(),
+      },
+      executionCost,
+    })
+    const review = orchestrateStrategyReview({ source: 'MANUAL', nowMs, mandate, strategy, executionPlan: plan, committee })
+    expect(committee.costGatePassed).toBe(false)
+    expect(review.gate.status).toBe('DEFERRED')
+    expect(review.prompt).toContain('investmentCommittee')
   })
 })

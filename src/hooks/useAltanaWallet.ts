@@ -125,12 +125,12 @@ export function useAltanaWallet() {
     }
   }, [profile, refreshBalance])
 
-  const activatePortfolio = useCallback(async (durationDays: number, plan: PortfolioPlan) => {
+  const activatePortfolio = useCallback(async (durationDays: number, plan: PortfolioPlan, executeApprovedPlan = true) => {
     if (!profile) throw new Error('Create or recover the Altana wallet first.')
     setError('')
     try {
       const { grantAndExecutePortfolioPlan } = await import('../integrations/altana')
-      const result = await grantAndExecutePortfolioPlan(profile, durationDays, plan, setStage)
+      const result = await grantAndExecutePortfolioPlan(profile, durationDays, plan, setStage, executeApprovedPlan)
       await refreshBalance(profile)
       setStage('idle')
       return result

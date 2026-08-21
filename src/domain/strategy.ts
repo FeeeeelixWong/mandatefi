@@ -33,6 +33,8 @@ export type StrategyGuardrails = {
   maximumImpermanentLossBps: number
   dailyTurnoverBps: number
   minimumActionCooldownMinutes: number
+  maximumExecutionCostBps: number
+  minimumNetBenefitBps: number
   leverageAllowed: false
 }
 
@@ -93,6 +95,8 @@ const profileGuardrails: Record<RiskProfileId, StrategyGuardrails> = {
     maximumImpermanentLossBps: 300,
     dailyTurnoverBps: 2_000,
     minimumActionCooldownMinutes: 240,
+    maximumExecutionCostBps: 300,
+    minimumNetBenefitBps: 75,
     leverageAllowed: false,
   },
   balanced: {
@@ -103,6 +107,8 @@ const profileGuardrails: Record<RiskProfileId, StrategyGuardrails> = {
     maximumImpermanentLossBps: 700,
     dailyTurnoverBps: 3_500,
     minimumActionCooldownMinutes: 120,
+    maximumExecutionCostBps: 500,
+    minimumNetBenefitBps: 50,
     leverageAllowed: false,
   },
   growth: {
@@ -113,6 +119,8 @@ const profileGuardrails: Record<RiskProfileId, StrategyGuardrails> = {
     maximumImpermanentLossBps: 1_200,
     dailyTurnoverBps: 5_000,
     minimumActionCooldownMinutes: 60,
+    maximumExecutionCostBps: 700,
+    minimumNetBenefitBps: 35,
     leverageAllowed: false,
   },
 }

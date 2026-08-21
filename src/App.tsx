@@ -18,6 +18,11 @@ import {
   type StrategyPlan, type StrategySleeveId,
 } from './domain/strategy'
 import { orchestrateStrategyReview, type StrategyReview } from './domain/strategyOrchestrator'
+import {
+  buildInvestmentCommittee,
+  type ExecutionCostEstimate,
+  type InvestmentCommittee,
+} from './domain/investmentCommittee'
 import type { ReviewSource } from './domain/triggerEngine'
 import { useAltanaWallet, type AltanaStage } from './hooks/useAltanaWallet'
 import { useInjectedWallet } from './hooks/useInjectedWallet'
@@ -138,6 +143,7 @@ function buildDecision(
     confidence: review?.recommendation.confidence,
     gateStatus: review?.gate.status,
     promptVersion: review?.promptVersion,
+    committee: review?.committee,
   }
 }
 
@@ -170,7 +176,7 @@ function ProductHome({ onCreate }: { onCreate: () => void }) {
   return <div className="home-page">
     <section className="home-hero">
       <div className="hero-copy">
-        <span className="product-kicker"><BrainCircuit size={16} /> AI strategy, owner-controlled</span>
+        <span className="product-kicker"><BrainCircuit size={16} /> Five-agent investment committee</span>
         <h1>Put your DeFi portfolio<br />on a clear strategy.</h1>
         <p>Choose an outcome and risk level. MandateFi builds a PancakeSwap portfolio across spot, liquidity, farms, and earn. Completed adapters execute inside your mandate; every other action requires approval.</p>
         <div className="hero-actions"><button className="primary-button hero-button" onClick={onCreate}>Build my strategy <ArrowRight size={18} /></button><span><ShieldCheck size={16} /> No custody. No leverage. Revoke anytime.</span></div>
@@ -185,11 +191,11 @@ function ProductHome({ onCreate }: { onCreate: () => void }) {
           <span><Layers3 size={17} /><b>Farm</b><small>Add rewards</small></span><ChevronRight size={15} />
           <span><RefreshCw size={17} /><b>Compound</b><small>Recycle yield</small></span>
         </div>
-        <footer><span><Bot size={16} /> Strategy review scheduled daily</span><strong>Risk {preview.riskScore}/10</strong></footer>
+        <footer><span><Bot size={16} /> Specialists monitor markets and costs continuously</span><strong>Risk {preview.riskScore}/10</strong></footer>
       </div>
     </section>
     <section className="product-proof" aria-label="Product capabilities">
-      <div><Route size={19} /><span><strong>Build the basket</strong><small>Live PancakeSwap testnet swaps with bounded routes and slippage.</small></span></div>
+      <div><BrainCircuit size={19} /><span><strong>Run an investment committee</strong><small>Market, LP, Farm, Earn, and cost specialists report independently.</small></span></div>
       <div><Layers3 size={19} /><span><strong>Compose yield</strong><small>LP, Farm, and Earn allocations sized by return, liquidity, and IL risk.</small></span></div>
       <div><ShieldCheck size={19} /><span><strong>Enforce the mandate</strong><small>Contract scope, daily turnover, expiry, and emergency revoke stay explicit.</small></span></div>
     </section>
@@ -213,14 +219,16 @@ function PortfolioOverview({ mandate, snapshot, executionPlan, loading, runtimeA
   const managedValue = executionPlan?.managedValue ?? safeParseNative(mandate.managedAmount)
   const recommendationTitle = latest?.expertAction ? latest.expertAction.replaceAll('_', ' ') : executionPlan ? executionActionLabel(executionPlan.action) : 'Reading portfolio'
   const gateStatus = latest?.gateStatus ?? (executionPlan?.action === 'HOLD' ? 'HOLD' : 'PENDING REVIEW')
+  const committee: InvestmentCommittee | null = latest?.committee ?? (executionPlan ? buildInvestmentCommittee({ strategy, executionPlan, snapshot }) : null)
   return <div className="dashboard-page">
     <div className="page-title-row"><div><span className="eyebrow">Managed strategy</span><h1>{mandate.name}</h1><p>{strategy.summary} Capital remains in the passkey smart wallet.</p></div><div className="title-actions"><button className="secondary-button" onClick={onOpenPolicies}><Settings2 size={16} /> Guardrails</button><button className="primary-button" disabled={checking || mandate.status !== 'Active'} onClick={onCheck}>{checking ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run live review</button></div></div>
     <section className="portfolio-hero-panel"><div className="portfolio-value-block"><span>Capital under mandate</span><strong>{loading ? 'Refreshing...' : `${formatNative(managedValue)} tBNB`}</strong><small>BNB Testnet portfolio proof</small></div><Metric label="Model yield" value={`${formatBps(strategy.modelYieldBps)} APY`} detail="Scenario estimate, not a live quote" /><Metric label="Strategy risk" value={`${strategy.riskScore}/10`} detail={`${riskProfiles[mandate.riskProfile].name} mandate`} /><Metric label="Next review" value={strategy.reviewCadence} detail={runtimeAvailable ? 'Local executor online' : 'Owner approval required'} /></section>
     <div className="dashboard-layout">
       <section className="workspace-panel allocation-panel"><header className="panel-header"><div><span>AI portfolio construction</span><h2>Where the capital works</h2></div><span className="status-chip active"><i /> Active mandate</span></header><StrategyBar plan={strategy} /><div className="sleeve-grid">{strategy.sleeves.map((sleeve) => <article key={sleeve.id}><div className={`sleeve-icon sleeve-${sleeve.id}`}>{sleeve.id === 'reserve' ? <Vault size={18} /> : sleeve.id === 'market' ? <TrendingUp size={18} /> : sleeve.id === 'liquidity' ? <Waves size={18} /> : <Leaf size={18} />}</div><span>{sleeve.name}</span><strong>{formatBps(sleeve.allocationBps)}</strong><p>{sleeve.purpose}</p><small>{toolNames[sleeve.tool]}</small></article>)}</div></section>
       <aside className="workspace-panel ai-panel"><header className="panel-header"><div><span>Latest expert review</span><h2>{recommendationTitle}</h2></div><BrainCircuit size={23} /></header>{(latest || executionPlan) && <><p>{latest?.rationale ?? executionPlan?.rationale}</p>{latest?.triggers?.length ? <div className="trigger-chips" aria-label="Active review triggers">{latest.triggers.map((trigger) => <span key={trigger}>{trigger.replaceAll('_', ' ')}</span>)}</div> : <div className="trigger-chips"><span>NO ACTIVE EVENT RISK</span></div>}<div className="ai-signals"><div><span>Portfolio data</span><strong>{snapshot ? 'Live snapshot' : 'Waiting'}</strong></div><div><span>Review source</span><strong>{latest?.reviewSource ?? 'Awaiting review'}</strong></div><div><span>Confidence</span><strong>{latest?.confidence !== undefined ? `${latest.confidence}%` : '—'}</strong></div><div><span>Risk gate</span><strong>{gateStatus.replaceAll('_', ' ')}</strong></div></div><div className={`ai-decision ${latest?.gateStatus === 'AUTO_EXECUTE' ? 'trade' : 'hold'}`}>{latest?.gateStatus === 'AUTO_EXECUTE' ? <ArrowDownUp size={17} /> : <CircleCheck size={17} />}<span>{latest?.gateStatus === 'AUTO_EXECUTE' && executionPlan ? `${executionPlan.inputAsset} to ${executionPlan.outputAsset} adapter authorised` : latest?.gateStatus === 'APPROVAL_REQUIRED' ? 'Waiting for explicit owner approval' : latest?.gateStatus === 'BLOCKED' ? 'Recommendation blocked until its adapter is live' : latest?.gateStatus === 'DEFERRED' ? 'Execution delayed by the cooldown policy' : 'No automatic action authorised'}</span></div></>}</aside>
+      {committee && <section className="workspace-panel committee-panel"><header className="panel-header"><div><span>Investment committee</span><h2>Five specialists, one bounded decision</h2></div><span className="coverage-note">{committee.readyAgents}/5 current</span></header><div className="committee-summary"><div><span>Committee view</span><strong>{committee.summary}</strong></div><div><span>Execution cost</span><strong>{committee.executionCostBps === null ? 'Awaiting quote' : formatBps(committee.executionCostBps)}</strong></div><div><span>Cost ceiling</span><strong>{formatBps(strategy.guardrails.maximumExecutionCostBps)}</strong></div><div><span>Net benefit</span><strong>{committee.netBenefitBps === null ? 'Not measurable' : formatBps(committee.netBenefitBps)}</strong></div></div><div className="committee-grid">{committee.reports.map((report) => <article key={report.agentId}><div className="committee-agent-icon">{report.agentId === 'market' ? <BarChart3 size={17} /> : report.agentId === 'liquidity' ? <Waves size={17} /> : report.agentId === 'farms' ? <Layers3 size={17} /> : report.agentId === 'earn' ? <Leaf size={17} /> : <Fuel size={17} />}</div><div className="committee-agent-head"><strong>{report.name}</strong><span className={`agent-status agent-${report.status.toLowerCase()}`}>{report.status}</span></div><p>{report.headline}</p><small>Checks every {report.cadenceMinutes < 60 ? `${report.cadenceMinutes} min` : `${report.cadenceMinutes / 60} hr`}</small></article>)}</div></section>}
       <section className="workspace-panel action-panel"><header className="panel-header"><div><span>Execution plan</span><h2>PancakeSwap action queue</h2></div><span className="coverage-note">1 live · 3 staged</span></header><div className="action-queue">{strategy.actions.map((action) => <article key={action.id}><span className="action-order">{action.order}</span><div className="action-copy"><div><strong>{action.title}</strong><span>{toolNames[action.tool]}</span></div><p>{action.detail}</p></div><div className="action-meta"><strong>{formatBps(action.allocationBps)}</strong><span className={`coverage coverage-${action.coverage.toLowerCase().replace('_', '-')}`}>{coverageLabel(action.coverage)}</span></div></article>)}</div></section>
-      <aside className="workspace-panel policy-panel"><header className="panel-header"><div><span>Hard limits</span><h2>What AI cannot cross</h2></div><ShieldCheck size={22} /></header><dl className="policy-facts"><div><dt>Minimum liquid reserve</dt><dd>{formatBps(strategy.guardrails.minimumReserveBps)}</dd></div><div><dt>Maximum LP exposure</dt><dd>{formatBps(strategy.guardrails.maximumLiquidityBps)}</dd></div><div><dt>Single position cap</dt><dd>{formatBps(strategy.guardrails.maximumSinglePositionBps)}</dd></div><div><dt>Maximum slippage</dt><dd>{formatBps(strategy.guardrails.maximumSlippageBps)}</dd></div><div><dt>Leverage</dt><dd>Blocked</dd></div></dl>{latest && <div className="latest-proof"><span>Latest onchain proof</span><strong>{latest.state.replace('_', ' ')}</strong>{latest.transactionHash ? <a href={txUrl(latest.transactionHash)} target="_blank" rel="noreferrer">View transaction <ExternalLink size={12} /></a> : <small>No transaction required</small>}</div>}</aside>
+      <aside className="workspace-panel policy-panel"><header className="panel-header"><div><span>Hard limits</span><h2>What AI cannot cross</h2></div><ShieldCheck size={22} /></header><dl className="policy-facts"><div><dt>Minimum liquid reserve</dt><dd>{formatBps(strategy.guardrails.minimumReserveBps)}</dd></div><div><dt>Maximum LP exposure</dt><dd>{formatBps(strategy.guardrails.maximumLiquidityBps)}</dd></div><div><dt>Single position cap</dt><dd>{formatBps(strategy.guardrails.maximumSinglePositionBps)}</dd></div><div><dt>Execution cost ceiling</dt><dd>{formatBps(strategy.guardrails.maximumExecutionCostBps)}</dd></div><div><dt>Leverage</dt><dd>Blocked</dd></div></dl>{latest && <div className="latest-proof"><span>Latest onchain proof</span><strong>{latest.state.replace('_', ' ')}</strong>{latest.transactionHash ? <a href={txUrl(latest.transactionHash)} target="_blank" rel="noreferrer">View transaction <ExternalLink size={12} /></a> : <small>No transaction required</small>}</div>}</aside>
     </div>
     {!runtimeAvailable && mandate.status === 'Active' && <div className="runtime-notice"><AlertTriangle size={18} /><div><strong>The execution key is not available in this browser session.</strong><span>The onchain policy remains active and revocable. Create a replacement runtime to resume automatic reviews.</span></div><button onClick={onCreate}>Replace runtime</button></div>}
   </div>
@@ -433,6 +441,16 @@ function App() {
         risk: mandate.riskProfile,
         targetReserveBps: BigInt(allocationFor(strategy, 'reserve')),
       })
+      let liveQuote: PortfolioRebalanceQuote | null = null
+      let executionCost: ExecutionCostEstimate | null = null
+      try {
+        const { estimatePortfolioExecutionCost, quotePortfolioPlan } = await import('./integrations/altana')
+        liveQuote = await quotePortfolioPlan(plan)
+        executionCost = await estimatePortfolioExecutionCost(plan, liveQuote)
+      } catch {
+        // The committee records missing cost evidence and the risk gate fails closed.
+      }
+      const committee = buildInvestmentCommittee({ strategy, executionPlan: plan, snapshot: nextSnapshot, executionCost })
       const review = orchestrateStrategyReview({
         source,
         mandate: {
@@ -447,6 +465,7 @@ function App() {
         executionPlan: plan,
         lastReviewAt: mandate.decisions[0]?.createdAt,
         lastExecutionAt: mandate.decisions.find((decision) => decision.gateStatus === 'AUTO_EXECUTE')?.createdAt,
+        committee,
       })
       if (!review.reviewNeeded) return
       if (source === 'MONITOR' && review.gate.status === 'DEFERRED') return
@@ -455,7 +474,7 @@ function App() {
         const session = runtimeSessions.current.get(mandateId)
         if (!session) throw new Error('This browser no longer holds the scoped runtime key. Create a replacement policy to resume execution.')
         const { executePortfolioPlanWithSession } = await import('./integrations/altana')
-        result = await executePortfolioPlanWithSession(session, plan)
+        result = await executePortfolioPlanWithSession(session, plan, liveQuote ?? undefined)
       }
       const decision = buildDecision(plan, result, review)
       setMandates((current) => current.map((item) => item.id === mandateId ? { ...item, decisions: [decision, ...item.decisions] } : item))
@@ -501,6 +520,15 @@ function App() {
       risk: draft.risk,
       targetReserveBps: BigInt(allocationFor(strategy, 'reserve')),
     })
+    let executionCost: ExecutionCostEstimate | null = null
+    try {
+      const { estimatePortfolioExecutionCost, quotePortfolioPlan } = await import('./integrations/altana')
+      const quote = await quotePortfolioPlan(executionPlan)
+      executionCost = await estimatePortfolioExecutionCost(executionPlan, quote)
+    } catch {
+      // Activation can still register the mandate, but execution remains deferred.
+    }
+    const committee = buildInvestmentCommittee({ strategy, executionPlan, snapshot: latestSnapshot, executionCost })
     const review = orchestrateStrategyReview({
       source: 'ACTIVATION',
       mandate: {
@@ -513,8 +541,9 @@ function App() {
       },
       strategy,
       executionPlan,
+      committee,
     })
-    const proof = await altana.activatePortfolio(draft.duration, executionPlan)
+    const proof = await altana.activatePortfolio(draft.duration, executionPlan, review.gate.status === 'AUTO_EXECUTE')
     const id = crypto.randomUUID()
     runtimeSessions.current.set(id, proof.session)
     setRuntimeMandateIds((current) => [...current, id])

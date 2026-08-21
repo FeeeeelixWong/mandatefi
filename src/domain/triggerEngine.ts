@@ -32,6 +32,14 @@ export type ProtocolSignals = {
   liquidityChangeBps?: number
   stablecoinDeviationBps?: number
   cashFlowDetected?: boolean
+  liquidityObservedAt?: string
+  lpFeeAprBps?: number
+  farmObservedAt?: string
+  farmRiskCostBps?: number
+  earnObservedAt?: string
+  earnNetYieldBps?: number
+  earnRiskCostBps?: number
+  pendingRewardsValueBps?: number
 }
 
 export type TriggerContext = {

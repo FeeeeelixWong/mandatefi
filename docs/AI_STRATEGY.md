@@ -12,7 +12,8 @@ The current browser build uses a deterministic fallback decision engine that imp
 flowchart LR
   M["One-minute monitor"] --> T["Trigger engine"]
   T -->|"No trigger"| N["No review and no transaction"]
-  T -->|"Schedule, drift, event, or owner request"| P["Versioned asset-manager prompt"]
+  T -->|"Schedule, drift, event, or owner request"| C["Five specialist reports"]
+  C --> P["Versioned committee-chair prompt"]
   P --> R["Typed recommendation"]
   R --> G["Deterministic risk gate"]
   G -->|"AUTO_EXECUTE"| X["Reviewed live adapter"]
@@ -38,11 +39,25 @@ flowchart LR
 | Mandate expiry | Within 48 hours | Review renewal or safe unwind |
 | Owner request | Manual review | Evaluate immediately |
 
-The current live browser snapshot supplies schedule, owner, expiry, and liquid-reserve drift inputs. LP, yield, and protocol event fields are defined in the trigger contract and require production market-data adapters before they can drive live decisions.
+The current live browser snapshot supplies schedule, owner, expiry, liquid-reserve drift, PancakeSwap quotes, and BSC gas inputs. LP, yield, and protocol event fields are defined in the specialist contracts and report `UNAVAILABLE` until production market-data adapters provide fresh evidence.
+
+## Specialist agents
+
+The committee deliberately separates research from portfolio judgment:
+
+| Agent | Primary responsibility | Freshness window |
+| --- | --- | ---: |
+| Market analyst | Spot state, balances, drift, volatility and depeg risk | 15 minutes |
+| LP analyst | Pool depth, fee APR, range state and impermanent loss | 20 minutes |
+| Farm analyst | Net incentives, emissions, locks and exit liquidity | 45 minutes |
+| Earn analyst | Vault yield, rewards and compounding economics | 90 minutes |
+| Execution cost analyst | Live gas, route slippage, price impact and exit cost | 2 minutes |
+
+Every report has a status, stance, confidence, evidence timestamp, findings, missing inputs, and gross/risk estimates. The portfolio manager sees dissent and missing data; the deterministic gate still retains final authority.
 
 ## Expert prompt contract
 
-`src/domain/assetManagerPrompt.ts` defines prompt version `mandatefi.asset-manager.v1`. It instructs the expert to optimize risk-adjusted net returns while accounting for gas, price impact, slippage, lock duration, liquidity, and impermanent loss.
+`src/domain/assetManagerPrompt.ts` defines prompt version `mandatefi.asset-manager.v2`. It instructs the portfolio manager to chair independent specialist reports and optimize risk-adjusted net returns while accounting for gas, price impact, slippage, lock duration, liquidity, and impermanent loss.
 
 The response must be strict JSON containing:
 
@@ -63,11 +78,11 @@ The deterministic gate checks adapter coverage after every recommendation:
 | --- | --- |
 | `AUTO_EXECUTE` | The typed action has a reviewed live adapter and passes cooldown and mandate checks |
 | `APPROVAL_REQUIRED` | The action is supported only with an explicit owner decision |
-| `DEFERRED` | A normal action is still inside the profile's cooldown period |
+| `DEFERRED` | A normal action is cooling down, lacks fresh cost evidence, or exceeds its execution-cost ceiling |
 | `BLOCKED` | The recommendation has no live reviewed adapter |
 | `HOLD` | No execution is required |
 
-Critical pause or emergency recommendations are never suppressed by the ordinary cooldown, but they still cannot bypass owner approval or adapter coverage.
+For Swap, the cost analyst combines a live BSC gas price with a conservative smart-wallet gas envelope, PancakeSwap marginal/size quote degradation, and the mandate's slippage reserve. Pool fees are already embedded in the quoted output and are not double-counted. Critical pause or emergency recommendations are never suppressed by the ordinary cooldown, but they still cannot bypass owner approval or adapter coverage.
 
 ## Production model replacement
 

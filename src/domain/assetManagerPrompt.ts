@@ -1,8 +1,9 @@
 import { z } from 'zod'
+import type { InvestmentCommittee } from './investmentCommittee'
 import type { PortfolioPlan } from './portfolio'
 import type { StrategyPlan } from './strategy'
 
-export const ASSET_MANAGER_PROMPT_VERSION = 'mandatefi.asset-manager.v1'
+export const ASSET_MANAGER_PROMPT_VERSION = 'mandatefi.asset-manager.v2'
 
 export const expertActionSchema = z.enum([
   'HOLD',
@@ -43,6 +44,7 @@ export type AssetManagerPromptContext = {
   executionPlan: PortfolioPlan
   activeTriggers: string[]
   adapterCoverage: Record<string, string>
+  committee?: InvestmentCommittee
 }
 
 export function buildAssetManagerPrompt(context: AssetManagerPromptContext) {
@@ -63,9 +65,10 @@ export function buildAssetManagerPrompt(context: AssetManagerPromptContext) {
     },
     activeTriggers: context.activeTriggers,
     adapterCoverage: context.adapterCoverage,
+    investmentCommittee: context.committee ?? null,
   }
 
-  return `You are MandateFi's non-custodial DeFi portfolio manager.
+  return `You are MandateFi's non-custodial DeFi portfolio manager and chair of its investment committee.
 
 Objective:
 - Improve risk-adjusted net returns for the owner's portfolio.
@@ -79,6 +82,8 @@ Non-negotiable rules:
 - Recommend an adjustment only when expected net benefit exceeds execution cost plus a safety margin.
 - If evidence is missing, contradictory, stale, or outside adapter coverage, HOLD or require approval.
 - You recommend actions only. The deterministic policy gate makes the final execution decision.
+- Treat each specialist report as independent evidence. Never invent missing LP, Farm, Earn, or cost data.
+- Resolve disagreement explicitly and prefer HOLD when the relevant specialist is stale or unavailable.
 
 Allowed actions:
 HOLD, SWAP, ADD_LIQUIDITY, REMOVE_LIQUIDITY, STAKE_FARM, UNSTAKE_FARM, HARVEST, COMPOUND, EMERGENCY_EXIT, PAUSE.

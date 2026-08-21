@@ -20,6 +20,7 @@ import {
   type Hex,
 } from 'viem'
 import { z } from 'zod'
+import type { ExecutionCostEstimate } from '../domain/investmentCommittee'
 import type { PortfolioPlan, PortfolioSnapshot } from '../domain/portfolio'
 import { bscTestnetClient } from '../lib/chains'
 
@@ -333,6 +334,71 @@ export async function quotePortfolioPlan(plan: PortfolioPlan): Promise<Portfolio
   }
 }
 
+export async function estimatePortfolioExecutionCost(
+  plan: PortfolioPlan,
+  quote: PortfolioRebalanceQuote | null,
+): Promise<ExecutionCostEstimate> {
+  const observedAt = new Date().toISOString()
+  if (plan.action === 'HOLD' || !quote) {
+    return {
+      observedAt,
+      gasPriceGwei: 0,
+      gasUnits: 0,
+      gasCostNative: '0',
+      gasCostBps: 0,
+      slippageReserveBps: 0,
+      priceImpactBps: 0,
+      exitCostBps: 0,
+      totalCostBps: 0,
+      source: 'NO_ACTION',
+      note: 'No transaction is proposed.',
+    }
+  }
+
+  const path = plan.action === 'BUY_STABLE'
+    ? [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD]
+    : [BSC_TESTNET_BUSD, BSC_TESTNET_WBNB]
+  const marginalInput = plan.action === 'BUY_STABLE' ? parseEther('0.0001') : parseEther('0.05')
+  const probeInput = plan.amountIn < marginalInput ? plan.amountIn : marginalInput
+  const [gasPrice, marginalAmounts] = await Promise.all([
+    bscTestnetClient.getGasPrice(),
+    bscTestnetClient.readContract({
+      address: PANCAKE_V2_ROUTER,
+      abi: pancakeRouterAbi,
+      functionName: 'getAmountsOut',
+      args: [probeInput, path],
+    }),
+  ])
+  const marginalOut = marginalAmounts.at(-1) ?? 0n
+  const linearOut = probeInput > 0n ? marginalOut * plan.amountIn / probeInput : quote.quotedOut
+  const priceImpactBps = linearOut > quote.quotedOut && linearOut > 0n
+    ? Number((linearOut - quote.quotedOut) * 10_000n / linearOut)
+    : 0
+  // A conservative smart-wallet envelope: approve + swap requires the larger allowance.
+  const gasUnits = plan.action === 'BUY_STABLE' ? 260_000 : 340_000
+  const gasCost = gasPrice * BigInt(gasUnits)
+  const gasCostBps = plan.managedValue > 0n
+    ? Number(gasCost * 10_000n / plan.managedValue)
+    : 10_000
+  const slippageReserveBps = Number(plan.maxSlippageBps)
+  const exitCostBps = 0
+  const totalCostBps = gasCostBps + slippageReserveBps + priceImpactBps + exitCostBps
+
+  return {
+    observedAt,
+    gasPriceGwei: Number(gasPrice) / 1e9,
+    gasUnits,
+    gasCostNative: formatEther(gasCost),
+    gasCostBps,
+    slippageReserveBps,
+    priceImpactBps,
+    exitCostBps,
+    totalCostBps,
+    source: 'BSC_RPC_AND_PANCAKESWAP_QUOTE',
+    note: 'PancakeSwap pool fees are embedded in the quoted output; the model does not double-count them.',
+  }
+}
+
 export function formatStrategyToken(value: bigint) {
   return Number(formatUnits(value, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 })
 }
@@ -404,9 +470,10 @@ export async function grantAndExecutePortfolioPlan(
   durationDays: number,
   plan: PortfolioPlan,
   onStage?: (stage: 'granting' | 'executing') => void,
+  executeApprovedPlan = true,
 ): Promise<AltanaPortfolioProof> {
   const expiry = Math.floor(Date.now() / 1000) + durationDays * 24 * 60 * 60
-  const quote = await quotePortfolioPlan(plan)
+  const quote = executeApprovedPlan ? await quotePortfolioPlan(plan) : null
 
   onStage?.('granting')
   const grant = await altanaClient.grantSession({
@@ -418,7 +485,7 @@ export async function grantAndExecutePortfolioPlan(
     register: true,
   })
 
-  if (!quote || plan.action === 'HOLD') {
+  if (!executeApprovedPlan || !quote || plan.action === 'HOLD') {
     return { session: grant, grant, plan }
   }
 

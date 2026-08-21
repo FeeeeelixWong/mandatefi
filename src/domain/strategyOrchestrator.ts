@@ -5,6 +5,7 @@ import {
   type ExpertRecommendation,
 } from './assetManagerPrompt'
 import type { PortfolioPlan } from './portfolio'
+import type { InvestmentCommittee } from './investmentCommittee'
 import type { StrategyPlan } from './strategy'
 import {
   evaluateTriggers,
@@ -29,6 +30,7 @@ export type StrategyReview = {
     checks: string[]
   }
   nextReviewAt: string
+  committee?: InvestmentCommittee
 }
 
 type OrchestratorContext = {
@@ -47,6 +49,7 @@ type OrchestratorContext = {
   lastReviewAt?: string
   lastExecutionAt?: string
   signals?: ProtocolSignals
+  committee?: InvestmentCommittee
 }
 
 const adapterCoverage = {
@@ -62,7 +65,7 @@ const adapterCoverage = {
   HOLD: 'NO_EXECUTION',
 } as const
 
-function deterministicRecommendation(triggers: ReviewTrigger[], plan: PortfolioPlan): ExpertRecommendation {
+function deterministicRecommendation(triggers: ReviewTrigger[], plan: PortfolioPlan, committee?: InvestmentCommittee): ExpertRecommendation {
   const kinds = new Set(triggers.map((trigger) => trigger.kind))
 
   if (kinds.has('STABLECOIN_DEPEG')) {
@@ -81,7 +84,11 @@ function deterministicRecommendation(triggers: ReviewTrigger[], plan: PortfolioP
     return { decision: 'ADJUST', action: 'UNSTAKE_FARM', confidence: 82, rationale: 'The current farm no longer clears the approved alternative after the yield-decay threshold.', expectedNetBenefitBps: 250, requiresApproval: true }
   }
   if (plan.action !== 'HOLD') {
-    return { decision: 'ADJUST', action: 'SWAP', confidence: 90, rationale: plan.rationale, expectedNetBenefitBps: null, requiresApproval: false }
+    return {
+      decision: 'ADJUST', action: 'SWAP', confidence: committee?.costGatePassed === false ? 72 : 90,
+      rationale: committee ? `${plan.rationale} ${committee.summary}` : plan.rationale,
+      expectedNetBenefitBps: committee?.netBenefitBps ?? null, requiresApproval: false,
+    }
   }
   return { decision: 'HOLD', action: 'HOLD', confidence: 93, rationale: plan.rationale, expectedNetBenefitBps: 0, requiresApproval: false }
 }
@@ -101,7 +108,7 @@ export function orchestrateStrategyReview(context: OrchestratorContext): Strateg
   const triggers = evaluateTriggers(triggerContext)
   const reviewNeeded = triggers.length > 0
   const recommendation = expertRecommendationSchema.parse(
-    reviewNeeded ? deterministicRecommendation(triggers, context.executionPlan) : {
+    reviewNeeded ? deterministicRecommendation(triggers, context.executionPlan, context.committee) : {
       decision: 'HOLD', action: 'HOLD', confidence: 100,
       rationale: 'No schedule, allocation, market, liquidity, cash-flow, or expiry trigger requires a strategy review.',
       expectedNetBenefitBps: 0, requiresApproval: false,
@@ -123,9 +130,15 @@ export function orchestrateStrategyReview(context: OrchestratorContext): Strateg
   } else if (!emergencyAction && isCooldownActive(triggerContext)) {
     status = 'DEFERRED'
     checks.push(`Execution cooldown: ${context.strategy.guardrails.minimumActionCooldownMinutes} minutes`)
+  } else if (recommendation.action === 'SWAP' && context.executionPlan.action !== 'HOLD' && context.committee?.costGatePassed === false) {
+    status = 'DEFERRED'
+    checks.push(`Execution cost is missing, stale, or above the ${context.strategy.guardrails.maximumExecutionCostBps / 100}% mandate ceiling`)
   } else if (recommendation.action === 'SWAP' && context.executionPlan.action !== 'HOLD') {
     status = 'AUTO_EXECUTE'
     checks.push('Live PancakeSwap Swap adapter available')
+    if (context.committee?.executionCostBps !== null && context.committee?.executionCostBps !== undefined) {
+      checks.push(`Worst-case execution cost: ${context.committee.executionCostBps / 100}%`)
+    }
   } else if (adapterCoverage[recommendation.action] === 'APPROVAL_REQUIRED' || adapterCoverage[recommendation.action] === 'OWNER_CONTROLLED') {
     status = 'APPROVAL_REQUIRED'
     checks.push('Explicit owner approval required before execution')
@@ -140,6 +153,7 @@ export function orchestrateStrategyReview(context: OrchestratorContext): Strateg
     executionPlan: context.executionPlan,
     activeTriggers: triggers.map((trigger) => trigger.kind),
     adapterCoverage,
+    committee: context.committee,
   })
 
   return {
@@ -152,5 +166,6 @@ export function orchestrateStrategyReview(context: OrchestratorContext): Strateg
     recommendation,
     gate: { status, checks },
     nextReviewAt: new Date(nowMs + context.strategy.reviewIntervalHours * 60 * 60 * 1_000).toISOString(),
+    committee: context.committee,
   }
 }

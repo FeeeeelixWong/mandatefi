@@ -1,3 +1,5 @@
+import type { InvestmentCommittee } from './domain/investmentCommittee'
+
 export interface Mandate {
   id: string
   name: string
@@ -47,4 +49,5 @@ export interface DecisionRecord {
   confidence?: number
   gateStatus?: 'AUTO_EXECUTE' | 'APPROVAL_REQUIRED' | 'BLOCKED' | 'DEFERRED' | 'HOLD'
   promptVersion?: string
+  committee?: InvestmentCommittee
 }
