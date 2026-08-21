@@ -1,17 +1,25 @@
-import type { PortfolioPlan, PortfolioSnapshot } from './portfolio'
-import type { StrategyPlan } from './strategy'
-import type { ProtocolSignals } from './triggerEngine'
+import type { PortfolioPlan, PortfolioSnapshot } from './portfolio.js'
+import type { StrategyPlan } from './strategy.js'
+import type { ProtocolSignals } from './triggerEngine.js'
 import {
   protocolLabel,
   selectEarnOpportunity,
   selectFarmOpportunity,
   selectLiquidityOpportunity,
   type PancakeResearchSnapshot,
-} from '../integrations/pancakeResearch'
+} from '../integrations/pancakeResearch.js'
 
 export type SpecialistAgentId = 'market' | 'liquidity' | 'farms' | 'earn' | 'execution-cost'
 export type AgentDataStatus = 'READY' | 'STALE' | 'UNAVAILABLE'
 export type AgentStance = 'SUPPORT' | 'NEUTRAL' | 'CAUTION' | 'BLOCK'
+export type AgentModelMode = 'DEEPSEEK' | 'DETERMINISTIC_FALLBACK'
+
+export type AgentInference = {
+  mode: AgentModelMode
+  model: string
+  promptVersion: string
+  latencyMs: number
+}
 
 export type ExecutionCostEstimate = {
   observedAt: string
@@ -44,7 +52,13 @@ export type SpecialistReport = {
   sourceUrl?: string
   estimatedGrossBenefitBps: number | null
   estimatedRiskCostBps: number | null
+  inference?: AgentInference
 }
+
+export type SpecialistJudgement = Pick<
+  SpecialistReport,
+  'agentId' | 'stance' | 'confidence' | 'headline' | 'findings' | 'missingInputs'
+> & { inference: AgentInference }
 
 export type InvestmentCommittee = {
   generatedAt: string
@@ -60,6 +74,8 @@ export type InvestmentCommittee = {
   costGatePassed: boolean
   dissentingAgents: SpecialistAgentId[]
   summary: string
+  modelMode?: 'DEEPSEEK' | 'HYBRID_FALLBACK' | 'DETERMINISTIC_FALLBACK'
+  runId?: string
 }
 
 type CommitteeContext = {
@@ -291,5 +307,50 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
       : costGatePassed
         ? 'Market evidence and live execution costs are inside the mandate cost ceiling.'
         : 'The committee withheld execution because cost evidence is missing, stale, or above the mandate ceiling.',
+    modelMode: 'DETERMINISTIC_FALLBACK',
+  }
+}
+
+export function applySpecialistJudgements(
+  committee: InvestmentCommittee,
+  judgements: SpecialistJudgement[],
+  runId: string,
+): InvestmentCommittee {
+  const byAgent = new Map(judgements.map((judgement) => [judgement.agentId, judgement]))
+  const reports = committee.reports.map((baseReport) => {
+    const judgement = byAgent.get(baseReport.agentId)
+    if (!judgement) {
+      return {
+        ...baseReport,
+        inference: {
+          mode: 'DETERMINISTIC_FALLBACK' as const,
+          model: 'rules-engine',
+          promptVersion: 'mandatefi.specialist.fallback.v1',
+          latencyMs: 0,
+        },
+      }
+    }
+    return {
+      ...baseReport,
+      stance: judgement.stance,
+      confidence: judgement.confidence,
+      headline: judgement.headline,
+      findings: judgement.findings,
+      missingInputs: judgement.missingInputs,
+      inference: judgement.inference,
+    }
+  })
+  const deepSeekReports = reports.filter((report) => report.inference?.mode === 'DEEPSEEK').length
+
+  return {
+    ...committee,
+    reports,
+    dissentingAgents: reports
+      .filter((report) => report.stance === 'BLOCK' || report.stance === 'CAUTION')
+      .map((report) => report.agentId),
+    modelMode: deepSeekReports === reports.length
+      ? 'DEEPSEEK'
+      : deepSeekReports > 0 ? 'HYBRID_FALLBACK' : 'DETERMINISTIC_FALLBACK',
+    runId,
   }
 }

@@ -103,4 +103,34 @@ describe('AI strategy orchestrator', () => {
     expect(review.gate.status).toBe('DEFERRED')
     expect(review.prompt).toContain('investmentCommittee')
   })
+
+  it('keeps DeepSeek recommendations behind the deterministic adapter gate', () => {
+    const review = orchestrateStrategyReview({
+      source: 'MANUAL', nowMs, mandate, strategy, executionPlan: executionPlan('1.25'),
+      recommendationOverride: {
+        decision: 'ADJUST', action: 'ADD_LIQUIDITY', confidence: 91,
+        rationale: 'Verified liquidity evidence supports a bounded LP allocation.',
+        expectedNetBenefitBps: 180, requiresApproval: false,
+      },
+      modelMetadata: {
+        mode: 'DEEPSEEK', modelName: 'deepseek-v4-pro', runId: 'run-1', inputHash: 'a'.repeat(64),
+      },
+    })
+    expect(review.modelMode).toBe('DEEPSEEK')
+    expect(review.modelName).toBe('deepseek-v4-pro')
+    expect(review.gate.status).toBe('APPROVAL_REQUIRED')
+  })
+
+  it('blocks an expired mandate even when DeepSeek recommends execution', () => {
+    const review = orchestrateStrategyReview({
+      source: 'MANUAL', nowMs,
+      mandate: { ...mandate, expiry: Math.floor(nowMs / 1_000) - 1 },
+      strategy, executionPlan: executionPlan('0'),
+      recommendationOverride: {
+        decision: 'ADJUST', action: 'SWAP', confidence: 99,
+        rationale: 'The model proposes a rebalance.', expectedNetBenefitBps: 500, requiresApproval: false,
+      },
+    })
+    expect(review.gate.status).toBe('BLOCKED')
+  })
 })

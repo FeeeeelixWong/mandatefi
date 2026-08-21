@@ -1,7 +1,7 @@
 import { z } from 'zod'
-import type { InvestmentCommittee } from './investmentCommittee'
-import type { PortfolioPlan } from './portfolio'
-import type { StrategyPlan } from './strategy'
+import type { InvestmentCommittee } from './investmentCommittee.js'
+import type { PortfolioPlan } from './portfolio.js'
+import type { StrategyPlan } from './strategy.js'
 
 export const ASSET_MANAGER_PROMPT_VERSION = 'mandatefi.asset-manager.v3'
 

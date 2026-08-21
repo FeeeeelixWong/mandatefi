@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { RiskProfileId } from '../domain/portfolio'
+import type { RiskProfileId } from '../domain/portfolio.js'
 
 const urlSchema = z.string().url()
 

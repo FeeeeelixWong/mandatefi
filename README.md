@@ -6,7 +6,7 @@
 [![Status](https://img.shields.io/badge/status-working_MVP-177653)](#execution-coverage)
 [![License](https://img.shields.io/badge/license-MIT-111827)](LICENSE)
 
-**Live product:** https://feeeeelixwong.github.io/mandatefi/
+**Live product:** https://mandatefi-ten.vercel.app/
 
 MandateFi lets an owner assign capital, choose an outcome, set risk and liquidity preferences, and approve a revocable mandate. Its strategy engine then constructs a portfolio across four sleeves: liquid reserve, market exposure, liquidity yield, and farm/earn positions.
 
@@ -27,11 +27,11 @@ flowchart LR
   L --> G
   E --> G
   G --> T["Schedule and event triggers"]
-  T --> MA["Market analyst"]
-  T --> LP["LP analyst"]
-  T --> FA["Farm analyst"]
-  T --> EA["Earn analyst"]
-  T --> CA["Execution cost analyst"]
+  T --> MA["DeepSeek market agent"]
+  T --> LP["DeepSeek LP agent"]
+  T --> FA["DeepSeek Farm agent"]
+  T --> EA["DeepSeek Earn agent"]
+  T --> CA["DeepSeek execution-cost agent"]
   MA --> Q["Portfolio manager"]
   LP --> Q
   FA --> Q
@@ -56,9 +56,9 @@ The engine does not merely wait for one BNB/BUSD ratio to cross a band. It:
 2. Applies hard limits for liquid reserve, LP exposure, position size, slippage, impermanent loss, turnover, expiry, and leverage.
 3. Builds an ordered action queue across the relevant PancakeSwap modules.
 4. Scans lightweight triggers every minute and runs a full review only for schedule, drift, risk, cash-flow, expiry, or owner events.
-5. Runs five independent specialist reports with explicit cadence and `READY`, `STALE`, or `UNAVAILABLE` data states.
+5. Calls five independent DeepSeek specialist agents in parallel, each with its own role prompt and explicit `READY`, `STALE`, or `UNAVAILABLE` evidence state.
 6. Prices the proposed action with live BSC gas and PancakeSwap route quotes before the portfolio manager can recommend execution.
-7. Produces a versioned, schema-validated portfolio-manager recommendation before the deterministic risk gate.
+7. Sends the five reports to a separate DeepSeek portfolio-manager agent and validates its strict JSON recommendation before the deterministic risk gate.
 8. Executes only through a completed adapter and only inside the approved mandate.
 9. Holds, defers, blocks, or requests approval when an action is unnecessary, costly, cooling down, unsupported, or outside policy.
 
@@ -72,7 +72,9 @@ The engine does not merely wait for one BNB/BUSD ratio to cross a band. It:
 | Earn analyst | 60 minutes | Vault APY, accrued rewards, compounding threshold and withdrawal terms |
 | Execution cost analyst | Per action / 1 minute | Live gas, slippage reserve, route price impact and exit friction |
 
-The portfolio manager is a committee chair, not an oracle. It may aggregate these reports, but it cannot silently replace missing evidence. LP, Farm, and Earn agents rank verified mainnet opportunities from a scheduled PancakeSwap research snapshot. The execution-cost agent separately revalidates BSC gas and route costs for an actionable testnet Swap. Research data never grants transaction authority.
+Each specialist is a separate DeepSeek request, and the portfolio manager is a sixth request that acts as committee chair. It may aggregate the reports, but it cannot silently replace missing evidence. LP, Farm, and Earn agents rank verified mainnet opportunities from a scheduled PancakeSwap research snapshot. The execution-cost agent separately reviews BSC gas and route costs for an actionable testnet Swap. Research data never grants transaction authority.
+
+The Vercel backend keeps the DeepSeek key server-side, validates every model response with Zod, hashes every input, and records the model, prompt version, run ID, and final output. If one specialist fails, only that report falls back to the deterministic engine. If the manager fails, the complete review safely falls back without broadening execution authority.
 
 ### PancakeSwap Research Plane
 
@@ -129,8 +131,8 @@ The live Altana session currently permits only the reviewed PancakeSwap V2 Swap 
 | Capability | Coverage | What this build proves |
 | --- | --- | --- |
 | AI strategy composition | **Live** | Generates four-sleeve allocations, actions, model risk, and guardrails |
-| Multi-agent investment committee | **Live with verified research** | Produces five independent reports; LP, Farm, and Earn rank timestamped official PancakeSwap opportunities |
-| Expert prompt and trigger orchestration | **Live with deterministic fallback** | Uses a versioned committee prompt contract, typed response schema, event triggers, action cooldowns, and a deterministic execution gate |
+| Multi-agent investment committee | **Live through DeepSeek on Vercel** | Runs five parallel specialist prompts; LP, Farm, and Earn use timestamped official PancakeSwap evidence |
+| Portfolio-manager orchestration | **Live through DeepSeek with safe fallback** | Runs a sixth manager prompt, validates strict JSON, and retains event triggers, cooldowns, and a deterministic execution gate |
 | PancakeSwap quote and bounded Swap | **Live on BSC Testnet** | Reads balances, live gas and route quotes; calculates cost and minimum output; executes through a scoped Altana session |
 | Infinity liquidity position | **Research live; owner approval required** | Mainnet pools are ranked; autonomous liquidity execution is intentionally not claimed |
 | Farms position | **Research live; adapter planned** | Active MasterChef PIDs and emissions are verified; no live staking claim |
@@ -163,15 +165,19 @@ These receipts prove the wallet and scoped-session lifecycle. A new owner-author
 - `src/domain/portfolio.ts` evaluates the currently live liquid-reserve Swap path.
 - `src/domain/triggerEngine.ts` decides when schedule, drift, risk, cash-flow, expiry, or owner events justify a review.
 - `src/domain/investmentCommittee.ts` builds specialist reports, tracks data freshness, and calculates cost-adjusted committee consensus.
+- `src/domain/specialistPrompts.ts` defines the five independent, scope-limited specialist roles.
+- `src/domain/agentContracts.ts` defines the JSON-safe request, response, and Zod validation contracts shared by browser and server.
 - `src/domain/assetManagerPrompt.ts` defines the versioned expert role and strict typed recommendation schema.
-- `src/domain/strategyOrchestrator.ts` applies deterministic fallback judgment and the adapter-aware execution gate.
+- `src/domain/strategyOrchestrator.ts` accepts a validated DeepSeek recommendation, applies deterministic fallback when needed, and always runs the adapter-aware execution gate.
 - `src/integrations/pancakeResearch.ts` validates the scheduled research snapshot and selects risk-aware LP, Farm, and Earn candidates.
+- `src/integrations/agentReview.ts` serializes the live portfolio safely and invokes the Vercel agent runtime.
+- `api/strategy/review.ts` fans out five DeepSeek specialists, invokes the manager, hashes inputs, and persists the audit event.
 - `scripts/refresh-pancake-research.mjs` assembles the official-data snapshot from PancakeSwap Explorer, MasterChef V3, Syrup Pool configuration, and BNB Chain RPC evidence.
 - `src/integrations/altana.ts` reads balances and quotes, builds permissions, grants sessions, executes, and revokes.
 - `src/hooks/useAltanaWallet.ts` manages the passkey wallet lifecycle and safe UI states.
 - `src/App.tsx` provides portfolio, strategy creation, activity, and guardrail journeys.
 
-The hackathon deployment is a static browser app. The scoped session signer stays only in memory, and the local evaluator runs while the tab is active. A production deployment would move the same deterministic engine to a secure always-on executor without broadening the owner-approved policy.
+The frontend and AI API are designed to deploy together on Vercel. The scoped session signer still stays only in browser memory: Vercel receives normalized market and mandate evidence but never receives the owner passkey, private key, or unrestricted transaction authority. Scheduled server-side monitoring can be added later without changing that custody boundary; execution still requires the scoped wallet runtime or explicit owner approval.
 
 See [the AI strategy runtime](docs/AI_STRATEGY.md), [the production integration plan](docs/INTEGRATION_PLAN.md), and [the BSC Testnet runbook](docs/ALTANA_RUNBOOK.md).
 
@@ -179,8 +185,22 @@ See [the AI strategy runtime](docs/AI_STRATEGY.md), [the production integration 
 
 ```bash
 npm install
-npm run dev
+cp .env.example .env.local
+# Add DEEPSEEK_API_KEY to .env.local
+npm run dev:vercel
 ```
+
+`npm run dev` still starts the frontend alone; agent reviews will then use the deterministic fallback unless `VITE_AGENT_API_URL` points to a deployed backend.
+
+Vercel environment variables:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DEEPSEEK_API_KEY` | Yes | Server-only DeepSeek credential |
+| `DEEPSEEK_SPECIALIST_MODEL` | No | Defaults to `deepseek-v4-flash` |
+| `DEEPSEEK_MANAGER_MODEL` | No | Defaults to `deepseek-v4-pro` |
+| `MANDATEFI_ALLOWED_ORIGINS` | No | Additional comma-separated browser origins |
+| `DATABASE_URL` | No | Neon/Postgres audit store; otherwise structured Vercel logs are used |
 
 Quality checks:
 

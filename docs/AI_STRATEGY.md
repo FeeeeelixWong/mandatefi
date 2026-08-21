@@ -4,7 +4,7 @@
 
 MandateFi separates portfolio judgment from transaction authority. An asset-management expert may recommend a typed action, but it cannot create arbitrary calldata, sign a transaction, loosen a mandate, or declare an unfinished adapter executable.
 
-The current browser build uses a deterministic fallback decision engine that implements the same structured output contract as the production model. This makes the full trigger-to-gate workflow testable without exposing an API key in a static deployment.
+The Vercel runtime calls DeepSeek behind a server-only API key. Five specialist agents reason independently and a sixth portfolio-manager agent synthesizes their reports. The original deterministic engine remains as a safe fallback and implements the same structured output contract, so a model outage cannot broaden permissions or disable the risk gate.
 
 ## Decision pipeline
 
@@ -12,8 +12,8 @@ The current browser build uses a deterministic fallback decision engine that imp
 flowchart LR
   M["One-minute monitor"] --> T["Trigger engine"]
   T -->|"No trigger"| N["No review and no transaction"]
-  T -->|"Schedule, drift, event, or owner request"| C["Five specialist reports"]
-  C --> P["Versioned committee-chair prompt"]
+  T -->|"Schedule, drift, event, or owner request"| C["Five parallel DeepSeek specialist agents"]
+  C --> P["DeepSeek portfolio-manager agent"]
   P --> R["Typed recommendation"]
   R --> G["Deterministic risk gate"]
   G -->|"AUTO_EXECUTE"| X["Reviewed live adapter"]
@@ -54,6 +54,8 @@ The committee deliberately separates research from portfolio judgment:
 | Execution cost analyst | Live gas, route slippage, price impact and exit cost | 2 minutes |
 
 Every report has a status, stance, confidence, evidence timestamp, findings, missing inputs, and gross/risk estimates. The portfolio manager sees dissent and missing data; the deterministic gate still retains final authority.
+
+The five roles are versioned in `src/domain/specialistPrompts.ts` as `mandatefi.specialist.v1`. Every role receives the same signed mandate and normalized portfolio context but a different scope boundary. A Market agent cannot select Farms, a Farm agent cannot invent LP telemetry, and the Cost agent cannot override the mandate ceiling.
 
 ## Research and execution boundary
 
@@ -97,13 +99,16 @@ The deterministic gate checks adapter coverage after every recommendation:
 
 For Swap, the cost analyst combines a live BSC gas price with a conservative smart-wallet gas envelope, PancakeSwap marginal/size quote degradation, and the mandate's slippage reserve. Pool fees are already embedded in the quoted output and are not double-counted. Critical pause or emergency recommendations are never suppressed by the ordinary cooldown, but they still cannot bypass owner approval or adapter coverage.
 
-## Production model replacement
+## Vercel and DeepSeek runtime
 
-The deterministic fallback should be replaced behind a server-side model endpoint, not inside the static frontend. The endpoint must:
+`api/strategy/review.ts` implements the production model boundary:
 
-1. Receive a signed mandate version and normalized market snapshot.
-2. Build the versioned prompt server-side.
-3. Validate the model response with `expertRecommendationSchema`.
-4. Store prompt version, input hashes, response, and confidence in the audit log.
-5. Send only the typed recommendation to the deterministic gate.
-6. Never receive the owner passkey or unrestricted transaction authority.
+1. Validate a JSON-safe mandate, strategy, portfolio snapshot, triggers, and deterministic evidence set.
+2. Call five `deepseek-v4-flash` specialist agents concurrently.
+3. Validate each report before merging it with deterministic data status, source, and numeric estimates.
+4. Call `deepseek-v4-pro` with the five validated reports and the versioned manager prompt.
+5. Validate the manager's strict JSON with `expertRecommendationSchema`.
+6. Hash the complete input and record run ID, model mode, prompt version, output, and confidence in Postgres or Vercel logs.
+7. Return only typed reports and a typed recommendation to the browser's deterministic gate.
+
+The runtime never receives the owner passkey or unrestricted transaction authority. A partial specialist failure becomes `HYBRID_FALLBACK`; a manager failure uses the deterministic recommendation. Neither path skips the policy gate.

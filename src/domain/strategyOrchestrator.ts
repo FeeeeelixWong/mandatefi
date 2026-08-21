@@ -22,7 +22,10 @@ export type StrategyReview = {
   source: ReviewSource
   prompt: string
   promptVersion: string
-  modelMode: 'DETERMINISTIC_FALLBACK'
+  modelMode: 'DEEPSEEK' | 'HYBRID_FALLBACK' | 'DETERMINISTIC_FALLBACK'
+  modelName: string
+  runId?: string
+  inputHash?: string
   triggers: ReviewTrigger[]
   recommendation: ExpertRecommendation
   gate: {
@@ -33,7 +36,7 @@ export type StrategyReview = {
   committee?: InvestmentCommittee
 }
 
-type OrchestratorContext = {
+export type StrategyOrchestratorContext = {
   source: ReviewSource
   nowMs?: number
   mandate: {
@@ -50,6 +53,13 @@ type OrchestratorContext = {
   lastExecutionAt?: string
   signals?: ProtocolSignals
   committee?: InvestmentCommittee
+  recommendationOverride?: ExpertRecommendation
+  modelMetadata?: {
+    mode: StrategyReview['modelMode']
+    modelName: string
+    runId: string
+    inputHash: string
+  }
 }
 
 const adapterCoverage = {
@@ -93,7 +103,7 @@ function deterministicRecommendation(triggers: ReviewTrigger[], plan: PortfolioP
   return { decision: 'HOLD', action: 'HOLD', confidence: 93, rationale: plan.rationale, expectedNetBenefitBps: 0, requiresApproval: false }
 }
 
-export function orchestrateStrategyReview(context: OrchestratorContext): StrategyReview {
+export function orchestrateStrategyReview(context: StrategyOrchestratorContext): StrategyReview {
   const nowMs = context.nowMs ?? Date.now()
   const triggerContext = {
     source: context.source,
@@ -108,7 +118,7 @@ export function orchestrateStrategyReview(context: OrchestratorContext): Strateg
   const triggers = evaluateTriggers(triggerContext)
   const reviewNeeded = triggers.length > 0
   const recommendation = expertRecommendationSchema.parse(
-    reviewNeeded ? deterministicRecommendation(triggers, context.executionPlan, context.committee) : {
+    reviewNeeded ? context.recommendationOverride ?? deterministicRecommendation(triggers, context.executionPlan, context.committee) : {
       decision: 'HOLD', action: 'HOLD', confidence: 100,
       rationale: 'No schedule, allocation, market, liquidity, cash-flow, or expiry trigger requires a strategy review.',
       expectedNetBenefitBps: 0, requiresApproval: false,
@@ -161,7 +171,10 @@ export function orchestrateStrategyReview(context: OrchestratorContext): Strateg
     source: context.source,
     prompt,
     promptVersion: ASSET_MANAGER_PROMPT_VERSION,
-    modelMode: 'DETERMINISTIC_FALLBACK',
+    modelMode: context.modelMetadata?.mode ?? 'DETERMINISTIC_FALLBACK',
+    modelName: context.modelMetadata?.modelName ?? 'rules-engine',
+    runId: context.modelMetadata?.runId,
+    inputHash: context.modelMetadata?.inputHash,
     triggers,
     recommendation,
     gate: { status, checks },

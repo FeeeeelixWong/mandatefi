@@ -49,5 +49,9 @@ export interface DecisionRecord {
   confidence?: number
   gateStatus?: 'AUTO_EXECUTE' | 'APPROVAL_REQUIRED' | 'BLOCKED' | 'DEFERRED' | 'HOLD'
   promptVersion?: string
+  modelMode?: 'DEEPSEEK' | 'HYBRID_FALLBACK' | 'DETERMINISTIC_FALLBACK'
+  modelName?: string
+  agentRunId?: string
+  agentInputHash?: string
   committee?: InvestmentCommittee
 }
