@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity, AlertTriangle, ArrowDownUp, ArrowRight, BarChart3, Bot, BrainCircuit,
+  Activity, AlertTriangle, ArrowDownUp, ArrowRight, BarChart3, BrainCircuit,
   BookOpen, Check, ChevronRight, CircleCheck,
   ExternalLink, Fingerprint, Fuel, Gauge, KeyRound, Layers3, LayoutDashboard,
   Leaf, LoaderCircle, Menu, Pause, Play, Plus, RefreshCw, Route, Search,
@@ -177,7 +177,6 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 }
 
 function ProductHome({ onCreate }: { onCreate: () => void }) {
-  const preview = buildStrategyPlan({ goal: 'balanced-growth', risk: 'balanced', liquidityNeed: 'weekly', horizonDays: 30 })
   return <div className="home-page">
     <section className="home-hero">
       <div className="hero-copy">
@@ -186,17 +185,40 @@ function ProductHome({ onCreate }: { onCreate: () => void }) {
         <p>Choose an outcome and risk level. MandateFi builds a PancakeSwap portfolio across spot, liquidity, farms, and earn. Completed adapters execute inside your mandate; every other action requires approval.</p>
         <div className="hero-actions"><button className="primary-button hero-button" onClick={onCreate}>Build my strategy <ArrowRight size={18} /></button><span><ShieldCheck size={16} /> No custody. No leverage. Revoke anytime.</span></div>
       </div>
-      <div className="hero-workspace" aria-label="Balanced AI strategy preview">
-        <header><div><span>AI strategy preview</span><strong>Balanced growth</strong></div><span className="network-pill"><i /> BNB Chain</span></header>
-        <div className="hero-total"><span>Capital assigned</span><strong>$10,000</strong><small>30-day mandate · weekly liquidity</small></div>
-        <StrategyBar plan={preview} />
-        <div className="hero-plan-row">
-          <span><Route size={17} /><b>Swap</b><small>Build basket</small></span><ChevronRight size={15} />
-          <span><Waves size={17} /><b>Liquidity</b><small>Earn fees</small></span><ChevronRight size={15} />
-          <span><Layers3 size={17} /><b>Farm</b><small>Add rewards</small></span><ChevronRight size={15} />
-          <span><RefreshCw size={17} /><b>Compound</b><small>Recycle yield</small></span>
+      <div className="hero-workspace" aria-label="MandateFi product architecture">
+        <header><div><span>Product architecture</span><strong>From mandate to managed DeFi</strong></div><span className="network-pill"><i /> BNB Chain</span></header>
+        <div className="home-architecture">
+          <section className="architecture-mandate">
+            <span className="architecture-icon"><Settings2 size={19} /></span>
+            <div><small>Owner mandate</small><strong>You set the boundaries</strong></div>
+            <div className="mandate-inputs" aria-label="Mandate inputs"><span>Capital</span><span>Goal</span><span>Risk</span><span>Liquidity</span></div>
+          </section>
+
+          <div className="architecture-connector" aria-hidden="true"><span /></div>
+
+          <section className="architecture-team">
+            <header><span><BrainCircuit size={17} /> 5-agent investment team</span><small>Continuous specialist analysis</small></header>
+            <div className="architecture-agent-grid">
+              {aboutAgents.map((agent, index) => { const Icon = agent.icon; return <div key={agent.name}><span><Icon size={16} /></span><b>{agent.name}</b><small>0{index + 1}</small></div> })}
+            </div>
+          </section>
+
+          <div className="architecture-connector" aria-hidden="true"><span /></div>
+
+          <section className="architecture-decision">
+            <span className="architecture-icon"><ShieldCheck size={19} /></span>
+            <div><small>Decision orchestrator</small><strong>Hold · Rebalance · Ask owner</strong></div>
+            <span className="guardrail-chip">Inside your guardrails</span>
+          </section>
+
+          <div className="architecture-connector" aria-hidden="true"><span /></div>
+
+          <section className="architecture-execution">
+            <div className="execution-brand"><Route size={19} /><span><small>Execution layer</small><strong>PancakeSwap</strong></span></div>
+            <div className="execution-tools"><span><ArrowDownUp size={15} /> Swap</span><span><Waves size={15} /> Liquidity</span><span><Layers3 size={15} /> Farms</span><span><Leaf size={15} /> Earn</span></div>
+          </section>
         </div>
-        <footer><span><Bot size={16} /> Specialists monitor markets and costs continuously</span><strong>Risk {preview.riskScore}/10</strong></footer>
+        <footer><span><Wallet size={16} /> Owner-controlled wallet</span><strong>Monitor → Review → Execute onchain</strong></footer>
       </div>
     </section>
     <section className="product-proof" aria-label="Product capabilities">
