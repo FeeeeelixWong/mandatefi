@@ -12,43 +12,16 @@ MandateFi lets an owner assign capital, choose an outcome, set risk and liquidit
 
 PancakeSwap is the execution venue, not the strategy itself. A simple tBNB/BUSD Swap is the first live adapter used to prove scoped execution on BSC Testnet. Liquidity, Farms, and Earn are represented as separate strategy actions with honest coverage labels until their adapters are complete.
 
-## Product Logic
+## Product Structure
 
-```mermaid
-flowchart LR
-  O["Owner sets capital, goal, risk, liquidity, and term"] --> A["AI strategy engine"]
-  A --> C["Portfolio construction"]
-  C --> R["Liquid reserve"]
-  C --> M["Market exposure"]
-  C --> L["Liquidity yield"]
-  C --> E["Farm and earn"]
-  R --> G["Mandate guardrails"]
-  M --> G
-  L --> G
-  E --> G
-  G --> T["Schedule and event triggers"]
-  T --> MA["DeepSeek market agent"]
-  T --> LP["DeepSeek LP agent"]
-  T --> FA["DeepSeek Farm agent"]
-  T --> EA["DeepSeek Earn agent"]
-  T --> CA["DeepSeek execution-cost agent"]
-  MA --> Q["Portfolio manager"]
-  LP --> Q
-  FA --> Q
-  EA --> Q
-  CA --> Q
-  Q --> VQ["Versioned typed recommendation"]
-  VQ --> D["Deterministic risk gate"]
-  D --> X["PancakeSwap execution adapters"]
-  X --> S["Swap: live"]
-  X --> P["Liquidity: owner approval"]
-  X --> F["Farms and Earn: adapter planned"]
-  S --> B["BNB Smart Chain Testnet"]
-  P --> B
-  F --> B
-  O --> V["Pause or revoke"]
-  V --> G
-```
+![MandateFi collaboration flow showing the owner, control plane, five specialist agents, portfolio manager, deterministic risk gate, PancakeSwap adapters, and BNB Chain](docs/assets/mandatefi-collaboration-flow.svg)
+
+- **Owner:** defines capital, goals, risk, liquidity, term, and approval boundaries; retains custody and can pause or revoke at any time.
+- **MandateFi system:** gathers timestamped evidence, detects review triggers, validates model outputs, and applies the deterministic policy gate.
+- **AI committee:** five independent specialists analyze separate evidence domains; the portfolio manager synthesizes a typed recommendation but cannot sign or expand authority.
+- **Execution layer:** only a reviewed adapter inside the signed mandate can reach PancakeSwap and BNB Chain; receipts and audit evidence return to the owner.
+
+## Product Logic
 
 The engine does not merely wait for one BNB/BUSD ratio to cross a band. It:
 

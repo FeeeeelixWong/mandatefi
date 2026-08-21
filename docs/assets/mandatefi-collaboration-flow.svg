@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">MandateFi user, system, agent, and execution collaboration flow</title>
+  <desc id="desc">The owner signs a revocable mandate. MandateFi collects live evidence and triggers five specialist agents. A portfolio manager synthesizes their reports. A deterministic risk gate controls approval and PancakeSwap execution, then returns an auditable receipt to the owner.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#7645d9"/>
+    </marker>
+    <marker id="arrowTeal" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#1fc7d4"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#d84b62"/>
+    </marker>
+    <style>
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 38px; font-weight: 700; fill: #1e1b4b; }
+      .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 18px; font-weight: 400; fill: #5b5875; }
+      .lane-title { font-family: Arial, Helvetica, sans-serif; font-size: 22px; font-weight: 700; fill: #1e1b4b; }
+      .lane-kicker { font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 700; fill: #7645d9; }
+      .card-title { font-family: Arial, Helvetica, sans-serif; font-size: 17px; font-weight: 700; fill: #242037; }
+      .body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 400; fill: #625f74; }
+      .small { font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: 600; fill: #6d6981; }
+      .agent-title { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 700; fill: #242037; }
+      .pill { font-family: Arial, Helvetica, sans-serif; font-size: 12px; font-weight: 700; }
+      .step { font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 700; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="#f7f7fb"/>
+  <rect x="0" y="0" width="1600" height="112" fill="#ffffff"/>
+  <text x="56" y="53" class="title">How MandateFi works</text>
+  <text x="56" y="84" class="subtitle">The owner defines authority. AI analyzes evidence. Deterministic policy controls execution.</text>
+
+  <!-- Column backgrounds -->
+  <rect x="48" y="144" width="286" height="624" rx="8" fill="#ffffff" stroke="#dedbe8" stroke-width="2"/>
+  <rect x="362" y="144" width="344" height="624" rx="8" fill="#ffffff" stroke="#d9e7ea" stroke-width="2"/>
+  <rect x="734" y="144" width="480" height="624" rx="8" fill="#ffffff" stroke="#ded7f2" stroke-width="2"/>
+  <rect x="1242" y="144" width="310" height="624" rx="8" fill="#ffffff" stroke="#e3dfd0" stroke-width="2"/>
+
+  <!-- Step numbers -->
+  <circle cx="76" cy="176" r="16" fill="#7645d9"/><text x="72" y="181" class="step">1</text>
+  <circle cx="390" cy="176" r="16" fill="#1fc7d4"/><text x="386" y="181" class="step">2</text>
+  <circle cx="762" cy="176" r="16" fill="#7645d9"/><text x="758" y="181" class="step">3</text>
+  <circle cx="1270" cy="176" r="16" fill="#f0b90b"/><text x="1266" y="181" class="step">4</text>
+
+  <!-- Owner lane -->
+  <text x="104" y="168" class="lane-kicker">OWNER</text>
+  <text x="76" y="222" class="lane-title">Set the mandate</text>
+  <circle cx="102" cy="274" r="22" fill="#f0e9ff"/>
+  <circle cx="102" cy="267" r="7" fill="none" stroke="#7645d9" stroke-width="3"/>
+  <path d="M88 291 C91 278 113 278 116 291" fill="none" stroke="#7645d9" stroke-width="3" stroke-linecap="round"/>
+  <text x="138" y="269" class="card-title">Your capital</text>
+  <text x="138" y="291" class="body">Wallet stays owner-controlled</text>
+
+  <rect x="76" y="324" width="230" height="176" rx="8" fill="#faf9fd" stroke="#e4e0ec"/>
+  <text x="96" y="354" class="small">MANDATE INPUTS</text>
+  <circle cx="96" cy="384" r="4" fill="#7645d9"/><text x="110" y="389" class="body">Goal and managed amount</text>
+  <circle cx="96" cy="417" r="4" fill="#7645d9"/><text x="110" y="422" class="body">Risk and liquidity needs</text>
+  <circle cx="96" cy="450" r="4" fill="#7645d9"/><text x="110" y="455" class="body">Term and approval rules</text>
+  <circle cx="96" cy="483" r="4" fill="#7645d9"/><text x="110" y="488" class="body">Spend and position limits</text>
+
+  <rect x="76" y="526" width="230" height="54" rx="8" fill="#7645d9"/>
+  <path d="M98 546 h18 v18 h-18 z M102 546 v-5 a5 5 0 0 1 10 0 v5" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <text x="130" y="559" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="700" fill="#ffffff">Sign revocable mandate</text>
+
+  <rect x="76" y="658" width="230" height="76" rx="8" fill="#fff5f6" stroke="#f2bcc5"/>
+  <path d="M96 682 l12 12 M108 682 l-12 12" stroke="#d84b62" stroke-width="3" stroke-linecap="round"/>
+  <text x="124" y="688" class="card-title" fill="#a92f43">Pause or revoke</text>
+  <text x="96" y="716" class="body">Available to the owner at any time</text>
+
+  <!-- System lane -->
+  <text x="418" y="168" class="lane-kicker" fill="#158a93">MANDATEFI SYSTEM</text>
+  <text x="390" y="222" class="lane-title">Build trusted context</text>
+
+  <rect x="390" y="246" width="288" height="100" rx="8" fill="#eefbfc" stroke="#b7e9ed"/>
+  <path d="M414 275 h22 M414 287 h16 M414 299 h26" stroke="#159ca7" stroke-width="3" stroke-linecap="round"/>
+  <text x="454" y="278" class="card-title">Live evidence</text>
+  <text x="454" y="301" class="body">Prices, portfolio, LP, Farm, Earn</text>
+  <text x="454" y="323" class="body">gas, routes, timestamps</text>
+
+  <rect x="390" y="368" width="288" height="100" rx="8" fill="#f7f6fb" stroke="#dedbe8"/>
+  <circle cx="426" cy="404" r="15" fill="none" stroke="#7645d9" stroke-width="3"/>
+  <path d="M426 389 v15 l10 8" fill="none" stroke="#7645d9" stroke-width="3" stroke-linecap="round"/>
+  <text x="454" y="400" class="card-title">Trigger engine</text>
+  <text x="454" y="423" class="body">Schedule, drift, risk, cash flow</text>
+  <text x="454" y="445" class="body">expiry, or owner request</text>
+
+  <rect x="390" y="490" width="288" height="122" rx="8" fill="#f6f1ff" stroke="#cbb8f3" stroke-width="2"/>
+  <path d="M414 521 h24 v24 h-24 z M418 525 h16 M418 531 h16 M418 537 h10" fill="none" stroke="#7645d9" stroke-width="2"/>
+  <text x="454" y="522" class="card-title">Typed committee context</text>
+  <text x="414" y="563" class="body">Freshness: READY / STALE / UNAVAILABLE</text>
+  <text x="414" y="585" class="body">Hard guardrails travel with every review</text>
+  <text x="414" y="605" class="small">NO KEYS  •  NO SIGNING</text>
+
+  <!-- Agent lane -->
+  <text x="790" y="168" class="lane-kicker">DEEPSEEK INVESTMENT COMMITTEE</text>
+  <text x="762" y="222" class="lane-title">Five specialists, one decision</text>
+
+  <rect x="762" y="250" width="132" height="112" rx="8" fill="#f8f5ff" stroke="#d9cdf5"/>
+  <path d="M808 279 v32 M796 305 l12 8 12-13 14 7" fill="none" stroke="#7645d9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="786" y="334" class="agent-title">Market</text><text x="780" y="352" class="small">Price + risk</text>
+
+  <rect x="908" y="250" width="132" height="112" rx="8" fill="#eefbfc" stroke="#b7e9ed"/>
+  <path d="M934 292 q10-12 20 0 t20 0 t20 0" fill="none" stroke="#159ca7" stroke-width="3"/>
+  <text x="946" y="334" class="agent-title">LP</text><text x="930" y="352" class="small">Depth + IL</text>
+
+  <rect x="1054" y="250" width="132" height="112" rx="8" fill="#fff9e7" stroke="#f1d980"/>
+  <path d="M1080 280 l20-9 20 9-20 9z M1080 291 l20 9 20-9 M1080 302 l20 9 20-9" fill="none" stroke="#c79500" stroke-width="3" stroke-linejoin="round"/>
+  <text x="1098" y="334" class="agent-title">Farm</text><text x="1080" y="352" class="small">Rewards + locks</text>
+
+  <rect x="835" y="382" width="132" height="112" rx="8" fill="#eefaf5" stroke="#bae5d3"/>
+  <path d="M879 430 c0-20 13-29 29-29-1 16-9 29-29 29z M880 429 l24-23" fill="none" stroke="#1a9b69" stroke-width="3" stroke-linecap="round"/>
+  <text x="884" y="466" class="agent-title">Earn</text><text x="866" y="484" class="small">Yield + exits</text>
+
+  <rect x="981" y="382" width="132" height="112" rx="8" fill="#fff5f6" stroke="#f2bcc5"/>
+  <path d="M1020 409 h22 v26 h-22z M1026 409 v-8 h10 v8 M1042 417 h8 v12 h-8" fill="none" stroke="#d84b62" stroke-width="3" stroke-linejoin="round"/>
+  <text x="1011" y="466" class="agent-title">Costs</text><text x="1000" y="484" class="small">Gas + slippage</text>
+
+  <path d="M828 364 V522 H974 M974 364 V522 M1120 364 V522 H974 M901 496 V522 M1047 496 V522" fill="none" stroke="#b9aed4" stroke-width="2"/>
+  <rect x="814" y="532" width="320" height="98" rx="8" fill="#ede5ff" stroke="#b79bea" stroke-width="2"/>
+  <circle cx="856" cy="581" r="21" fill="#7645d9"/>
+  <path d="M846 581 h20 M856 571 v20 M849 574 l14 14 M863 574 l-14 14" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <text x="892" y="570" class="small" fill="#7645d9">PORTFOLIO MANAGER</text>
+  <text x="892" y="594" class="card-title">HOLD · ADJUST · PAUSE</text>
+  <text x="892" y="615" class="body">Synthesizes evidence, never permissions</text>
+
+  <rect x="814" y="660" width="320" height="58" rx="8" fill="#faf9fd" stroke="#dedbe8"/>
+  <text x="838" y="685" class="small">OUTPUT</text>
+  <text x="838" y="706" class="body">Typed recommendation + confidence + rationale</text>
+
+  <!-- Decision and execution lane -->
+  <text x="1298" y="168" class="lane-kicker" fill="#9d7600">CONTROLLED EXECUTION</text>
+  <text x="1270" y="222" class="lane-title">Policy decides</text>
+
+  <rect x="1270" y="250" width="254" height="96" rx="8" fill="#f7f6fb" stroke="#dedbe8"/>
+  <path d="M1296 274 l16 7 v12 c0 11-7 18-16 22-9-4-16-11-16-22v-12z M1288 293 l6 6 11-13" fill="none" stroke="#7645d9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="1328" y="282" class="card-title">Deterministic risk gate</text>
+  <text x="1328" y="306" class="body">Adapter, cost, cooldown, limits</text>
+  <text x="1328" y="327" class="body">and approval checks</text>
+
+  <rect x="1270" y="370" width="118" height="32" rx="8" fill="#f0f0f4"/><text x="1290" y="391" class="pill" fill="#555264">HOLD / DEFER</text>
+  <rect x="1400" y="370" width="124" height="32" rx="8" fill="#fff0f2"/><text x="1422" y="391" class="pill" fill="#b33c50">BLOCK / PAUSE</text>
+  <rect x="1270" y="414" width="118" height="32" rx="8" fill="#fff8df"/><text x="1282" y="435" class="pill" fill="#946e00">ASK OWNER</text>
+  <rect x="1400" y="414" width="124" height="32" rx="8" fill="#e9faf2"/><text x="1412" y="435" class="pill" fill="#13774f">AUTO EXECUTE</text>
+
+  <rect x="1270" y="478" width="254" height="90" rx="8" fill="#fff9e7" stroke="#f1d980"/>
+  <path d="M1292 508 h24 l6 9-6 9h-24l-6-9z" fill="none" stroke="#c79500" stroke-width="3"/>
+  <text x="1334" y="511" class="card-title">PancakeSwap adapter</text>
+  <text x="1334" y="535" class="body">Only reviewed calls within the</text>
+  <text x="1334" y="556" class="body">signed session policy</text>
+
+  <rect x="1270" y="590" width="254" height="94" rx="8" fill="#eefbfc" stroke="#b7e9ed"/>
+  <circle cx="1304" cy="624" r="14" fill="none" stroke="#159ca7" stroke-width="3"/>
+  <path d="M1290 624 h28 M1304 610 c-7 8-7 20 0 28 M1304 610 c7 8 7 20 0 28" fill="none" stroke="#159ca7" stroke-width="2"/>
+  <text x="1334" y="620" class="card-title">BNB Chain</text>
+  <text x="1334" y="644" class="body">Transaction, receipt, audit trail</text>
+  <text x="1334" y="666" class="small">NO MANDATEFI CUSTODY</text>
+
+  <!-- Main flow arrows -->
+  <path d="M334 472 H362" fill="none" stroke="#7645d9" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M706 552 H734" fill="none" stroke="#7645d9" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M1214 690 H1228 V300 H1242" fill="none" stroke="#7645d9" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M1397 446 V478" fill="none" stroke="#1fc7d4" stroke-width="3" marker-end="url(#arrowTeal)"/>
+  <path d="M1397 568 V590" fill="none" stroke="#1fc7d4" stroke-width="3" marker-end="url(#arrowTeal)"/>
+
+  <!-- Approval and feedback loops -->
+  <path d="M1270 430 H1200 V790 H224 V580" fill="none" stroke="#c79500" stroke-width="2.5" stroke-dasharray="8 7" marker-end="url(#arrow)"/>
+  <text x="648" y="816" class="small" fill="#946e00">OWNER APPROVAL WHEN THE MANDATE REQUIRES IT</text>
+  <path d="M1270 637 H1220 V846 H208 V735" fill="none" stroke="#1fc7d4" stroke-width="2.5" marker-end="url(#arrowTeal)"/>
+  <text x="662" y="872" class="small" fill="#158a93">STATUS, RECEIPT, AND AUDIT EVIDENCE RETURN TO THE OWNER</text>
+  <path d="M306 696 H342 V744 H1242" fill="none" stroke="#d84b62" stroke-width="2.5" stroke-dasharray="8 7" marker-end="url(#arrowRed)"/>
+  <text x="573" y="738" class="small" fill="#b33c50">OWNER PAUSE OR REVOKE OVERRIDES THE AUTOMATION PATH</text>
+</svg>
