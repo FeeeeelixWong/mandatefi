@@ -76,6 +76,18 @@ Each specialist is a separate DeepSeek request, and the portfolio manager is a s
 
 The Vercel backend keeps the DeepSeek key server-side, validates every model response with Zod, hashes every input, and records the model, prompt version, run ID, and final output. If one specialist fails, only that report falls back to the deterministic engine. If the manager fails, the complete review safely falls back without broadening execution authority.
 
+### Production Evidence
+
+| Check | Verified result |
+| --- | --- |
+| Live product | [mandatefi-ten.vercel.app](https://mandatefi-ten.vercel.app) |
+| Runtime health | [`deepseekConfigured: true`](https://mandatefi-ten.vercel.app/api/health) with `deepseek-v4-flash` specialists and a `deepseek-v4-pro` manager |
+| Official market feed | [Live PancakeSwap Price API response](https://mandatefi-ten.vercel.app/api/market/prices) for BNB, CAKE, USDT, and USDC on BNB Chain mainnet |
+| Full model smoke | Run `dead2ca4-d1c0-480f-b712-3f81d6acb99e` completed with all five specialist reports and the manager in `DEEPSEEK` mode |
+| Safety outcome | The smoke review returned `HOLD` because LP, Farm, Earn, and execution-cost evidence was unavailable; the models did not invent yield or bypass the deterministic cost gate |
+
+The production boundary accepts either a `0-1` probability or a `0-100` percentage from a model and normalizes it to an integer percentage before validation. This keeps minor JSON-format variation from silently downgrading an otherwise valid specialist report while preserving strict enums, field limits, and policy checks.
+
 ### PancakeSwap Research Plane
 
 The deploy workflow refreshes `public/data/pancake-research.json` every 15 minutes because PancakeSwap Explorer does not expose a browser-CORS endpoint. The refresh job:

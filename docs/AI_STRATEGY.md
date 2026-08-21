@@ -106,10 +106,14 @@ For Swap, the cost analyst combines a live BSC gas price with a conservative sma
 
 1. Validate a JSON-safe mandate, strategy, portfolio snapshot, triggers, and deterministic evidence set.
 2. Call five `deepseek-v4-flash` specialist agents concurrently.
-3. Validate each report before merging it with deterministic data status, source, and numeric estimates.
+3. Normalize model confidence to an integer percentage, then validate each report before merging it with deterministic data status, source, and numeric estimates.
 4. Call `deepseek-v4-pro` with the five validated reports and the versioned manager prompt.
 5. Validate the manager's strict JSON with `expertRecommendationSchema`.
 6. Hash the complete input and record run ID, model mode, prompt version, output, and confidence in Postgres or Vercel logs.
 7. Return only typed reports and a typed recommendation to the browser's deterministic gate.
 
 The runtime never receives the owner passkey or unrestricted transaction authority. A partial specialist failure becomes `HYBRID_FALLBACK`; a manager failure uses the deterministic recommendation. Neither path skips the policy gate.
+
+### Production model proof
+
+On August 22, 2026, production smoke run `dead2ca4-d1c0-480f-b712-3f81d6acb99e` completed with all five specialists on `deepseek-v4-flash`, the portfolio manager on `deepseek-v4-pro`, and final `modelMode: DEEPSEEK`. The manager returned `HOLD` because verified LP, Farm, Earn, and execution-cost evidence was absent. This proves both the complete model path and the fail-closed behavior without claiming unavailable DeFi integrations.
