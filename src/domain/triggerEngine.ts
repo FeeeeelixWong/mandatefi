@@ -6,6 +6,7 @@ export type TriggerKind =
   | 'ACTIVATION'
   | 'MANUAL'
   | 'SCHEDULE_DUE'
+  | 'GAS_LOW'
   | 'PORTFOLIO_DRIFT'
   | 'LP_RANGE'
   | 'IMPERMANENT_LOSS'
@@ -79,7 +80,9 @@ export function evaluateTriggers(context: TriggerContext): ReviewTrigger[] {
     }
   }
 
-  if (context.executionPlan.action !== 'HOLD') {
+  if (context.executionPlan.purpose === 'GAS_TOP_UP') {
+    triggers.push({ kind: 'GAS_LOW', severity: 'critical', label: 'Gas reserve low', detail: 'The smart account Gas reserve is below its safety threshold and needs a bounded, recorded top-up.' })
+  } else if (context.executionPlan.action !== 'HOLD') {
     triggers.push({ kind: 'PORTFOLIO_DRIFT', severity: 'warning', label: 'Allocation drift', detail: 'The liquid reserve is outside its owner-approved execution band.' })
   }
   if (signals.lpRangeDistanceBps !== undefined && signals.lpRangeDistanceBps <= 300) {

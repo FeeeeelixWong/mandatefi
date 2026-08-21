@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
   <title id="title">MandateFi user, system, agent, and execution collaboration flow</title>
-  <desc id="desc">The owner signs a revocable mandate. MandateFi collects live evidence and triggers five specialist agents. A portfolio manager synthesizes their reports. A deterministic risk gate controls approval and PancakeSwap execution, then returns an auditable receipt to the owner.</desc>
+  <desc id="desc">The owner deposits tBNB into an owner-controlled Passkey smart account. An owner-signed startup transaction converts capital to USDT or USDC while retaining a protected gas reserve, then a revocable AI mandate begins. MandateFi collects live evidence and triggers five specialist agents. A deterministic risk gate controls PancakeSwap execution, including recorded gas refills.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
       <path d="M0 0 L10 5 L0 10 Z" fill="#7645d9"/>
@@ -48,19 +48,19 @@
   <circle cx="102" cy="274" r="22" fill="#f0e9ff"/>
   <circle cx="102" cy="267" r="7" fill="none" stroke="#7645d9" stroke-width="3"/>
   <path d="M88 291 C91 278 113 278 116 291" fill="none" stroke="#7645d9" stroke-width="3" stroke-linecap="round"/>
-  <text x="138" y="269" class="card-title">Your capital</text>
-  <text x="138" y="291" class="body">Wallet stays owner-controlled</text>
+  <text x="138" y="269" class="card-title">Your smart account</text>
+  <text x="138" y="291" class="body">Passkey stays owner-controlled</text>
 
   <rect x="76" y="324" width="230" height="176" rx="8" fill="#faf9fd" stroke="#e4e0ec"/>
   <text x="96" y="354" class="small">MANDATE INPUTS</text>
-  <circle cx="96" cy="384" r="4" fill="#7645d9"/><text x="110" y="389" class="body">Goal and managed amount</text>
-  <circle cx="96" cy="417" r="4" fill="#7645d9"/><text x="110" y="422" class="body">Risk and liquidity needs</text>
-  <circle cx="96" cy="450" r="4" fill="#7645d9"/><text x="110" y="455" class="body">Term and approval rules</text>
-  <circle cx="96" cy="483" r="4" fill="#7645d9"/><text x="110" y="488" class="body">Spend and position limits</text>
+  <circle cx="96" cy="384" r="4" fill="#7645d9"/><text x="110" y="389" class="body">Deposit tBNB</text>
+  <circle cx="96" cy="417" r="4" fill="#7645d9"/><text x="110" y="422" class="body">Owner converts → USDT / USDC</text>
+  <circle cx="96" cy="450" r="4" fill="#7645d9"/><text x="110" y="455" class="body">Keep 0.003 tBNB Gas target</text>
+  <circle cx="96" cy="483" r="4" fill="#7645d9"/><text x="110" y="488" class="body">Goal, risk, term, spend limits</text>
 
   <rect x="76" y="526" width="230" height="54" rx="8" fill="#7645d9"/>
   <path d="M98 546 h18 v18 h-18 z M102 546 v-5 a5 5 0 0 1 10 0 v5" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <text x="130" y="559" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="700" fill="#ffffff">Sign revocable mandate</text>
+  <text x="130" y="559" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="700" fill="#ffffff">Normalize + sign</text>
 
   <rect x="76" y="658" width="230" height="76" rx="8" fill="#fff5f6" stroke="#f2bcc5"/>
   <path d="M96 682 l12 12 M108 682 l-12 12" stroke="#d84b62" stroke-width="3" stroke-linecap="round"/>
@@ -81,8 +81,8 @@
   <circle cx="426" cy="404" r="15" fill="none" stroke="#7645d9" stroke-width="3"/>
   <path d="M426 389 v15 l10 8" fill="none" stroke="#7645d9" stroke-width="3" stroke-linecap="round"/>
   <text x="454" y="400" class="card-title">Trigger engine</text>
-  <text x="454" y="423" class="body">Schedule, drift, risk, cash flow</text>
-  <text x="454" y="445" class="body">expiry, or owner request</text>
+  <text x="454" y="423" class="body">Gas low, schedule, drift, risk</text>
+  <text x="454" y="445" class="body">cash flow, expiry, owner request</text>
 
   <rect x="390" y="490" width="288" height="122" rx="8" fill="#f6f1ff" stroke="#cbb8f3" stroke-width="2"/>
   <path d="M414 521 h24 v24 h-24 z M418 525 h16 M418 531 h16 M418 537 h10" fill="none" stroke="#7645d9" stroke-width="2"/>
@@ -134,8 +134,8 @@
   <rect x="1270" y="250" width="254" height="96" rx="8" fill="#f7f6fb" stroke="#dedbe8"/>
   <path d="M1296 274 l16 7 v12 c0 11-7 18-16 22-9-4-16-11-16-22v-12z M1288 293 l6 6 11-13" fill="none" stroke="#7645d9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="1328" y="282" class="card-title">Deterministic risk gate</text>
-  <text x="1328" y="306" class="body">Adapter, cost, cooldown, limits</text>
-  <text x="1328" y="327" class="body">and approval checks</text>
+  <text x="1328" y="306" class="body">Adapter, Gas, cost, limits</text>
+  <text x="1328" y="327" class="body">cooldown and approval checks</text>
 
   <rect x="1270" y="370" width="118" height="32" rx="8" fill="#f0f0f4"/><text x="1290" y="391" class="pill" fill="#555264">HOLD / DEFER</text>
   <rect x="1400" y="370" width="124" height="32" rx="8" fill="#fff0f2"/><text x="1422" y="391" class="pill" fill="#b33c50">BLOCK / PAUSE</text>
@@ -145,14 +145,14 @@
   <rect x="1270" y="478" width="254" height="90" rx="8" fill="#fff9e7" stroke="#f1d980"/>
   <path d="M1292 508 h24 l6 9-6 9h-24l-6-9z" fill="none" stroke="#c79500" stroke-width="3"/>
   <text x="1334" y="511" class="card-title">PancakeSwap adapter</text>
-  <text x="1334" y="535" class="body">Only reviewed calls within the</text>
-  <text x="1334" y="556" class="body">signed session policy</text>
+  <text x="1334" y="535" class="body">Rebalance or recorded Gas refill</text>
+  <text x="1334" y="556" class="body">inside the signed session policy</text>
 
   <rect x="1270" y="590" width="254" height="94" rx="8" fill="#eefbfc" stroke="#b7e9ed"/>
   <circle cx="1304" cy="624" r="14" fill="none" stroke="#159ca7" stroke-width="3"/>
   <path d="M1290 624 h28 M1304 610 c-7 8-7 20 0 28 M1304 610 c7 8 7 20 0 28" fill="none" stroke="#159ca7" stroke-width="2"/>
   <text x="1334" y="620" class="card-title">BNB Chain</text>
-  <text x="1334" y="644" class="body">Transaction, receipt, audit trail</text>
+  <text x="1334" y="644" class="body">Smart account, receipt, audit trail</text>
   <text x="1334" y="666" class="small">NO MANDATEFI CUSTODY</text>
 
   <!-- Main flow arrows -->

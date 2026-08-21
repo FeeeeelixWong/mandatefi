@@ -18,10 +18,11 @@ const pancakeMarket: PancakeMarketSnapshot = {
 function context() {
   const snapshot = {
     nativeBalance: parseEther('0.0115'), stableBalance: 0n,
+    stablecoin: 'USDT' as const,
     priceStablePerNative: parseEther('500'), updatedAt: new Date(nowMs).toISOString(),
   }
   const executionPlan = buildPortfolioPlan({
-    snapshot, managedAmount: parseEther('0.01'), goal: 'balanced-growth', risk: 'balanced', targetReserveBps: 2_500n,
+    snapshot, managedAmount: parseEther('10'), goal: 'balanced-growth', risk: 'balanced', targetReserveBps: 2_500n,
   })
   return { snapshot, executionPlan, pancakeMarket }
 }

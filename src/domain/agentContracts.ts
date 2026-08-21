@@ -77,17 +77,20 @@ export const strategyPlanSchema = z.object({
 
 export const serializedPortfolioPlanSchema = z.object({
   action: z.enum(['BUY_STABLE', 'BUY_NATIVE', 'HOLD']),
+  purpose: z.enum(['PORTFOLIO_REBALANCE', 'GAS_TOP_UP']),
+  stablecoin: z.enum(['USDT', 'USDC']),
   managedAmount: z.string().regex(/^\d+$/),
   managedValue: z.string().regex(/^\d+$/),
   availableNative: z.string().regex(/^\d+$/),
-  stableValueInNative: z.string().regex(/^\d+$/),
+  nativeValueInStable: z.string().regex(/^\d+$/),
+  priceStablePerNative: z.string().regex(/^\d+$/),
   currentStableBps: z.string().regex(/^\d+$/),
   targetStableBps: z.string().regex(/^\d+$/),
   projectedStableBps: z.string().regex(/^\d+$/),
   driftBandBps: z.string().regex(/^\d+$/),
   amountIn: z.string().regex(/^\d+$/),
-  inputAsset: z.enum(['tBNB', 'BUSD']),
-  outputAsset: z.enum(['tBNB', 'BUSD']),
+  inputAsset: z.enum(['tBNB', 'USDT', 'USDC']),
+  outputAsset: z.enum(['tBNB', 'USDT', 'USDC']),
   maxSlippageBps: z.string().regex(/^\d+$/),
   dailyNativeCap: z.string().regex(/^\d+$/),
   dailyStableCap: z.string().regex(/^\d+$/),
@@ -97,6 +100,7 @@ export const serializedPortfolioPlanSchema = z.object({
 export const serializedPortfolioSnapshotSchema = z.object({
   nativeBalance: z.string().regex(/^\d+$/),
   stableBalance: z.string().regex(/^\d+$/),
+  stablecoin: z.enum(['USDT', 'USDC']),
   priceStablePerNative: z.string().regex(/^\d+$/),
   updatedAt: z.iso.datetime(),
 }).strict()
@@ -151,6 +155,7 @@ export const agentReviewRequestSchema = z.object({
   mandate: z.object({
     goal: z.string().min(1),
     riskProfile: z.string().min(1),
+    stablecoin: z.enum(['USDT', 'USDC']),
     managedAmount: z.string().min(1),
     horizonDays: z.number().int().positive(),
     liquidityNeed: z.string().min(1),
@@ -186,7 +191,8 @@ export function serializePortfolioPlan(plan: PortfolioPlan): z.infer<typeof seri
     managedAmount: plan.managedAmount.toString(),
     managedValue: plan.managedValue.toString(),
     availableNative: plan.availableNative.toString(),
-    stableValueInNative: plan.stableValueInNative.toString(),
+    nativeValueInStable: plan.nativeValueInStable.toString(),
+    priceStablePerNative: plan.priceStablePerNative.toString(),
     currentStableBps: plan.currentStableBps.toString(),
     targetStableBps: plan.targetStableBps.toString(),
     projectedStableBps: plan.projectedStableBps.toString(),
@@ -204,7 +210,8 @@ export function deserializePortfolioPlan(plan: z.infer<typeof serializedPortfoli
     managedAmount: BigInt(plan.managedAmount),
     managedValue: BigInt(plan.managedValue),
     availableNative: BigInt(plan.availableNative),
-    stableValueInNative: BigInt(plan.stableValueInNative),
+    nativeValueInStable: BigInt(plan.nativeValueInStable),
+    priceStablePerNative: BigInt(plan.priceStablePerNative),
     currentStableBps: BigInt(plan.currentStableBps),
     targetStableBps: BigInt(plan.targetStableBps),
     projectedStableBps: BigInt(plan.projectedStableBps),
@@ -220,6 +227,7 @@ export function serializePortfolioSnapshot(snapshot: PortfolioSnapshot): z.infer
   return {
     nativeBalance: snapshot.nativeBalance.toString(),
     stableBalance: snapshot.stableBalance.toString(),
+    stablecoin: snapshot.stablecoin,
     priceStablePerNative: snapshot.priceStablePerNative.toString(),
     updatedAt: snapshot.updatedAt,
   }

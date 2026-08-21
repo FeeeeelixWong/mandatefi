@@ -21,8 +21,9 @@ import {
 } from 'viem'
 import { z } from 'zod'
 import type { ExecutionCostEstimate } from '../domain/investmentCommittee'
-import type { PortfolioPlan, PortfolioSnapshot } from '../domain/portfolio'
+import { GAS_RESERVE, type PortfolioAsset, type PortfolioPlan, type PortfolioSnapshot } from '../domain/portfolio'
 import { bscTestnetClient } from '../lib/chains'
+import { BSC_TESTNET_WBNB as CONFIGURED_WBNB, stablecoinConfig, type StablecoinSymbol } from '../lib/tokens'
 
 const STORAGE_KEY = 'mandatefi.altana-wallet.v1'
 
@@ -31,13 +32,8 @@ export const ALTANA_FUNDING_AMOUNT = parseEther('0.01')
 export const ALTANA_MINIMUM_BALANCE = parseEther('0.003')
 export const ALTANA_NATIVE_FEE_CAP = parseEther('0.003')
 export const ALTANA_KEYSTORE = BNB_TESTNET.keyStore
-export const PANCAKE_V2_ROUTER = getAddress('0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3')
-export const BSC_TESTNET_WBNB = getAddress('0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd')
-export const BSC_TESTNET_BUSD = getAddress('0x78867BbEeF44f2326bF8DDd1941a4439382EF2A7')
-export const SAFE_REBALANCE_AMOUNT = parseEther('0.001')
-export const SAFE_REBALANCE_NATIVE_CAP = parseEther('0.004')
-export const SAFE_REBALANCE_SLIPPAGE_BPS = 100n
-export const SAFE_REBALANCE_DEADLINE_SECONDS = 10 * 60
+export const BSC_TESTNET_WBNB = CONFIGURED_WBNB
+const SAFE_REBALANCE_DEADLINE_SECONDS = 20 * 60
 
 const passkeyCredentialSchema = z.object({
   kind: z.literal('webauthn'),
@@ -120,6 +116,17 @@ const erc20ApproveAbi = [{
   outputs: [{ type: 'bool' }],
 }] as const
 
+const erc20TransferAbi = [{
+  name: 'transfer',
+  type: 'function',
+  stateMutability: 'nonpayable',
+  inputs: [
+    { name: 'to', type: 'address' },
+    { name: 'amount', type: 'uint256' },
+  ],
+  outputs: [{ type: 'bool' }],
+}] as const
+
 export type AltanaWalletProfile = {
   wallet: Wallet
   signer: PasskeySigner
@@ -134,30 +141,20 @@ export type AltanaMandateProof = {
   verificationError?: string
 }
 
-export type SafeRebalanceQuote = {
-  amountIn: bigint
-  quotedOut: bigint
-  minimumOut: bigint
-  slippageBps: bigint
-  outputSymbol: 'BUSD'
-}
-
 export type PortfolioRebalanceQuote = {
   amountIn: bigint
   quotedOut: bigint
   minimumOut: bigint
   slippageBps: bigint
-  inputSymbol: 'tBNB' | 'BUSD'
-  outputSymbol: 'tBNB' | 'BUSD'
+  inputSymbol: PortfolioAsset
+  outputSymbol: PortfolioAsset
 }
 
-export type AltanaStrategyProof = {
-  session: GrantSessionResult
-  grant: GrantSessionResult
-  quote: SafeRebalanceQuote
-  execution?: ExecuteResult
-  executionError?: string
-  outputReceived?: bigint
+export type AltanaExitProof = {
+  stablecoin: StablecoinSymbol
+  stableAmount: bigint
+  nativeAmount: bigint
+  transaction: ExecuteResult
 }
 
 export type AltanaPortfolioProof = {
@@ -168,6 +165,14 @@ export type AltanaPortfolioProof = {
   execution?: ExecuteResult
   executionError?: string
   outputReceived?: bigint
+}
+
+export type AltanaNormalizationProof = {
+  stablecoin: StablecoinSymbol
+  amountIn: bigint
+  quote: PortfolioRebalanceQuote
+  outputReceived: bigint
+  transaction: ExecuteResult
 }
 
 export const altanaClient = createClient({
@@ -262,62 +267,33 @@ export function buildVerificationPermissions() {
   } as const
 }
 
-export function minimumOutputFor(quotedOut: bigint, slippageBps = SAFE_REBALANCE_SLIPPAGE_BPS) {
+export function minimumOutputFor(quotedOut: bigint, slippageBps = 100n) {
   return quotedOut * (10_000n - slippageBps) / 10_000n
 }
 
-export function buildSafeRebalancePermissions() {
-  return {
-    calls: [{
-      to: PANCAKE_V2_ROUTER,
-      signature: 'swapExactETHForTokens(uint256,address[],address,uint256)',
-    }],
-    spend: [{
-      limit: SAFE_REBALANCE_NATIVE_CAP,
-      period: 'day',
-    }],
-  } as const
-}
-
 export function buildPortfolioPermissions(plan: PortfolioPlan) {
+  const stablecoin = stablecoinConfig(plan.stablecoin)
   return {
     calls: [
-      { to: PANCAKE_V2_ROUTER, signature: 'swapExactETHForTokens(uint256,address[],address,uint256)' },
-      { to: BSC_TESTNET_BUSD, signature: 'approve(address,uint256)' },
-      { to: PANCAKE_V2_ROUTER, signature: 'swapExactTokensForETH(uint256,uint256,address[],address,uint256)' },
+      { to: stablecoin.router, signature: 'swapExactETHForTokens(uint256,address[],address,uint256)' },
+      { to: stablecoin.address, signature: 'approve(address,uint256)' },
+      { to: stablecoin.router, signature: 'swapExactTokensForETH(uint256,uint256,address[],address,uint256)' },
     ],
     spend: [
       { limit: plan.dailyNativeCap, period: 'day' },
-      { limit: plan.dailyStableCap, period: 'day', token: BSC_TESTNET_BUSD },
+      { limit: plan.dailyStableCap, period: 'day', token: stablecoin.address },
     ],
   } as const
-}
-
-export async function quoteSafeRebalance(): Promise<SafeRebalanceQuote> {
-  const amounts = await bscTestnetClient.readContract({
-    address: PANCAKE_V2_ROUTER,
-    abi: pancakeRouterAbi,
-    functionName: 'getAmountsOut',
-    args: [SAFE_REBALANCE_AMOUNT, [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD]],
-  })
-  const quotedOut = amounts.at(-1)
-  if (!quotedOut || quotedOut <= 0n) throw new Error('PancakeSwap returned no executable BUSD quote.')
-  return {
-    amountIn: SAFE_REBALANCE_AMOUNT,
-    quotedOut,
-    minimumOut: minimumOutputFor(quotedOut),
-    slippageBps: SAFE_REBALANCE_SLIPPAGE_BPS,
-    outputSymbol: 'BUSD',
-  }
 }
 
 export async function quotePortfolioPlan(plan: PortfolioPlan): Promise<PortfolioRebalanceQuote | null> {
   if (plan.action === 'HOLD' || plan.amountIn <= 0n) return null
+  const stablecoin = stablecoinConfig(plan.stablecoin)
   const path = plan.action === 'BUY_STABLE'
-    ? [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD]
-    : [BSC_TESTNET_BUSD, BSC_TESTNET_WBNB]
+    ? [BSC_TESTNET_WBNB, stablecoin.address]
+    : [stablecoin.address, BSC_TESTNET_WBNB]
   const amounts = await bscTestnetClient.readContract({
-    address: PANCAKE_V2_ROUTER,
+    address: stablecoin.router,
     abi: pancakeRouterAbi,
     functionName: 'getAmountsOut',
     args: [plan.amountIn, path],
@@ -355,15 +331,16 @@ export async function estimatePortfolioExecutionCost(
     }
   }
 
+  const stablecoin = stablecoinConfig(plan.stablecoin)
   const path = plan.action === 'BUY_STABLE'
-    ? [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD]
-    : [BSC_TESTNET_BUSD, BSC_TESTNET_WBNB]
+    ? [BSC_TESTNET_WBNB, stablecoin.address]
+    : [stablecoin.address, BSC_TESTNET_WBNB]
   const marginalInput = plan.action === 'BUY_STABLE' ? parseEther('0.0001') : parseEther('0.05')
   const probeInput = plan.amountIn < marginalInput ? plan.amountIn : marginalInput
   const [gasPrice, marginalAmounts] = await Promise.all([
     bscTestnetClient.getGasPrice(),
     bscTestnetClient.readContract({
-      address: PANCAKE_V2_ROUTER,
+      address: stablecoin.router,
       abi: pancakeRouterAbi,
       functionName: 'getAmountsOut',
       args: [probeInput, path],
@@ -377,8 +354,9 @@ export async function estimatePortfolioExecutionCost(
   // A conservative smart-wallet envelope: approve + swap requires the larger allowance.
   const gasUnits = plan.action === 'BUY_STABLE' ? 260_000 : 340_000
   const gasCost = gasPrice * BigInt(gasUnits)
+  const gasCostInStable = gasCost * plan.priceStablePerNative / parseEther('1')
   const gasCostBps = plan.managedValue > 0n
-    ? Number(gasCost * 10_000n / plan.managedValue)
+    ? Number(gasCostInStable * 10_000n / plan.managedValue)
     : 10_000
   const slippageReserveBps = Number(plan.maxSlippageBps)
   const exitCostBps = 0
@@ -403,24 +381,25 @@ export function formatStrategyToken(value: bigint) {
   return Number(formatUnits(value, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 })
 }
 
-export async function readBusdBalance(address: Address) {
+export async function readStablecoinBalance(address: Address, symbol: StablecoinSymbol) {
   return bscTestnetClient.readContract({
-    address: BSC_TESTNET_BUSD,
+    address: stablecoinConfig(symbol).address,
     abi: erc20BalanceAbi,
     functionName: 'balanceOf',
     args: [address],
   })
 }
 
-export async function readPortfolioSnapshot(address: Address): Promise<PortfolioSnapshot> {
+export async function readPortfolioSnapshot(address: Address, symbol: StablecoinSymbol): Promise<PortfolioSnapshot> {
+  const stablecoin = stablecoinConfig(symbol)
   const [nativeBalance, stableBalance, unitQuote] = await Promise.all([
     readAltanaBalance(address),
-    readBusdBalance(address),
+    readStablecoinBalance(address, symbol),
     bscTestnetClient.readContract({
-      address: PANCAKE_V2_ROUTER,
+      address: stablecoin.router,
       abi: pancakeRouterAbi,
       functionName: 'getAmountsOut',
-      args: [parseEther('1'), [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD]],
+      args: [parseEther('1'), [BSC_TESTNET_WBNB, stablecoin.address]],
     }),
   ])
   const priceStablePerNative = unitQuote.at(-1)
@@ -430,26 +409,15 @@ export async function readPortfolioSnapshot(address: Address): Promise<Portfolio
   return {
     nativeBalance,
     stableBalance,
+    stablecoin: symbol,
     priceStablePerNative,
     updatedAt: new Date().toISOString(),
   }
 }
 
-export async function readPancakePrice() {
-  const amounts = await bscTestnetClient.readContract({
-    address: PANCAKE_V2_ROUTER,
-    abi: pancakeRouterAbi,
-    functionName: 'getAmountsOut',
-    args: [parseEther('1'), [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD]],
-  })
-  const price = amounts.at(-1)
-  if (!price || price <= 0n) throw new Error('PancakeSwap price feed is unavailable.')
-  return price
-}
-
-async function waitForBusdIncrease(address: Address, before: bigint) {
+async function waitForStablecoinIncrease(address: Address, symbol: StablecoinSymbol, before: bigint) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const current = await readBusdBalance(address)
+    const current = await readStablecoinBalance(address, symbol)
     if (current > before) return current - before
     await new Promise((resolve) => setTimeout(resolve, 750))
   }
@@ -463,6 +431,50 @@ async function waitForNativeIncrease(address: Address, before: bigint) {
     await new Promise((resolve) => setTimeout(resolve, 750))
   }
   return 0n
+}
+
+export async function normalizeAltanaFunding(
+  profile: AltanaWalletProfile,
+  symbol: StablecoinSymbol,
+  amountIn: bigint,
+): Promise<AltanaNormalizationProof> {
+  if (amountIn <= 0n) throw new Error('No tBNB is available for startup conversion.')
+  const stablecoin = stablecoinConfig(symbol)
+  const amounts = await bscTestnetClient.readContract({
+    address: stablecoin.router,
+    abi: pancakeRouterAbi,
+    functionName: 'getAmountsOut',
+    args: [amountIn, [BSC_TESTNET_WBNB, stablecoin.address]],
+  })
+  const quotedOut = amounts.at(-1)
+  if (!quotedOut || quotedOut <= 0n) throw new Error(`PancakeSwap returned no executable tBNB to ${symbol} quote.`)
+  const quote: PortfolioRebalanceQuote = {
+    amountIn,
+    quotedOut,
+    minimumOut: minimumOutputFor(quotedOut, 100n),
+    slippageBps: 100n,
+    inputSymbol: 'tBNB',
+    outputSymbol: symbol,
+  }
+  const outputBefore = await readStablecoinBalance(profile.wallet.address, symbol)
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + SAFE_REBALANCE_DEADLINE_SECONDS)
+  const transaction = await altanaClient.execute({
+    wallet: profile.wallet,
+    signer: profile.signer,
+    chainId: ALTANA_CHAIN_ID,
+    calls: [{
+      to: stablecoin.router,
+      value: amountIn,
+      data: encodeFunctionData({
+        abi: pancakeRouterAbi,
+        functionName: 'swapExactETHForTokens',
+        args: [quote.minimumOut, [BSC_TESTNET_WBNB, stablecoin.address], profile.wallet.address, deadline],
+      }),
+    }],
+  })
+  if (transaction.status === 'FAILED') throw new Error(`The owner-authorized tBNB to ${symbol} startup conversion failed.`)
+  const outputReceived = await waitForStablecoinIncrease(profile.wallet.address, symbol, outputBefore)
+  return { stablecoin: symbol, amountIn, quote, outputReceived, transaction }
 }
 
 export async function grantAndExecutePortfolioPlan(
@@ -502,40 +514,41 @@ export async function executePortfolioPlanWithSession(
   const quote = suppliedQuote ?? await quotePortfolioPlan(plan)
   if (!quote || plan.action === 'HOLD') return {}
 
+  const stablecoin = stablecoinConfig(plan.stablecoin)
   const deadline = BigInt(Math.floor(Date.now() / 1000) + SAFE_REBALANCE_DEADLINE_SECONDS)
   const calls = plan.action === 'BUY_STABLE'
     ? [{
-      to: PANCAKE_V2_ROUTER,
+      to: stablecoin.router,
       value: plan.amountIn,
       data: encodeFunctionData({
         abi: pancakeRouterAbi,
         functionName: 'swapExactETHForTokens',
-        args: [quote.minimumOut, [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD], session.walletAddress, deadline],
+        args: [quote.minimumOut, [BSC_TESTNET_WBNB, stablecoin.address], session.walletAddress, deadline],
       }),
     }]
     : [
       {
-        to: BSC_TESTNET_BUSD,
+        to: stablecoin.address,
         value: 0n,
         data: encodeFunctionData({
           abi: erc20ApproveAbi,
           functionName: 'approve',
-          args: [PANCAKE_V2_ROUTER, plan.amountIn],
+          args: [stablecoin.router, plan.amountIn],
         }),
       },
       {
-        to: PANCAKE_V2_ROUTER,
+        to: stablecoin.router,
         value: 0n,
         data: encodeFunctionData({
           abi: pancakeRouterAbi,
           functionName: 'swapExactTokensForETH',
-          args: [plan.amountIn, quote.minimumOut, [BSC_TESTNET_BUSD, BSC_TESTNET_WBNB], session.walletAddress, deadline],
+          args: [plan.amountIn, quote.minimumOut, [stablecoin.address, BSC_TESTNET_WBNB], session.walletAddress, deadline],
         }),
       },
     ]
 
   const outputBefore = plan.action === 'BUY_STABLE'
-    ? await readBusdBalance(session.walletAddress)
+    ? await readStablecoinBalance(session.walletAddress, plan.stablecoin)
     : await readAltanaBalance(session.walletAddress)
 
   onStage?.('executing')
@@ -547,7 +560,7 @@ export async function executePortfolioPlanWithSession(
     })
     const outputReceived = execution.status === 'CONFIRMED'
       ? plan.action === 'BUY_STABLE'
-        ? await waitForBusdIncrease(session.walletAddress, outputBefore)
+        ? await waitForStablecoinIncrease(session.walletAddress, plan.stablecoin, outputBefore)
         : await waitForNativeIncrease(session.walletAddress, outputBefore)
       : 0n
     return {
@@ -560,67 +573,6 @@ export async function executePortfolioPlanWithSession(
     }
   } catch (error) {
     return {
-      quote,
-      executionError: altanaErrorMessage(error),
-    }
-  }
-}
-
-export async function grantAndExecuteSafeRebalance(
-  profile: AltanaWalletProfile,
-  durationDays: number,
-  onStage?: (stage: 'granting' | 'executing') => void,
-): Promise<AltanaStrategyProof> {
-  const expiry = Math.floor(Date.now() / 1000) + durationDays * 24 * 60 * 60
-  const quote = await quoteSafeRebalance()
-  const balanceBefore = await readBusdBalance(profile.wallet.address)
-
-  onStage?.('granting')
-  const grant = await altanaClient.grantSession({
-    wallet: profile.wallet,
-    signer: profile.signer,
-    chainId: ALTANA_CHAIN_ID,
-    permissions: buildSafeRebalancePermissions(),
-    expiry,
-    register: true,
-  })
-
-  const deadline = BigInt(Math.floor(Date.now() / 1000) + SAFE_REBALANCE_DEADLINE_SECONDS)
-  const data = encodeFunctionData({
-    abi: pancakeRouterAbi,
-    functionName: 'swapExactETHForTokens',
-    args: [
-      quote.minimumOut,
-      [BSC_TESTNET_WBNB, BSC_TESTNET_BUSD],
-      profile.wallet.address,
-      deadline,
-    ],
-  })
-
-  onStage?.('executing')
-  try {
-    const execution = await altanaClient.execute({
-      session: grant,
-      chainId: ALTANA_CHAIN_ID,
-      calls: [{ to: PANCAKE_V2_ROUTER, value: SAFE_REBALANCE_AMOUNT, data }],
-    })
-    const outputReceived = execution.status === 'CONFIRMED'
-      ? await waitForBusdIncrease(profile.wallet.address, balanceBefore)
-      : 0n
-    return {
-      session: grant,
-      grant,
-      quote,
-      execution,
-      outputReceived,
-      executionError: execution.status === 'FAILED'
-        ? 'The bounded PancakeSwap execution failed; the session remains revocable.'
-        : undefined,
-    }
-  } catch (error) {
-    return {
-      session: grant,
-      grant,
       quote,
       executionError: altanaErrorMessage(error),
     }
@@ -684,6 +636,41 @@ export async function revokeAltanaMandate(
     session: sessionPublicKey,
     chainId: ALTANA_CHAIN_ID,
   })
+}
+
+export async function exitAltanaAssets(
+  profile: AltanaWalletProfile,
+  stablecoinSymbol: StablecoinSymbol,
+  recipient: Address,
+): Promise<AltanaExitProof> {
+  const stablecoin = stablecoinConfig(stablecoinSymbol)
+  const [stableAmount, nativeBalance] = await Promise.all([
+    readStablecoinBalance(profile.wallet.address, stablecoinSymbol),
+    readAltanaBalance(profile.wallet.address),
+  ])
+  const nativeAmount = nativeBalance > GAS_RESERVE ? nativeBalance - GAS_RESERVE : 0n
+  const calls = []
+  if (stableAmount > 0n) {
+    calls.push({
+      to: stablecoin.address,
+      value: 0n,
+      data: encodeFunctionData({
+        abi: erc20TransferAbi,
+        functionName: 'transfer',
+        args: [recipient, stableAmount],
+      }),
+    })
+  }
+  if (nativeAmount > 0n) calls.push({ to: recipient, value: nativeAmount, data: '0x' as Hex })
+  if (calls.length === 0) throw new Error('The smart account has no available assets to withdraw.')
+
+  const transaction = await altanaClient.execute({
+    wallet: profile.wallet,
+    signer: profile.signer,
+    calls,
+    chainId: ALTANA_CHAIN_ID,
+  })
+  return { stablecoin: stablecoinSymbol, stableAmount, nativeAmount, transaction }
 }
 
 export function altanaExplorerTx(hash?: Hex) {

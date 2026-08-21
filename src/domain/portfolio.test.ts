@@ -11,33 +11,35 @@ describe('portfolio policy engine', () => {
     expect(targetStableBpsFor('maximize-growth', 'growth')).toBe(1_000n)
   })
 
-  it('buys BUSD when stable exposure is below the policy band', () => {
+  it('buys USDT when stable exposure is below the policy band', () => {
     const plan = buildPortfolioPlan({
       snapshot: {
-        nativeBalance: parseEther('0.0115'),
+        nativeBalance: parseEther('0.023'),
         stableBalance: 0n,
+        stablecoin: 'USDT',
         priceStablePerNative: parseEther('500'),
         updatedAt: now,
       },
-      managedAmount: parseEther('0.01'),
+      managedAmount: parseEther('10'),
       goal: 'balanced-growth',
       risk: 'balanced',
     })
 
     expect(plan.action).toBe('BUY_STABLE')
-    expect(plan.amountIn).toBe(parseEther('0.0035'))
+    expect(plan.amountIn).toBe(parseEther('0.007'))
     expect(plan.projectedStableBps).toBe(3_500n)
   })
 
   it('holds when allocation remains inside the allowed drift band', () => {
     const plan = buildPortfolioPlan({
       snapshot: {
-        nativeBalance: parseEther('0.007'),
-        stableBalance: parseEther('2.25'),
+        nativeBalance: parseEther('0.014'),
+        stableBalance: parseEther('4.5'),
+        stablecoin: 'USDT',
         priceStablePerNative: parseEther('500'),
         updatedAt: now,
       },
-      managedAmount: parseEther('0.01'),
+      managedAmount: parseEther('10'),
       goal: 'balanced-growth',
       risk: 'balanced',
     })
@@ -50,36 +52,59 @@ describe('portfolio policy engine', () => {
   it('buys tBNB when the stable allocation exceeds its upper band', () => {
     const plan = buildPortfolioPlan({
       snapshot: {
-        nativeBalance: parseEther('0.0035'),
-        stableBalance: parseEther('4'),
+        nativeBalance: parseEther('0.0015'),
+        stableBalance: parseEther('10'),
+        stablecoin: 'USDT',
         priceStablePerNative: parseEther('500'),
         updatedAt: now,
       },
-      managedAmount: parseEther('0.01'),
+      managedAmount: parseEther('10'),
       goal: 'balanced-growth',
       risk: 'balanced',
     })
 
     expect(plan.action).toBe('BUY_NATIVE')
-    expect(plan.amountIn).toBe(parseEther('1.75'))
-    expect(plan.projectedStableBps).toBe(4_500n)
+    expect(plan.amountIn).toBe(parseEther('3.5'))
+    expect(plan.projectedStableBps).toBe(6_500n)
+  })
+
+  it('restores a low Gas reserve before considering portfolio drift', () => {
+    const plan = buildPortfolioPlan({
+      snapshot: {
+        nativeBalance: parseEther('0.0008'),
+        stableBalance: parseEther('10'),
+        stablecoin: 'USDC',
+        priceStablePerNative: parseEther('500'),
+        updatedAt: now,
+      },
+      managedAmount: parseEther('10'),
+      goal: 'balanced-growth',
+      risk: 'balanced',
+    })
+
+    expect(plan.action).toBe('BUY_NATIVE')
+    expect(plan.purpose).toBe('GAS_TOP_UP')
+    expect(plan.amountIn).toBe(parseEther('1.1'))
+    expect(plan.outputAsset).toBe('tBNB')
   })
 
   it('uses the composed strategy reserve as the live execution target', () => {
     const plan = buildPortfolioPlan({
       snapshot: {
-        nativeBalance: parseEther('0.0115'),
-        stableBalance: 0n,
+        nativeBalance: parseEther('0.015'),
+        stableBalance: parseEther('4'),
+        stablecoin: 'USDC',
         priceStablePerNative: parseEther('500'),
         updatedAt: now,
       },
-      managedAmount: parseEther('0.01'),
+      managedAmount: parseEther('10'),
       goal: 'balanced-growth',
       risk: 'balanced',
       targetReserveBps: 2_500n,
     })
 
     expect(plan.targetStableBps).toBe(2_500n)
-    expect(plan.amountIn).toBe(parseEther('0.0025'))
+    expect(plan.stablecoin).toBe('USDC')
+    expect(plan.amountIn).toBe(parseEther('1.5'))
   })
 })

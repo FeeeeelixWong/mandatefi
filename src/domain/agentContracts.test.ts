@@ -19,10 +19,11 @@ function fixture() {
   })
   const snapshot = {
     nativeBalance: parseEther('0.0115'), stableBalance: 0n,
+    stablecoin: 'USDT' as const,
     priceStablePerNative: parseEther('500'), updatedAt: now,
   }
   const executionPlan = buildPortfolioPlan({
-    snapshot, managedAmount: parseEther('0.01'), goal: 'balanced-growth', risk: 'balanced',
+    snapshot, managedAmount: parseEther('10'), goal: 'balanced-growth', risk: 'balanced',
     targetReserveBps: 2_500n,
   })
   const baseCommittee = buildInvestmentCommittee({
@@ -58,7 +59,7 @@ describe('agent runtime contracts', () => {
     const prompt = buildSpecialistPrompt('market', marketReport, {
       source: 'MANUAL',
       mandate: {
-        goal: 'balanced-growth', riskProfile: 'balanced', managedAmount: '0.01',
+        goal: 'balanced-growth', riskProfile: 'balanced', stablecoin: 'USDT', managedAmount: '10',
         horizonDays: 30, liquidityNeed: 'weekly', expiry: 1_800_000_000,
       },
       strategy,

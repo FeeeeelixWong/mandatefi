@@ -1,8 +1,11 @@
-import { formatEther, parseEther } from 'viem'
+import { formatEther, formatUnits, parseEther } from 'viem'
+import type { StablecoinSymbol } from '../lib/tokens'
 
 export type RiskProfileId = 'conservative' | 'balanced' | 'growth'
 export type InvestmentGoal = 'preserve' | 'balanced-growth' | 'maximize-growth'
 export type RebalanceAction = 'BUY_STABLE' | 'BUY_NATIVE' | 'HOLD'
+export type PortfolioAsset = 'tBNB' | StablecoinSymbol
+export type PortfolioPlanPurpose = 'PORTFOLIO_REBALANCE' | 'GAS_TOP_UP'
 
 export type RiskProfile = {
   id: RiskProfileId
@@ -18,30 +21,35 @@ export type RiskProfile = {
 export type PortfolioSnapshot = {
   nativeBalance: bigint
   stableBalance: bigint
+  stablecoin: StablecoinSymbol
   priceStablePerNative: bigint
   updatedAt: string
 }
 
 export type PortfolioPlan = {
   action: RebalanceAction
+  purpose: PortfolioPlanPurpose
+  stablecoin: StablecoinSymbol
   managedAmount: bigint
   managedValue: bigint
   availableNative: bigint
-  stableValueInNative: bigint
+  nativeValueInStable: bigint
+  priceStablePerNative: bigint
   currentStableBps: bigint
   targetStableBps: bigint
   projectedStableBps: bigint
   driftBandBps: bigint
   amountIn: bigint
-  inputAsset: 'tBNB' | 'BUSD'
-  outputAsset: 'tBNB' | 'BUSD'
+  inputAsset: PortfolioAsset
+  outputAsset: PortfolioAsset
   maxSlippageBps: bigint
   dailyNativeCap: bigint
   dailyStableCap: bigint
   rationale: string
 }
 
-export const GAS_RESERVE = parseEther('0.0015')
+export const GAS_RESERVE = parseEther('0.003')
+export const GAS_LOW_WATERMARK = parseEther('0.0015')
 
 export const riskProfiles: Record<RiskProfileId, RiskProfile> = {
   conservative: {
@@ -115,66 +123,88 @@ export function buildPortfolioPlan({
   const profile = riskProfiles[risk]
   const price = snapshot.priceStablePerNative > 0n ? snapshot.priceStablePerNative : parseEther('1')
   const availableNative = snapshot.nativeBalance > GAS_RESERVE ? snapshot.nativeBalance - GAS_RESERVE : 0n
-  const stableValueInNative = snapshot.stableBalance * parseEther('1') / price
-  const walletValue = availableNative + stableValueInNative
+  const nativeValueInStable = availableNative * price / parseEther('1')
+  const walletValue = snapshot.stableBalance + nativeValueInStable
   const managedValue = min(managedAmount, walletValue)
-  const stableInScope = min(stableValueInNative, managedValue)
+  const stableInScope = min(snapshot.stableBalance, managedValue)
   const currentStableBps = safeBps(stableInScope, managedValue)
   const targetStableBps = clamp(targetReserveBps ?? targetStableBpsFor(goal, risk), 0n, 10_000n)
   const targetStableValue = managedValue * targetStableBps / 10_000n
-  const maxActionNative = managedValue * profile.maxActionBps / 10_000n
-  const dailyNativeCap = managedValue * profile.dailyTurnoverBps / 10_000n
-  const dailyStableCap = dailyNativeCap * price / parseEther('1')
+  const maxActionStable = managedValue * profile.maxActionBps / 10_000n
+  const dailyStableCap = managedValue * profile.dailyTurnoverBps / 10_000n
+  const dailyNativeCap = dailyStableCap * parseEther('1') / price
   const lowerBound = targetStableBps > profile.driftBandBps ? targetStableBps - profile.driftBandBps : 0n
   const upperBound = min(10_000n, targetStableBps + profile.driftBandBps)
 
+  if (snapshot.nativeBalance < GAS_LOW_WATERMARK && snapshot.stableBalance > 0n && managedValue > 0n) {
+    const nativeShortfall = GAS_RESERVE - snapshot.nativeBalance
+    const stableNeeded = nativeShortfall * price / parseEther('1')
+    const amountIn = min(stableNeeded, snapshot.stableBalance, dailyStableCap)
+    const nativeReceived = amountIn * parseEther('1') / price
+    const projectedStableBps = safeBps(stableInScope > amountIn ? stableInScope - amountIn : 0n, managedValue)
+    return {
+      action: amountIn > 0n ? 'BUY_NATIVE' : 'HOLD', purpose: 'GAS_TOP_UP', stablecoin: snapshot.stablecoin,
+      managedAmount, managedValue, availableNative, nativeValueInStable, priceStablePerNative: price, currentStableBps,
+      targetStableBps, projectedStableBps, driftBandBps: profile.driftBandBps, amountIn,
+      inputAsset: snapshot.stablecoin, outputAsset: 'tBNB', maxSlippageBps: profile.maxSlippageBps,
+      dailyNativeCap, dailyStableCap,
+      rationale: amountIn > 0n
+        ? `The Gas reserve fell below ${formatNative(GAS_LOW_WATERMARK)} tBNB. Convert up to ${formatStable(amountIn)} ${snapshot.stablecoin} to restore approximately ${formatNative(snapshot.nativeBalance + nativeReceived)} tBNB; record this operational top-up separately from portfolio rebalancing.`
+        : `The Gas reserve is below its safety threshold, but no approved ${snapshot.stablecoin} amount is available for a bounded top-up.`,
+    }
+  }
+
   if (managedValue === 0n) {
     return {
-      action: 'HOLD', managedAmount, managedValue, availableNative, stableValueInNative,
-      currentStableBps: 0n, targetStableBps, projectedStableBps: 0n,
-      driftBandBps: profile.driftBandBps, amountIn: 0n, inputAsset: 'tBNB', outputAsset: 'BUSD',
+      action: 'HOLD', purpose: 'PORTFOLIO_REBALANCE', stablecoin: snapshot.stablecoin, managedAmount, managedValue, availableNative,
+      nativeValueInStable, priceStablePerNative: price, currentStableBps: 0n, targetStableBps, projectedStableBps: 0n,
+      driftBandBps: profile.driftBandBps, amountIn: 0n, inputAsset: snapshot.stablecoin, outputAsset: 'tBNB',
       maxSlippageBps: profile.maxSlippageBps, dailyNativeCap, dailyStableCap,
-      rationale: 'Fund the smart wallet before the strategy can calculate an executable allocation.',
+      rationale: `Deposit ${snapshot.stablecoin} into the owner smart account before the strategy can calculate an executable allocation.`,
     }
   }
 
   if (currentStableBps < lowerBound) {
-    const deficit = targetStableValue > stableInScope ? targetStableValue - stableInScope : 0n
-    const amountIn = min(deficit, maxActionNative, availableNative)
-    const projectedStableBps = safeBps(stableInScope + amountIn, managedValue)
+    const deficitStable = targetStableValue > stableInScope ? targetStableValue - stableInScope : 0n
+    const nativeNeeded = deficitStable * parseEther('1') / price
+    const maxActionNative = maxActionStable * parseEther('1') / price
+    const amountIn = min(nativeNeeded, maxActionNative, availableNative)
+    const convertedStable = amountIn * price / parseEther('1')
+    const projectedStableBps = safeBps(stableInScope + convertedStable, managedValue)
     return {
-      action: amountIn > 0n ? 'BUY_STABLE' : 'HOLD', managedAmount, managedValue, availableNative,
-      stableValueInNative, currentStableBps, targetStableBps, projectedStableBps,
-      driftBandBps: profile.driftBandBps, amountIn, inputAsset: 'tBNB', outputAsset: 'BUSD',
-      maxSlippageBps: profile.maxSlippageBps, dailyNativeCap, dailyStableCap,
+      action: amountIn > 0n ? 'BUY_STABLE' : 'HOLD', purpose: 'PORTFOLIO_REBALANCE', stablecoin: snapshot.stablecoin,
+      managedAmount, managedValue, availableNative, nativeValueInStable, priceStablePerNative: price, currentStableBps,
+      targetStableBps, projectedStableBps, driftBandBps: profile.driftBandBps, amountIn,
+      inputAsset: 'tBNB', outputAsset: snapshot.stablecoin, maxSlippageBps: profile.maxSlippageBps,
+      dailyNativeCap, dailyStableCap,
       rationale: amountIn > 0n
-        ? `The liquid-reserve sleeve is below its ${formatPercent(targetStableBps)} execution target, so the live Swap adapter can convert ${formatNative(amountIn)} tBNB to BUSD within the mandate.`
-        : 'The liquid-reserve sleeve is below target, but the gas reserve leaves no tBNB available for the next Swap action.',
+        ? `The liquid reserve is below its ${formatPercent(targetStableBps)} target, so the bounded Swap adapter can convert ${formatNative(amountIn)} tBNB back to ${snapshot.stablecoin}.`
+        : `The ${snapshot.stablecoin} reserve is below target, but the protected Gas balance leaves no tBNB available for reallocation.`,
     }
   }
 
   if (currentStableBps > upperBound) {
-    const surplusNative = stableInScope > targetStableValue ? stableInScope - targetStableValue : 0n
-    const nativeToSell = min(surplusNative, maxActionNative)
-    const amountIn = min(nativeToSell * price / parseEther('1'), snapshot.stableBalance)
-    const projectedStableBps = safeBps(stableInScope - min(stableInScope, nativeToSell), managedValue)
+    const surplusStable = stableInScope > targetStableValue ? stableInScope - targetStableValue : 0n
+    const amountIn = min(surplusStable, maxActionStable, snapshot.stableBalance)
+    const projectedStableBps = safeBps(stableInScope - amountIn, managedValue)
     return {
-      action: amountIn > 0n ? 'BUY_NATIVE' : 'HOLD', managedAmount, managedValue, availableNative,
-      stableValueInNative, currentStableBps, targetStableBps, projectedStableBps,
-      driftBandBps: profile.driftBandBps, amountIn, inputAsset: 'BUSD', outputAsset: 'tBNB',
-      maxSlippageBps: profile.maxSlippageBps, dailyNativeCap, dailyStableCap,
+      action: amountIn > 0n ? 'BUY_NATIVE' : 'HOLD', purpose: 'PORTFOLIO_REBALANCE', stablecoin: snapshot.stablecoin,
+      managedAmount, managedValue, availableNative, nativeValueInStable, priceStablePerNative: price, currentStableBps,
+      targetStableBps, projectedStableBps, driftBandBps: profile.driftBandBps, amountIn,
+      inputAsset: snapshot.stablecoin, outputAsset: 'tBNB', maxSlippageBps: profile.maxSlippageBps,
+      dailyNativeCap, dailyStableCap,
       rationale: amountIn > 0n
-        ? `The liquid-reserve sleeve is above its ${formatPercent(targetStableBps)} execution target, so the live Swap adapter can convert ${formatStable(amountIn)} BUSD to tBNB within the mandate.`
-        : 'The liquid-reserve sleeve is above target, but no BUSD is available for the next Swap action.',
+        ? `The ${snapshot.stablecoin} reserve is above its ${formatPercent(targetStableBps)} target, so the live adapter can deploy ${formatStable(amountIn)} ${snapshot.stablecoin} into bounded tBNB market exposure.`
+        : `The ${snapshot.stablecoin} reserve is above target, but no stablecoin is available for the next action.`,
     }
   }
 
   return {
-    action: 'HOLD', managedAmount, managedValue, availableNative, stableValueInNative,
-    currentStableBps, targetStableBps, projectedStableBps: currentStableBps,
-    driftBandBps: profile.driftBandBps, amountIn: 0n, inputAsset: 'tBNB', outputAsset: 'BUSD',
+    action: 'HOLD', purpose: 'PORTFOLIO_REBALANCE', stablecoin: snapshot.stablecoin, managedAmount, managedValue, availableNative,
+    nativeValueInStable, priceStablePerNative: price, currentStableBps, targetStableBps, projectedStableBps: currentStableBps,
+    driftBandBps: profile.driftBandBps, amountIn: 0n, inputAsset: snapshot.stablecoin, outputAsset: 'tBNB',
     maxSlippageBps: profile.maxSlippageBps, dailyNativeCap, dailyStableCap,
-    rationale: `The liquid-reserve sleeve is inside its ${formatPercent(lowerBound)}–${formatPercent(upperBound)} execution band. The strategy keeps the current Swap position while other sleeves remain subject to their own approval and adapter status.`,
+    rationale: `The ${snapshot.stablecoin} reserve is inside its ${formatPercent(lowerBound)}–${formatPercent(upperBound)} execution band.`,
   }
 }
 
@@ -187,5 +217,5 @@ export function formatNative(value: bigint) {
 }
 
 export function formatStable(value: bigint) {
-  return Number(formatEther(value)).toLocaleString(undefined, { maximumFractionDigits: 4 })
+  return Number(formatUnits(value, 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })
 }

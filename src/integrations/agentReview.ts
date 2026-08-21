@@ -10,12 +10,14 @@ import type { PortfolioPlan, PortfolioSnapshot } from '../domain/portfolio'
 import type { StrategyPlan } from '../domain/strategy'
 import type { ExpertRecommendation } from '../domain/assetManagerPrompt'
 import type { ReviewSource } from '../domain/triggerEngine'
+import type { StablecoinSymbol } from '../lib/tokens'
 
 type DeepSeekReviewContext = {
   source: ReviewSource
   mandate: {
     goal: string
     riskProfile: string
+    stablecoin: StablecoinSymbol
     managedAmount: string
     horizonDays: number
     liquidityNeed: string

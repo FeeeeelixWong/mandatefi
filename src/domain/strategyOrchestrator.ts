@@ -7,6 +7,7 @@ import {
 import type { PortfolioPlan } from './portfolio'
 import type { InvestmentCommittee } from './investmentCommittee'
 import type { StrategyPlan } from './strategy'
+import type { StablecoinSymbol } from '../lib/tokens'
 import {
   evaluateTriggers,
   isCooldownActive,
@@ -42,6 +43,7 @@ export type StrategyOrchestratorContext = {
   mandate: {
     goal: string
     riskProfile: string
+    stablecoin: StablecoinSymbol
     managedAmount: string
     horizonDays: number
     liquidityNeed: string
@@ -137,15 +139,17 @@ export function orchestrateStrategyReview(context: StrategyOrchestratorContext):
     checks.push('Mandate has expired')
   } else if (!reviewNeeded || recommendation.action === 'HOLD') {
     status = 'HOLD'
-  } else if (!emergencyAction && isCooldownActive(triggerContext)) {
+  } else if (!emergencyAction && context.executionPlan.purpose !== 'GAS_TOP_UP' && isCooldownActive(triggerContext)) {
     status = 'DEFERRED'
     checks.push(`Execution cooldown: ${context.strategy.guardrails.minimumActionCooldownMinutes} minutes`)
-  } else if (recommendation.action === 'SWAP' && context.executionPlan.action !== 'HOLD' && context.committee?.costGatePassed === false) {
+  } else if (recommendation.action === 'SWAP' && context.executionPlan.action !== 'HOLD' && context.executionPlan.purpose !== 'GAS_TOP_UP' && context.committee?.costGatePassed === false) {
     status = 'DEFERRED'
     checks.push(`Execution cost is missing, stale, or above the ${context.strategy.guardrails.maximumExecutionCostBps / 100}% mandate ceiling`)
   } else if (recommendation.action === 'SWAP' && context.executionPlan.action !== 'HOLD') {
     status = 'AUTO_EXECUTE'
-    checks.push('Live PancakeSwap Swap adapter available')
+    checks.push(context.executionPlan.purpose === 'GAS_TOP_UP'
+      ? 'Bounded PancakeSwap Gas top-up route available'
+      : 'Live PancakeSwap Swap adapter available')
     if (context.committee?.executionCostBps !== null && context.committee?.executionCostBps !== undefined) {
       checks.push(`Worst-case execution cost: ${context.committee.executionCostBps / 100}%`)
     }

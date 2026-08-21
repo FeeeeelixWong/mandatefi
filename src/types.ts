@@ -1,11 +1,15 @@
 import type { InvestmentCommittee } from './domain/investmentCommittee'
+import type { PortfolioAsset } from './domain/portfolio'
+import type { StablecoinSymbol } from './lib/tokens'
 
 export interface Mandate {
   id: string
   name: string
   goal: 'preserve' | 'balanced-growth' | 'maximize-growth'
   riskProfile: 'conservative' | 'balanced' | 'growth'
+  stablecoin: StablecoinSymbol
   managedAmount: string
+  managedStableCap: string
   duration: number
   liquidityNeed?: 'anytime' | 'weekly' | 'term'
   strategyAllocations?: Record<'reserve' | 'market' | 'liquidity' | 'earn', number>
@@ -24,6 +28,7 @@ export interface Mandate {
   dailyStableCap: string
   grantTxHash?: `0x${string}`
   revokeTxHash?: `0x${string}`
+  exitTxHash?: `0x${string}`
   decisions: DecisionRecord[]
 }
 
@@ -31,17 +36,18 @@ export interface DecisionRecord {
   id: string
   createdAt: string
   action: 'BUY_STABLE' | 'BUY_NATIVE' | 'HOLD'
+  purpose: 'INITIAL_NORMALIZATION' | 'PORTFOLIO_REBALANCE' | 'GAS_TOP_UP'
   state: 'CONFIRMED' | 'FAILED' | 'POLICY_ONLY'
   rationale: string
   currentStableBps: number
   targetStableBps: number
   projectedStableBps: number
   amountIn: string
-  inputAsset: 'tBNB' | 'BUSD'
+  inputAsset: PortfolioAsset
   quotedOutput?: string
   minimumOutput?: string
   outputReceived?: string
-  outputAsset: 'tBNB' | 'BUSD'
+  outputAsset: PortfolioAsset
   transactionHash?: `0x${string}`
   reviewSource?: 'ACTIVATION' | 'MANUAL' | 'MONITOR'
   triggers?: string[]

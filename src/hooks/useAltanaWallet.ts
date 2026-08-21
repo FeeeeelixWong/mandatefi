@@ -4,8 +4,9 @@ import type { AltanaWalletProfile } from '../integrations/altana'
 import type { PortfolioPlan } from '../domain/portfolio'
 import { bscTestnetClient } from '../lib/chains'
 import { sendNativeTransfer, type Eip1193Provider } from '../lib/wallet'
+import type { StablecoinSymbol } from '../lib/tokens'
 
-export type AltanaStage = 'idle' | 'creating' | 'recovering' | 'funding' | 'granting' | 'executing' | 'revoking' | 'error'
+export type AltanaStage = 'idle' | 'creating' | 'recovering' | 'funding' | 'normalizing' | 'granting' | 'executing' | 'revoking' | 'withdrawing' | 'error'
 
 const fundingAmount = parseEther('0.01')
 const minimumBalance = parseEther('0.003')
@@ -90,12 +91,13 @@ export function useAltanaWallet() {
     }
   }, [refreshBalance])
 
-  const fund = useCallback(async (provider: Eip1193Provider, from: Address) => {
+  const fund = useCallback(async (provider: Eip1193Provider, from: Address, amount = fundingAmount) => {
     if (!profile) throw new Error('Create or recover the Altana wallet first.')
     setStage('funding')
     setError('')
     try {
-      const hash = await sendNativeTransfer(provider, from, profile.wallet.address, fundingAmount)
+      if (amount <= 0n) throw new Error('The smart account already meets the funding target.')
+      const hash = await sendNativeTransfer(provider, from, profile.wallet.address, amount)
       await bscTestnetClient.waitForTransactionReceipt({ hash, timeout: 90_000 })
       await refreshBalance(profile)
       setStage('idle')
@@ -107,14 +109,13 @@ export function useAltanaWallet() {
     }
   }, [profile, refreshBalance])
 
-  const activate = useCallback(async (durationDays: number, strategyMode?: 'safe-rebalance') => {
+  const normalizeFunding = useCallback(async (stablecoin: StablecoinSymbol, amountIn: bigint) => {
     if (!profile) throw new Error('Create or recover the Altana wallet first.')
+    setStage('normalizing')
     setError('')
     try {
-      const { grantAndExecuteSafeRebalance, grantAndVerifyAltanaMandate } = await import('../integrations/altana')
-      const result = strategyMode === 'safe-rebalance'
-        ? await grantAndExecuteSafeRebalance(profile, durationDays, setStage)
-        : await grantAndVerifyAltanaMandate(profile, durationDays, setStage)
+      const { normalizeAltanaFunding } = await import('../integrations/altana')
+      const result = await normalizeAltanaFunding(profile, stablecoin, amountIn)
       await refreshBalance(profile)
       setStage('idle')
       return result
@@ -158,8 +159,24 @@ export function useAltanaWallet() {
     }
   }, [profile, refreshBalance])
 
+  const exitAssets = useCallback(async (stablecoin: StablecoinSymbol, recipient: Address) => {
+    if (!profile) throw new Error('Recover the Altana owner passkey before withdrawing.')
+    setStage('withdrawing')
+    setError('')
+    try {
+      const { exitAltanaAssets } = await import('../integrations/altana')
+      const result = await exitAltanaAssets(profile, stablecoin, recipient)
+      await refreshBalance(profile)
+      setStage('idle')
+      return result
+    } catch (operationError) {
+      setError(operationErrorMessage(operationError))
+      setStage('error')
+      throw operationError
+    }
+  }, [profile, refreshBalance])
+
   return {
-    activate,
     activatePortfolio,
     address: profile?.wallet.address ?? null,
     balance: displayBalance(balanceWei),
@@ -167,10 +184,12 @@ export function useAltanaWallet() {
     clearError: () => setError(''),
     create,
     error,
+    exitAssets,
     fund,
     hasMinimumBalance: balanceWei !== null && balanceWei >= minimumBalance,
     isBusy: !['idle', 'error'].includes(stage),
     isPasskeySupported: typeof PublicKeyCredential !== 'undefined' && Boolean(navigator.credentials),
+    normalizeFunding,
     profile,
     recover,
     refreshBalance,

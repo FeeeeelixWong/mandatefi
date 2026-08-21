@@ -2,6 +2,7 @@ import { z } from 'zod'
 import type { InvestmentCommittee } from './investmentCommittee.js'
 import type { PortfolioPlan } from './portfolio.js'
 import type { StrategyPlan } from './strategy.js'
+import type { StablecoinSymbol } from '../lib/tokens.js'
 
 export const ASSET_MANAGER_PROMPT_VERSION = 'mandatefi.asset-manager.v3'
 
@@ -35,6 +36,7 @@ export type AssetManagerPromptContext = {
   mandate: {
     goal: string
     riskProfile: string
+    stablecoin: StablecoinSymbol
     managedAmount: string
     horizonDays: number
     liquidityNeed: string
@@ -59,6 +61,7 @@ export function buildAssetManagerPrompt(context: AssetManagerPromptContext) {
       targetReserveBps: Number(context.executionPlan.targetStableBps),
       projectedReserveBps: Number(context.executionPlan.projectedStableBps),
       proposedSwapAction: context.executionPlan.action,
+      purpose: context.executionPlan.purpose,
       proposedAmountIn: context.executionPlan.amountIn.toString(),
       inputAsset: context.executionPlan.inputAsset,
       outputAsset: context.executionPlan.outputAsset,
@@ -87,6 +90,7 @@ Non-negotiable rules:
 - Treat mainnet research snapshots as opportunity discovery only. They never authorize execution on another network.
 - Revalidate pool state, wallet state, gas, price impact, slippage, and adapter coverage on the execution network immediately before any action.
 - Treat short-window annualized APR as an observed signal, never as a forecast or guaranteed return.
+- Treat GAS_TOP_UP as an operational safety action: restore only the configured reserve, use the selected stablecoin route, never expand portfolio risk, and preserve a separate audit record.
 
 Allowed actions:
 HOLD, SWAP, ADD_LIQUIDITY, REMOVE_LIQUIDITY, STAKE_FARM, UNSTAKE_FARM, HARVEST, COMPOUND, EMERGENCY_EXIT, PAUSE.

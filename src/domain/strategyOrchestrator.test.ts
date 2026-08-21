@@ -8,7 +8,7 @@ import { buildInvestmentCommittee, type ExecutionCostEstimate } from './investme
 const nowMs = Date.parse('2026-08-21T12:00:00.000Z')
 const strategy = buildStrategyPlan({ goal: 'balanced-growth', risk: 'balanced', liquidityNeed: 'weekly', horizonDays: 30 })
 const mandate = {
-  goal: 'balanced-growth', riskProfile: 'balanced', managedAmount: '0.01',
+  goal: 'balanced-growth', riskProfile: 'balanced', stablecoin: 'USDT' as const, managedAmount: '10',
   horizonDays: 30, liquidityNeed: 'weekly', expiry: Math.floor(nowMs / 1_000) + 30 * 24 * 60 * 60,
 }
 
@@ -17,10 +17,11 @@ function executionPlan(stableBalance: string) {
     snapshot: {
       nativeBalance: stableBalance === '0' ? parseEther('0.0115') : parseEther('0.009'),
       stableBalance: parseEther(stableBalance),
+      stablecoin: 'USDT',
       priceStablePerNative: parseEther('500'),
       updatedAt: new Date(nowMs).toISOString(),
     },
-    managedAmount: parseEther('0.01'), goal: 'balanced-growth', risk: 'balanced', targetReserveBps: 2_500n,
+    managedAmount: parseEther('10'), goal: 'balanced-growth', risk: 'balanced', targetReserveBps: 2_500n,
   })
 }
 
@@ -50,6 +51,23 @@ describe('AI strategy orchestrator', () => {
       lastExecutionAt: new Date(nowMs - 30 * 60 * 1_000).toISOString(),
     })
     expect(review.gate.status).toBe('DEFERRED')
+  })
+
+  it('allows a bounded Gas refill to bypass the portfolio cooldown', () => {
+    const gasPlan = buildPortfolioPlan({
+      snapshot: {
+        nativeBalance: parseEther('0.0005'), stableBalance: parseEther('10'),
+        stablecoin: 'USDT', priceStablePerNative: parseEther('500'), updatedAt: new Date(nowMs).toISOString(),
+      },
+      managedAmount: parseEther('10'), goal: 'balanced-growth', risk: 'balanced', targetReserveBps: 2_500n,
+    })
+    const review = orchestrateStrategyReview({
+      source: 'MONITOR', nowMs, mandate, strategy, executionPlan: gasPlan,
+      lastReviewAt: new Date(nowMs - 60 * 60 * 1_000).toISOString(),
+      lastExecutionAt: new Date(nowMs - 30 * 60 * 1_000).toISOString(),
+    })
+    expect(gasPlan.purpose).toBe('GAS_TOP_UP')
+    expect(review.gate.status).toBe('AUTO_EXECUTE')
   })
 
   it('requires owner approval for LP risk actions', () => {
@@ -94,6 +112,7 @@ describe('AI strategy orchestrator', () => {
       nowMs, strategy, executionPlan: plan,
       snapshot: {
         nativeBalance: parseEther('0.0115'), stableBalance: 0n,
+        stablecoin: 'USDT',
         priceStablePerNative: parseEther('500'), updatedAt: new Date(nowMs).toISOString(),
       },
       executionCost,

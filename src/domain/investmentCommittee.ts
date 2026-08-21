@@ -190,7 +190,7 @@ export function buildInvestmentCommittee(context: CommitteeContext): InvestmentC
           `Stablecoins: USDT ${exactUsd(market.pricesUsd.usdt)} · USDC ${exactUsd(market.pricesUsd.usdc)} · max deviation ${market.stablecoinMaxDeviationBps} bps.`,
         ] : []),
         ...(context.snapshot ? [
-          `BSC Testnet execution quote: ${Number(context.snapshot.priceStablePerNative) / 1e18} BUSD per tBNB.`,
+          `BSC Testnet execution quote: ${Number(context.snapshot.priceStablePerNative) / 1e18} ${context.snapshot.stablecoin} per tBNB.`,
           `Reserve: ${Number(plan.currentStableBps) / 100}% current vs ${Number(plan.targetStableBps) / 100}% target.`,
         ] : []),
       ],

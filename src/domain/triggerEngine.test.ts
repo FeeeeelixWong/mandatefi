@@ -12,10 +12,11 @@ function plan(stableBalance: string) {
     snapshot: {
       nativeBalance: stableBalance === '0' ? parseEther('0.0115') : parseEther('0.009'),
       stableBalance: parseEther(stableBalance),
+      stablecoin: 'USDT',
       priceStablePerNative: parseEther('500'),
       updatedAt: new Date(nowMs).toISOString(),
     },
-    managedAmount: parseEther('0.01'),
+    managedAmount: parseEther('10'),
     goal: 'balanced-growth',
     risk: 'balanced',
     targetReserveBps: 2_500n,
@@ -56,5 +57,28 @@ describe('strategy trigger engine', () => {
     })
     expect(triggers.find((trigger) => trigger.kind === 'STABLECOIN_DEPEG')?.severity).toBe('critical')
     expect(isCooldownActive({ nowMs, strategy, lastExecutionAt: new Date(nowMs - 30 * 60 * 1_000).toISOString() })).toBe(true)
+  })
+
+  it('labels a reserve refill as a Gas event rather than allocation drift', () => {
+    const gasPlan = buildPortfolioPlan({
+      snapshot: {
+        nativeBalance: parseEther('0.0005'),
+        stableBalance: parseEther('10'),
+        stablecoin: 'USDT',
+        priceStablePerNative: parseEther('500'),
+        updatedAt: new Date(nowMs).toISOString(),
+      },
+      managedAmount: parseEther('10'),
+      goal: 'balanced-growth',
+      risk: 'balanced',
+    })
+    const triggers = evaluateTriggers({
+      source: 'MONITOR', nowMs, strategy, executionPlan: gasPlan,
+      lastReviewAt: new Date(nowMs - 60 * 60 * 1_000).toISOString(),
+      expiry: Math.floor(nowMs / 1_000) + 30 * 24 * 60 * 60,
+    })
+
+    expect(triggers.map((trigger) => trigger.kind)).toContain('GAS_LOW')
+    expect(triggers.map((trigger) => trigger.kind)).not.toContain('PORTFOLIO_DRIFT')
   })
 })

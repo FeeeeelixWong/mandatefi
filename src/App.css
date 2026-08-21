@@ -285,12 +285,12 @@
 .config-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .config-section-heading span { font-size: 14px; font-weight: 700; }
 .config-section-heading small { color: var(--muted); font-size: 11px; }
-.amount-field { margin-top: 12px; display: grid; gap: 5px; }
+.amount-field { min-width: 0; margin-top: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
 .amount-field > span { color: var(--muted); font-size: 12px; }
 .amount-field > div { height: 60px; padding: 0 15px; border: 1px solid var(--line-strong); border-radius: 7px; display: flex; align-items: center; background: var(--soft); }
 .amount-field input { min-width: 0; flex: 1; border: 0; outline: 0; color: var(--ink); background: transparent; font-family: Kanit, Inter, sans-serif; font-size: 29px; font-weight: 600; }
 .amount-field b { font-size: 12px; }
-.amount-field small, .field-note { margin: 0; color: var(--muted); font-size: 10px; }
+.amount-field small, .field-note { min-width: 0; width: 100%; max-width: 100%; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
 .amount-field small.field-error { color: #c03a73; }
 .quick-values { margin-top: 8px; display: flex; gap: 7px; }
 .quick-values button { min-width: 58px; min-height: 34px; border: 1px solid var(--line); border-radius: 6px; color: var(--purple); background: #fff; cursor: pointer; font-size: 11px; font-weight: 700; }
@@ -347,6 +347,7 @@
 .approval-checklist > div > div { display: grid; gap: 2px; }
 .approval-checklist strong { font-size: 12px; }
 .approval-checklist small { color: var(--muted); font-size: 10px; }
+.approval-checklist .checklist-state { color: var(--muted); font-size: 10px; font-weight: 700; }
 .approval-checklist button { min-height: 34px; padding: 0 10px; border: 1px solid #c8b5e6; border-radius: 6px; color: var(--purple); background: #fff; cursor: pointer; font-size: 10px; font-weight: 700; }
 .inline-actions { display: flex !important; gap: 6px; }
 .approval-boundary { margin: 14px 22px 20px; padding: 12px; border-radius: 7px; display: flex; align-items: flex-start; gap: 9px; color: var(--cyan-dark); background: var(--cyan-soft); }
