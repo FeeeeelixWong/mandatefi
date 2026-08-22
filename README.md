@@ -39,6 +39,12 @@ MandateFi is not a pooled vault and the Vercel backend never receives assets or 
 
 The current hackathon build uses BSC Testnet assets. A production release still requires audited smart-account recovery, an audited stablecoin adapter, stronger argument-level allowance constraints or Permit2, monitoring, and an emergency operations policy.
 
+## Wallet Compatibility
+
+MandateFi discovers wallets with EIP-6963 and falls back to wallet-specific injected providers. The user explicitly chooses the funding wallet, and that exact provider is retained for account events, BNB Testnet switching, deposits, and owner exit destinations. This avoids silently routing a transaction through another extension when several wallets are installed.
+
+The current connector supports OKX Wallet, MetaMask, Rabby Wallet, Coinbase Wallet, Trust Wallet, Binance Wallet, Phantom EVM, Brave Wallet, and other standards-compatible EIP-1193/EIP-6963 browser wallets. The selected extension controls only the owner EOA; managed assets remain in the owner's separate Passkey smart account.
+
 ## Product Logic
 
 The engine does not merely wait for one token ratio to cross a band. It:
@@ -190,6 +196,8 @@ These existing receipts prove the wallet and scoped-session lifecycle. The next 
 - `src/integrations/altana.ts` quotes both candidate normalization routes, performs the owner-signed conversion into the reviewed AI-selected stablecoin, reads token and Gas balances, builds token-specific permissions, executes scoped swaps and Gas refills, revokes, and provides an owner-only exit path.
 - `src/integrations/pancakeExecutor.ts` prepares bounded owner allowances, grants exact module permissions, deploys Swap/LP/Farm/Earn sequentially, reads live protocol positions, and unwinds all protocol positions through the owner Passkey.
 - `src/hooks/useAltanaWallet.ts` manages the passkey wallet lifecycle and safe UI states.
+- `src/hooks/useInjectedWallet.ts` discovers, selects, persists, and listens to the exact EIP-6963 or wallet-specific injected provider chosen by the owner.
+- `src/lib/wallet.ts` normalizes OKX, MetaMask, Rabby, Coinbase, Trust, Binance, Phantom, Brave, and generic EIP-1193 providers without handing transaction routing to a browser-global default.
 - `src/App.tsx` provides portfolio, strategy creation, activity, and guardrail journeys.
 
 The frontend and AI API are designed to deploy together on Vercel. The scoped session signer still stays only in browser memory: Vercel receives normalized market and mandate evidence but never receives the owner passkey, private key, or unrestricted transaction authority. Scheduled server-side monitoring can be added later without changing that custody boundary; execution still requires the scoped wallet runtime or explicit owner approval.

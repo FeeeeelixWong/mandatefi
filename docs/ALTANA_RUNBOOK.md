@@ -45,7 +45,7 @@ Recurring cross-product migrations remain owner-approved in this MVP. Initial fo
 4. Let the allocation agent compare USDT and USDC, then review its selected base asset, confidence, rationale, and evidence.
 5. Review the four-sleeve allocation, ordered PancakeSwap actions, coverage, and hard limits.
 6. Continue to approval and inspect exact Swap, LP, Farm, Earn, token, contract, spend-cap, and expiry boundaries.
-7. Connect an injected wallet and switch to BNB Smart Chain Testnet.
+7. Open the wallet selector, choose the installed OKX, MetaMask, Rabby, Coinbase, Trust, Binance, Phantom, Brave, or other EIP-6963/EIP-1193 wallet, and switch that exact provider to BNB Smart Chain Testnet.
 8. Create or recover the Altana passkey smart wallet.
 9. Deposit the missing tBNB needed to reach the displayed funding target. Existing tBNB in this dedicated account may be reused.
 10. Select **Normalize and start** and approve the owner Passkey startup conversion.
