@@ -40,8 +40,8 @@ export default async function handler(request: ApiRequest, response: ApiResponse
           system: 'You are MandateFi stablecoin allocation agent. Use only supplied evidence and return strict json.',
           user: buildStablecoinAllocatorPrompt(input),
           schema: stablecoinSelectionOutputSchema,
-          maxTokens: 800,
-          thinking: 'enabled',
+          maxTokens: 1_000,
+          thinking: 'disabled',
         })
         selection = result.value
         modelMode = 'DEEPSEEK'
