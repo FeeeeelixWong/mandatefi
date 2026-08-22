@@ -198,6 +198,12 @@ export type PancakeDeploymentProof = {
   positions: PancakePositionSnapshot
 }
 
+export type PancakeActivationProgress = {
+  phase: 'APPROVED' | 'GRANTED' | 'DEPLOYING'
+  transactionHash?: Hex
+  receipts?: PancakeModuleReceipt[]
+}
+
 export type PancakeExitProof = {
   stablecoin: StablecoinSymbol
   transactions: ExecuteResult[]
@@ -392,16 +398,26 @@ async function executeSession(session: Session, calls: Array<{ to: Address; valu
 }
 
 export async function readPancakePositions(address: Address, stablecoin: StablecoinSymbol): Promise<PancakePositionSnapshot> {
-  const [stableBalance, nativeBalance, cakeBalance, lpWalletBalance, farmInfo, earnInfo, pricePerShare] = await Promise.all([
-    readStablecoinBalance(address, stablecoin),
-    readAltanaBalance(address),
-    tokenBalance(PANCAKE_TESTNET_CAKE, address),
-    tokenBalance(PANCAKE_CAKE_WBNB_LP, address),
-    bscTestnetClient.readContract({ address: PANCAKE_MASTERCHEF_V2, abi: masterChefAbi, functionName: 'userInfo', args: [PANCAKE_CAKE_WBNB_PID, address] }),
-    bscTestnetClient.readContract({ address: PANCAKE_CAKE_POOL, abi: cakePoolAbi, functionName: 'userInfo', args: [address] }),
-    bscTestnetClient.readContract({ address: PANCAKE_CAKE_POOL, abi: cakePoolAbi, functionName: 'getPricePerFullShare' }),
+  const safeBalance = async (read: () => Promise<bigint>) => {
+    try { return await read() } catch { return 0n }
+  }
+  const farmStakedPromise = safeBalance(async () => {
+    const info = await bscTestnetClient.readContract({ address: PANCAKE_MASTERCHEF_V2, abi: masterChefAbi, functionName: 'userInfo', args: [PANCAKE_CAKE_WBNB_PID, address] })
+    return info[0]
+  })
+  const earnSharesPromise = safeBalance(async () => {
+    const info = await bscTestnetClient.readContract({ address: PANCAKE_CAKE_POOL, abi: cakePoolAbi, functionName: 'userInfo', args: [address] })
+    return info[0]
+  })
+  const [stableBalance, nativeBalance, cakeBalance, lpWalletBalance, farmStaked, earnShares, pricePerShare] = await Promise.all([
+    safeBalance(() => readStablecoinBalance(address, stablecoin)),
+    safeBalance(() => readAltanaBalance(address)),
+    safeBalance(() => tokenBalance(PANCAKE_TESTNET_CAKE, address)),
+    safeBalance(() => tokenBalance(PANCAKE_CAKE_WBNB_LP, address)),
+    farmStakedPromise,
+    earnSharesPromise,
+    safeBalance(() => bscTestnetClient.readContract({ address: PANCAKE_CAKE_POOL, abi: cakePoolAbi, functionName: 'getPricePerFullShare' })),
   ])
-  const earnShares = earnInfo[0]
   const grossEarnValue = earnShares * pricePerShare / 10n ** 18n
   return {
     stablecoin,
@@ -409,7 +425,7 @@ export async function readPancakePositions(address: Address, stablecoin: Stablec
     nativeBalance,
     cakeBalance,
     lpWalletBalance,
-    farmStaked: farmInfo[0],
+    farmStaked,
     earnShares,
     earnCakeValue: grossEarnValue,
     observedAt: new Date().toISOString(),
@@ -420,12 +436,17 @@ export async function deployPancakePortfolio(
   session: Session,
   deployment: PancakeDeploymentPlan,
   onStage?: (stage: 'executing') => void,
+  onReceipt?: (receipts: PancakeModuleReceipt[]) => void,
 ) {
   const receipts: PancakeModuleReceipt[] = []
   const stablecoin = stablecoinConfig(deployment.stablecoin)
   const wallet = session.walletAddress
   const deadline = BigInt(Math.floor(Date.now() / 1_000) + DEADLINE_SECONDS)
   onStage?.('executing')
+  const record = (next: PancakeModuleReceipt) => {
+    receipts.push(next)
+    onReceipt?.([...receipts])
+  }
 
   try {
     const nativeBefore = await readAltanaBalance(wallet)
@@ -439,12 +460,12 @@ export async function deployPancakePortfolio(
       }),
     }])
     const output = await waitForIncrease(() => readAltanaBalance(wallet), nativeBefore)
-    receipts.push(receipt('SWAP', 'ALLOCATE', stablecoin.router, 'Built the market sleeve through the bounded stablecoin-to-tBNB route.', result, {
+    record(receipt('SWAP', 'ALLOCATE', stablecoin.router, 'Built the market sleeve through the bounded stablecoin-to-tBNB route.', result, {
       inputAmount: amount(deployment.marketAmount), inputAsset: deployment.stablecoin,
       outputAmount: amount(output), outputAsset: 'tBNB',
     }))
   } catch (error) {
-    receipts.push(failedReceipt('SWAP', 'ALLOCATE', stablecoin.router, error))
+    record(failedReceipt('SWAP', 'ALLOCATE', stablecoin.router, error))
     return receipts
   }
 
@@ -488,12 +509,12 @@ export async function deployPancakePortfolio(
       },
     ])
     mintedLp = await waitForIncrease(() => tokenBalance(PANCAKE_CAKE_WBNB_LP, wallet), lpBefore)
-    receipts.push(receipt('LIQUIDITY', 'ADD_LIQUIDITY', PANCAKE_V2_ROUTER, 'Minted CAKE/WBNB V2 LP tokens through the official testnet router.', result, {
+    record(receipt('LIQUIDITY', 'ADD_LIQUIDITY', PANCAKE_V2_ROUTER, 'Minted CAKE/WBNB V2 LP tokens through the official testnet router.', result, {
       inputAmount: amount(deployment.liquidityAmount), inputAsset: deployment.stablecoin,
       outputAmount: amount(mintedLp), outputAsset: 'CAKE-WBNB LP',
     }))
   } catch (error) {
-    receipts.push(failedReceipt('LIQUIDITY', 'ADD_LIQUIDITY', PANCAKE_V2_ROUTER, error))
+    record(failedReceipt('LIQUIDITY', 'ADD_LIQUIDITY', PANCAKE_V2_ROUTER, error))
     return receipts
   }
 
@@ -504,11 +525,11 @@ export async function deployPancakePortfolio(
       value: 0n,
       data: encodeFunctionData({ abi: masterChefAbi, functionName: 'deposit', args: [PANCAKE_CAKE_WBNB_PID, mintedLp] }),
     }])
-    receipts.push(receipt('FARM', 'STAKE_LP', PANCAKE_MASTERCHEF_V2, 'Staked the minted LP position in MasterChef V2 Farm PID 4.', result, {
+    record(receipt('FARM', 'STAKE_LP', PANCAKE_MASTERCHEF_V2, 'Staked the minted LP position in MasterChef V2 Farm PID 4.', result, {
       inputAmount: amount(mintedLp), inputAsset: 'CAKE-WBNB LP', outputAmount: amount(mintedLp), outputAsset: 'Farm shares',
     }))
   } catch (error) {
-    receipts.push(failedReceipt('FARM', 'STAKE_LP', PANCAKE_MASTERCHEF_V2, error))
+    record(failedReceipt('FARM', 'STAKE_LP', PANCAKE_MASTERCHEF_V2, error))
     return receipts
   }
 
@@ -536,12 +557,12 @@ export async function deployPancakePortfolio(
       },
     ])
     earnedCake = await waitForIncrease(() => tokenBalance(PANCAKE_TESTNET_CAKE, wallet), cakeBefore)
-    receipts.push(receipt('EARN', 'ALLOCATE', PANCAKE_V2_ROUTER, 'Converted the Earn sleeve to CAKE through the official V2 router.', result, {
+    record(receipt('EARN', 'ALLOCATE', PANCAKE_V2_ROUTER, 'Converted the Earn sleeve to CAKE through the official V2 router.', result, {
       inputAmount: amount(deployment.earnAmount), inputAsset: deployment.stablecoin,
       outputAmount: amount(earnedCake), outputAsset: 'CAKE',
     }))
   } catch (error) {
-    receipts.push(failedReceipt('EARN', 'ALLOCATE', PANCAKE_V2_ROUTER, error))
+    record(failedReceipt('EARN', 'ALLOCATE', PANCAKE_V2_ROUTER, error))
     return receipts
   }
 
@@ -554,11 +575,11 @@ export async function deployPancakePortfolio(
       data: encodeFunctionData({ abi: cakePoolAbi, functionName: 'deposit', args: [earnedCake, 0n] }),
     }])
     const shares = await waitForIncrease(async () => (await bscTestnetClient.readContract({ address: PANCAKE_CAKE_POOL, abi: cakePoolAbi, functionName: 'userInfo', args: [wallet] }))[0], sharesBefore)
-    receipts.push(receipt('EARN', 'DEPOSIT_EARN', PANCAKE_CAKE_POOL, 'Deposited CAKE into the flexible CAKE Pool with a zero-second lock.', result, {
+    record(receipt('EARN', 'DEPOSIT_EARN', PANCAKE_CAKE_POOL, 'Deposited CAKE into the flexible CAKE Pool with a zero-second lock.', result, {
       inputAmount: amount(earnedCake), inputAsset: 'CAKE', outputAmount: amount(shares), outputAsset: 'CAKE Pool shares',
     }))
   } catch (error) {
-    receipts.push(failedReceipt('EARN', 'DEPOSIT_EARN', PANCAKE_CAKE_POOL, error))
+    record(failedReceipt('EARN', 'DEPOSIT_EARN', PANCAKE_CAKE_POOL, error))
   }
 
   return receipts
@@ -572,6 +593,7 @@ export async function grantAndDeployPancakePortfolio(
   rebalance: PortfolioPlan,
   executeApprovedPlan: boolean,
   onStage?: (stage: 'approving' | 'granting' | 'executing') => void,
+  onProgress?: (progress: PancakeActivationProgress) => void,
 ): Promise<PancakeDeploymentProof> {
   const prepared = await preparePancakeDeployment(snapshot, strategy)
   const deployment = {
@@ -582,6 +604,7 @@ export async function grantAndDeployPancakePortfolio(
   if (executeApprovedPlan) {
     onStage?.('approving')
     approval = await approvePancakeDeployment(profile, deployment)
+    onProgress?.({ phase: 'APPROVED', transactionHash: approval.transactionHash })
   }
   onStage?.('granting')
   const grant = await altanaClient.grantSession({
@@ -592,7 +615,10 @@ export async function grantAndDeployPancakePortfolio(
     expiry: Math.floor(Date.now() / 1_000) + durationDays * 24 * 60 * 60,
     register: true,
   })
-  const receipts = executeApprovedPlan ? await deployPancakePortfolio(grant, deployment, onStage) : []
+  onProgress?.({ phase: 'GRANTED', transactionHash: grant.transactionHash })
+  const receipts = executeApprovedPlan
+    ? await deployPancakePortfolio(grant, deployment, onStage, (nextReceipts) => onProgress?.({ phase: 'DEPLOYING', receipts: nextReceipts }))
+    : []
   const positions = await readPancakePositions(profile.wallet.address, snapshot.stablecoin)
   return { session: grant, grant, approval, deployment, receipts, positions }
 }

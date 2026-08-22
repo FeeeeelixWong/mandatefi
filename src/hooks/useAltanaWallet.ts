@@ -7,6 +7,7 @@ import type { PortfolioSnapshot } from '../domain/portfolio'
 import { bscTestnetClient } from '../lib/chains'
 import { sendNativeTransfer, type Eip1193Provider } from '../lib/wallet'
 import type { StablecoinSymbol } from '../lib/tokens'
+import type { PancakeActivationProgress } from '../integrations/pancakeExecutor'
 
 export type AltanaStage = 'idle' | 'creating' | 'recovering' | 'funding' | 'normalizing' | 'approving' | 'granting' | 'executing' | 'revoking' | 'withdrawing' | 'error'
 
@@ -149,6 +150,7 @@ export function useAltanaWallet() {
     snapshot: PortfolioSnapshot,
     rebalance: PortfolioPlan,
     executeApprovedPlan = true,
+    onProgress?: (progress: PancakeActivationProgress) => void,
   ) => {
     if (!profile) throw new Error('Create or recover the Altana wallet first.')
     setError('')
@@ -162,6 +164,7 @@ export function useAltanaWallet() {
         rebalance,
         executeApprovedPlan,
         setStage,
+        onProgress,
       )
       await refreshBalance(profile)
       setStage('idle')

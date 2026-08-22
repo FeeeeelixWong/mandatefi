@@ -47,9 +47,9 @@ import {
 import { fetchPancakeMarket, type PancakeMarketSnapshot } from './integrations/pancakeMarket'
 import { requestDeepSeekReview } from './integrations/agentReview'
 import { buildLocalStablecoinSelection, requestStablecoinSelection } from './integrations/stablecoinSelection'
-import type { PancakeDeploymentProof, PancakePositionSnapshot } from './integrations/pancakeExecutor'
+import type { PancakeActivationProgress, PancakeDeploymentProof, PancakePositionSnapshot } from './integrations/pancakeExecutor'
 import { completedPancakeModules, latestPancakeModuleReceipt } from './domain/pancakeReceipts'
-import type { DecisionRecord, Mandate } from './types'
+import type { ActivationAttempt, DecisionRecord, Mandate } from './types'
 import './App.css'
 
 type View = 'overview' | 'create' | 'decisions' | 'policies' | 'about'
@@ -64,6 +64,7 @@ type MandateDraft = {
 }
 
 const mandateStorageKey = 'mandatefi.portfolio-mandates.v5'
+const activationStorageKey = 'mandatefi.activation-attempts.v1'
 
 const navItems: Array<{ id: View; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Portfolio', icon: LayoutDashboard },
@@ -87,6 +88,16 @@ const altanaStageCopy: Record<AltanaStage, string> = {
   error: 'Action required',
 }
 
+const activationPhaseCopy: Record<ActivationAttempt['phase'], string> = {
+  PREPARING: 'Reading funded portfolio',
+  NORMALIZING: 'Converting startup capital',
+  REVIEWING: 'Running the investment committee',
+  APPROVING: 'Registering owner allowances',
+  GRANTING: 'Registering scoped policy',
+  DEPLOYING: 'Deploying PancakeSwap modules',
+  FAILED: 'Needs attention',
+}
+
 const liquidityOptions: Array<{ id: LiquidityNeed; name: string; description: string }> = [
   { id: 'anytime', name: 'Anytime', description: 'Keep more capital liquid for withdrawals.' },
   { id: 'weekly', name: 'Weekly', description: 'Balance liquidity with active yield positions.' },
@@ -108,6 +119,19 @@ function loadMandates(): Mandate[] {
     return parsed.filter((item): item is Mandate => Boolean(
       item && typeof item === 'object' && typeof item.name === 'string' &&
       typeof item.smartWallet === 'string' && Array.isArray(item.decisions),
+    ))
+  } catch {
+    return []
+  }
+}
+
+function loadActivationAttempts(): ActivationAttempt[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(activationStorageKey) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is ActivationAttempt => Boolean(
+      item && typeof item === 'object' && typeof item.id === 'string' &&
+      typeof item.smartWallet === 'string' && typeof item.phase === 'string',
     ))
   } catch {
     return []
@@ -645,6 +669,7 @@ function MandateWizard({
   const [quote, setQuote] = useState<PortfolioRebalanceQuote | null>(null)
   const [quoteError, setQuoteError] = useState('')
   const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState('')
   const [selectingStablecoin, setSelectingStablecoin] = useState(false)
   const [stablecoinError, setStablecoinError] = useState('')
   const [amountTouched, setAmountTouched] = useState(false)
@@ -745,7 +770,14 @@ function MandateWizard({
 
   async function start() {
     setStarting(true)
-    try { await onStart(draft) } finally { setStarting(false) }
+    setStartError('')
+    try {
+      await onStart(draft)
+    } catch (error) {
+      setStartError(error instanceof Error ? error.message : 'Strategy activation did not complete.')
+    } finally {
+      setStarting(false)
+    }
   }
 
   return <div className="configurator-page">
@@ -785,7 +817,7 @@ function MandateWizard({
           <div className="approval-boundary"><KeyRound size={18} /><div><strong>Exact scope granted today</strong><span>The allocator chose {draft.stablecoin}, but it cannot grant itself broader access. The session is pinned to {shortAddress(selectedStable.router)}, the official CAKE router, CAKE/WBNB LP, MasterChef V2 PID 4, and flexible CAKE Pool methods. It cannot approve tokens, call arbitrary contracts, use leverage, or exceed daily caps.</span></div></div>
           {busy && <div className="operation-status"><LoaderCircle className="spin" size={16} /> {starting ? 'Starting the strategy...' : altanaStageCopy[altanaStage]}</div>}
           {!isPasskeySupported && <div className="inline-error"><AlertTriangle size={16} /> This browser does not expose WebAuthn passkeys.</div>}
-          {(walletError || altanaError) && <div className="inline-error"><AlertTriangle size={16} /> {walletError || altanaError}</div>}
+          {(startError || walletError || altanaError) && <div className="inline-error"><AlertTriangle size={16} /> {startError || walletError || altanaError}</div>}
           <footer className="config-actions"><button className="secondary-button" disabled={busy} onClick={() => setStep(2)}>Back to strategy</button><button className="primary-button" disabled={!ready || busy} aria-busy={busy} onClick={() => void start()}>{busy ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} Normalize and start</button></footer>
         </>}
       </section>
@@ -802,18 +834,26 @@ function MandateWizard({
   </div>
 }
 
-function DecisionLog({ mandates }: { mandates: Mandate[] }) {
+function DecisionLog({ mandates, activationAttempts }: { mandates: Mandate[]; activationAttempts: ActivationAttempt[] }) {
   const decisions = mandates
     .flatMap((mandate) => mandate.decisions.map((decision) => ({ mandate, decision })))
     .sort((a, b) => b.decision.createdAt.localeCompare(a.decision.createdAt))
   const moduleReceipts = mandates
     .flatMap((mandate) => (mandate.moduleReceipts ?? []).map((moduleReceipt) => ({ mandate, moduleReceipt })))
     .sort((a, b) => b.moduleReceipt.createdAt.localeCompare(a.moduleReceipt.createdAt))
-  const hasActivity = decisions.length > 0 || moduleReceipts.length > 0
+  const hasActivity = decisions.length > 0 || moduleReceipts.length > 0 || activationAttempts.length > 0
 
   return <div className="list-page">
     <div className="page-title-row"><div><span className="eyebrow">Execution evidence</span><h1>Activity</h1><p>Every Swap, LP, Farm, Earn, policy, and exit action keeps its own onchain receipt.</p></div></div>
     {!hasActivity ? <div className="simple-empty"><Activity size={26} /><h2>No activity yet</h2><p>Create a strategy to generate its first decision.</p></div> : <div className="decision-log">
+      {[...activationAttempts].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((attempt) => {
+        const latestHash = attempt.moduleReceipts?.findLast((item) => item.transactionHash)?.transactionHash ?? attempt.grantTxHash ?? attempt.approvalTxHash ?? attempt.normalizationDecision?.transactionHash
+        return <article key={attempt.id}>
+          <div className="decision-icon hold">{attempt.phase === 'FAILED' ? <AlertTriangle size={17} /> : <LoaderCircle className="spin" size={17} />}</div>
+          <div className="decision-copy"><div><strong>Strategy activation · {activationPhaseCopy[attempt.phase]}</strong><span>{attempt.name}</span></div><p>{attempt.error ?? 'Confirmed stages are journaled immediately. Closing or refreshing this page will not erase the visible evidence.'}</p><div className="decision-tags"><span>{attempt.stablecoin}</span><span>{attempt.fundingAmount} tBNB funded</span><span>{shortAddress(attempt.smartWallet)}</span>{attempt.normalizationDecision && <span>Startup conversion confirmed</span>}{attempt.grantTxHash && <span>Policy registered</span>}{attempt.moduleReceipts?.length ? <span>{completedPancakeModules(attempt.moduleReceipts).size}/4 modules</span> : null}</div></div>
+          <div className="decision-evidence"><strong className={attempt.phase === 'FAILED' ? 'evidence-failed' : 'evidence-policy_only'}>{attempt.phase === 'FAILED' ? 'NEEDS ATTENTION' : 'IN PROGRESS'}</strong><span>{new Date(attempt.updatedAt).toLocaleString()}</span>{latestHash && <a href={txUrl(latestHash)} target="_blank" rel="noreferrer">Latest proof <ExternalLink size={12} /></a>}</div>
+        </article>
+      })}
       {moduleReceipts.map(({ mandate, moduleReceipt }) => {
         const Icon = moduleReceipt.module === 'SWAP' ? ArrowDownUp : moduleReceipt.module === 'LIQUIDITY' ? Waves : moduleReceipt.module === 'FARM' ? Layers3 : Leaf
         return <article key={moduleReceipt.id}>
@@ -839,6 +879,7 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [walletPickerOpen, setWalletPickerOpen] = useState(false)
   const [mandates, setMandates] = useState<Mandate[]>(loadMandates)
+  const [activationAttempts, setActivationAttempts] = useState<ActivationAttempt[]>(loadActivationAttempts)
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null)
   const [snapshotLoading, setSnapshotLoading] = useState(false)
   const [snapshotError, setSnapshotError] = useState('')
@@ -864,6 +905,7 @@ function App() {
   const closeWalletPicker = useCallback(() => setWalletPickerOpen(false), [])
 
   useEffect(() => { localStorage.setItem(mandateStorageKey, JSON.stringify(mandates)) }, [mandates])
+  useEffect(() => { localStorage.setItem(activationStorageKey, JSON.stringify(activationAttempts)) }, [activationAttempts])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }) }, [view])
   useEffect(() => { if (menuOpen) mobileCloseButton.current?.focus() }, [menuOpen])
   useEffect(() => {
@@ -1055,10 +1097,32 @@ function App() {
   }
 
   async function startMandate(draft: MandateDraft) {
-    if (!altana.address) return
+    const smartWallet = altana.address
+    if (!smartWallet) throw new Error('Create or recover the Passkey smart account before activation.')
     if (!draft.stablecoinSelection || draft.stablecoinSelection.stablecoin !== draft.stablecoin) {
       throw new Error('Generate the strategy again so the stablecoin allocation agent can select the base asset.')
     }
+    const attemptId = crypto.randomUUID()
+    const goalName = goalOptions.find((goal) => goal.id === draft.goal)?.name ?? 'Managed portfolio'
+    const now = new Date().toISOString()
+    const updateAttempt = (patch: Partial<ActivationAttempt>) => {
+      setActivationAttempts((current) => current.map((item) => item.id === attemptId ? {
+        ...item,
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      } : item))
+    }
+    setActivationAttempts((current) => [{
+      id: attemptId,
+      name: `${goalName} strategy`,
+      createdAt: now,
+      updatedAt: now,
+      stablecoin: draft.stablecoin,
+      smartWallet,
+      fundingAmount: draft.amount,
+      phase: 'PREPARING',
+    }, ...current])
+    try {
     const [fundingSnapshot, refreshedMarket] = await Promise.all([refreshSnapshot(draft.stablecoin), refreshPancakeMarket()])
     if (!fundingSnapshot) throw new Error('Portfolio data is unavailable.')
     const requestedFunding = safeParseNative(draft.amount)
@@ -1071,9 +1135,12 @@ function App() {
       ? fundingSnapshot.nativeBalance - GAS_RESERVE
       : 0n
     if (nativeForConversion > 0n) {
+      updateAttempt({ phase: 'NORMALIZING' })
       normalization = await altana.normalizeFunding(draft.stablecoin, nativeForConversion)
     }
     const normalizationDecision = normalization ? buildNormalizationDecision(normalization, draft.stablecoinSelection) : null
+    if (normalizationDecision) updateAttempt({ normalizationDecision, phase: 'REVIEWING' })
+    else updateAttempt({ phase: 'REVIEWING' })
     const latestSnapshot = await refreshSnapshot(draft.stablecoin)
     if (!latestSnapshot || latestSnapshot.stableBalance <= 0n) {
       throw new Error(`The owner startup conversion did not produce ${draft.stablecoin}. Review the wallet transaction before retrying.`)
@@ -1117,18 +1184,24 @@ function App() {
       executionPlan,
       committee,
     }, latestSnapshot)
+    updateAttempt({ phase: 'APPROVING' })
+    const recordActivationProgress = (progress: PancakeActivationProgress) => {
+      if (progress.phase === 'APPROVED') updateAttempt({ phase: 'GRANTING', approvalTxHash: progress.transactionHash })
+      else if (progress.phase === 'GRANTED') updateAttempt({ phase: 'DEPLOYING', grantTxHash: progress.transactionHash })
+      else updateAttempt({ phase: 'DEPLOYING', moduleReceipts: progress.receipts })
+    }
     const proof = await altana.activateDeFiPortfolio(
       draft.duration,
       strategy,
       latestSnapshot,
       executionPlan,
       review.gate.status === 'AUTO_EXECUTE',
+      recordActivationProgress,
     )
     const id = crypto.randomUUID()
     runtimeSessions.current.set(id, proof.session)
     setRuntimeMandateIds((current) => [...current, id])
     const decision = buildDeploymentDecision(executionPlan, proof, review)
-    const goalName = goalOptions.find((goal) => goal.id === draft.goal)?.name ?? 'Managed portfolio'
     const strategyAllocations = Object.fromEntries(strategy.sleeves.map((sleeve) => [sleeve.id, sleeve.allocationBps])) as Record<StrategySleeveId, number>
     const mandate: Mandate = {
       id,
@@ -1161,12 +1234,20 @@ function App() {
     }
     setPancakePositions(proof.positions)
     setMandates((current) => [mandate, ...current])
+    setActivationAttempts((current) => current.filter((item) => item.id !== attemptId))
     await refreshSnapshot(draft.stablecoin)
     setView('overview')
     const confirmedModules = completedPancakeModules(proof.receipts)
     setNotice(confirmedModules.size === 4
       ? `The allocation agent selected ${draft.stablecoin}; Swap, LP, Farm, and Earn all confirmed on BSC Testnet.`
       : `The strategy is active with ${confirmedModules.size}/4 modules confirmed. Review Activity before retrying any incomplete adapter.`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Strategy activation did not complete.'
+      updateAttempt({ phase: 'FAILED', error: message })
+      setView('decisions')
+      setNotice(message)
+      throw error
+    }
   }
 
   async function revokeMandate(id: string) {
@@ -1237,7 +1318,7 @@ function App() {
   return <div className="app-shell">
     <header className="app-header"><div className="app-header-inner">
       <button className="header-brand" onClick={() => setView('overview')}><span className="brand-mark"><BarChart3 size={19} /></span><span><strong>MandateFi</strong><small>AI DeFi Manager</small></span></button>
-      <nav className="top-navigation">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => setView(item.id)}><Icon size={16} /><span>{item.label}</span>{item.id === 'decisions' && mandates.some((mandate) => mandate.decisions.length) && <b>{mandates.reduce((sum, mandate) => sum + mandate.decisions.length, 0)}</b>}</button> })}</nav>
+      <nav className="top-navigation">{navItems.map((item) => { const Icon = item.icon; const activityCount = mandates.reduce((sum, mandate) => sum + mandate.decisions.length + (mandate.moduleReceipts?.length ?? 0), 0) + activationAttempts.length; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => setView(item.id)}><Icon size={16} /><span>{item.label}</span>{item.id === 'decisions' && activityCount > 0 && <b>{activityCount}</b>}</button> })}</nav>
       <div className="header-actions"><span className="header-network"><i className={wallet.isTargetNetwork ? 'online' : ''} /> BNB Testnet</span><button ref={walletButton} className={wallet.isConnected ? 'wallet-button connected' : 'wallet-button'} disabled={wallet.status === 'connecting'} onClick={openWalletPicker} title={wallet.selectedWallet?.name ?? 'Connect wallet'}><Wallet size={17} /><span className="wallet-button-copy">{wallet.status === 'connecting' ? <strong>Connecting...</strong> : wallet.account ? <><strong>{wallet.selectedWallet?.name ?? 'Wallet'} · {shortAddress(wallet.account)}</strong><small>{!wallet.isTargetNetwork ? 'Switch to BNB Testnet' : wallet.balanceStatus === 'loading' ? 'Reading balance...' : wallet.balanceStatus === 'error' ? 'Balance unavailable' : `${wallet.balance ?? '0'} tBNB`}</small></> : <strong>Connect wallet</strong>}</span></button><button ref={mobileMenuButton} className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></button></div>
     </div>
     <nav className={`mobile-navigation ${menuOpen ? 'open' : ''}`}><div><strong>Navigate</strong><button ref={mobileCloseButton} className="icon-button" onClick={closeMobileMenu} aria-label="Close menu"><X size={18} /></button></div>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => { setView(item.id); closeMobileMenu() }}><Icon size={18} /><span>{item.label}</span></button> })}<aside><ShieldCheck size={17} /><span><strong>{activeMandate ? activeMandate.name : 'Owner-controlled by default'}</strong><small>{activeMandate ? `${activeMandate.managedAmount} tBNB → ${activeMandate.stablecoin} · ${riskProfiles[activeMandate.riskProfile].name}` : 'Passkey admin and revocable scope'}</small></span></aside></nav>
@@ -1246,7 +1327,7 @@ function App() {
     <main className="main-area" inert={menuOpen ? true : undefined} aria-hidden={menuOpen ? true : undefined}><div className="page-content">
       {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} positions={pancakePositions} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
       {view === 'create' && <MandateWizard snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} walletName={wallet.selectedWallet?.name ?? 'Browser wallet'} walletBalance={wallet.balance} walletBalanceStatus={wallet.balanceStatus} altanaAddress={altana.address} altanaBalance={altana.balance} altanaBalanceWei={altana.balanceWei} altanaStage={altana.stage} altanaError={altana.error} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} isPasskeySupported={altana.isPasskeySupported} onConnect={openWalletPicker} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={fundAltanaWallet} onStart={startMandate} onCancel={() => setView('overview')} />}
-      {view === 'decisions' && <DecisionLog mandates={mandates} />}
+      {view === 'decisions' && <DecisionLog mandates={mandates} activationAttempts={activationAttempts} />}
       {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} exitingId={exitingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onExit={(id) => void exitMandateAssets(id)} onCreate={() => setView('create')} />}
       {view === 'about' && <AboutPage onCreate={() => setView('create')} />}
     </div></main>

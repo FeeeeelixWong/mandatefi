@@ -35,6 +35,31 @@ export interface Mandate {
   decisions: DecisionRecord[]
 }
 
+export type ActivationPhase =
+  | 'PREPARING'
+  | 'NORMALIZING'
+  | 'REVIEWING'
+  | 'APPROVING'
+  | 'GRANTING'
+  | 'DEPLOYING'
+  | 'FAILED'
+
+export interface ActivationAttempt {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+  stablecoin: StablecoinSymbol
+  smartWallet: `0x${string}`
+  fundingAmount: string
+  phase: ActivationPhase
+  error?: string
+  normalizationDecision?: DecisionRecord
+  approvalTxHash?: `0x${string}`
+  grantTxHash?: `0x${string}`
+  moduleReceipts?: PancakeModuleReceipt[]
+}
+
 export type PancakeModule = 'SWAP' | 'LIQUIDITY' | 'FARM' | 'EARN'
 
 export interface PancakeModuleReceipt {
