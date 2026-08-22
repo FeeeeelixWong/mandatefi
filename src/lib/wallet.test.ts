@@ -3,6 +3,7 @@ import type { Address, Hex } from 'viem'
 import {
   getLegacyInjectedWallets,
   mergeInjectedWallets,
+  readNativeBalance,
   sendNativeTransfer,
   walletFromAnnouncement,
   type Eip1193Provider,
@@ -61,5 +62,26 @@ describe('sendNativeTransfer', () => {
     const address = '0x1111111111111111111111111111111111111111' as Address
 
     await expect(sendNativeTransfer(provider, address, address, 1n)).rejects.toThrow('invalid transaction hash')
+  })
+})
+
+describe('readNativeBalance', () => {
+  it('reads the connected address balance through the selected wallet provider', async () => {
+    const request = vi.fn().mockResolvedValue('0xde0b6b3a7640000')
+    const selectedProvider = { request } as Eip1193Provider
+    const address = '0x1111111111111111111111111111111111111111' as Address
+
+    await expect(readNativeBalance(selectedProvider, address)).resolves.toBe(1_000_000_000_000_000_000n)
+    expect(request).toHaveBeenCalledWith({
+      method: 'eth_getBalance',
+      params: [address, 'latest'],
+    })
+  })
+
+  it('rejects malformed balance responses', async () => {
+    const selectedProvider = { request: vi.fn().mockResolvedValue('not-a-balance') } as Eip1193Provider
+    const address = '0x1111111111111111111111111111111111111111' as Address
+
+    await expect(readNativeBalance(selectedProvider, address)).rejects.toThrow('invalid native balance')
   })
 })

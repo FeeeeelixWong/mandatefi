@@ -45,7 +45,7 @@ MandateFi discovers wallets with EIP-6963 and falls back to wallet-specific inje
 
 The current connector supports OKX Wallet, MetaMask, Rabby Wallet, Coinbase Wallet, Trust Wallet, Binance Wallet, Phantom EVM, Brave Wallet, and other standards-compatible EIP-1193/EIP-6963 browser wallets. The selected extension controls only the owner EOA; managed assets remain in the owner's separate Passkey smart account.
 
-After connection, MandateFi reads the selected owner's native balance directly from BNB Smart Chain Testnet and shows it in the header, wallet details, and funding review. The balance refreshes when the account or network changes and after a funding transaction; users can also refresh it manually from the wallet dialog.
+After connection, MandateFi reads the selected owner's native balance through that exact wallet provider, with the BNB Smart Chain Testnet RPC as a fallback, and shows it in the header, wallet details, and funding review. The balance refreshes when the account or network changes and after a funding transaction; users can also refresh it manually from the wallet dialog.
 
 ## Product Logic
 

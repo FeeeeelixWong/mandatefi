@@ -6,6 +6,7 @@ import {
   mergeInjectedWallets,
   readAccounts,
   readChainId,
+  readNativeBalance,
   requestAccounts,
   switchToBscTestnet,
   walletErrorMessage,
@@ -66,7 +67,7 @@ export function useInjectedWallet() {
     }
   }, [registerWallet])
 
-  const refreshBalance = useCallback(async (address: Address | null, activeChainId: number | null) => {
+  const refreshBalance = useCallback(async (address: Address | null, activeChainId: number | null, activeProvider?: Eip1193Provider) => {
     const requestId = ++balanceRequest.current
     if (!address || activeChainId !== TARGET_CHAIN.id) {
       setBalance(null)
@@ -75,7 +76,13 @@ export function useInjectedWallet() {
     }
     setBalanceStatus('loading')
     try {
-      const wei = await bscTestnetClient.getBalance({ address })
+      let wei: bigint
+      try {
+        if (!activeProvider) throw new Error('No selected wallet provider.')
+        wei = await readNativeBalance(activeProvider, address)
+      } catch {
+        wei = await bscTestnetClient.getBalance({ address })
+      }
       if (requestId !== balanceRequest.current) return
       setBalance(Number(formatEther(wei)).toLocaleString(undefined, { maximumFractionDigits: 6 }))
       setBalanceStatus('ready')
@@ -94,7 +101,7 @@ export function useInjectedWallet() {
       setAccount(nextAccount)
       setChainId(activeChainId)
       setStatus(nextAccount ? 'connected' : 'idle')
-      await refreshBalance(nextAccount, activeChainId)
+      await refreshBalance(nextAccount, activeChainId, activeProvider)
     } catch (syncError) {
       setError(walletErrorMessage(syncError))
       setStatus('error')
@@ -128,7 +135,7 @@ export function useInjectedWallet() {
       setAccount(nextAccount)
       setChainId(activeChainId)
       setStatus('connected')
-      await refreshBalance(nextAccount, activeChainId)
+      await refreshBalance(nextAccount, activeChainId, wallet.provider)
       return true
     } catch (connectError) {
       setError(walletErrorMessage(connectError))

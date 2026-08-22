@@ -167,6 +167,17 @@ export async function readChainId(provider: Eip1193Provider): Promise<number> {
   return Number.parseInt(chainId, 16)
 }
 
+export async function readNativeBalance(provider: Eip1193Provider, address: Address): Promise<bigint> {
+  const balance = await provider.request({
+    method: 'eth_getBalance',
+    params: [address, 'latest'],
+  })
+  if (typeof balance !== 'string' || !/^0x[0-9a-f]+$/i.test(balance)) {
+    throw new Error('Wallet returned an invalid native balance.')
+  }
+  return BigInt(balance)
+}
+
 export async function switchToBscTestnet(provider: Eip1193Provider) {
   try {
     await provider.request({
