@@ -292,9 +292,13 @@
 .amount-field b { font-size: 12px; }
 .amount-field small, .field-note { min-width: 0; width: 100%; max-width: 100%; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
 .amount-field small.field-error { color: #c03a73; }
-.quick-values { margin-top: 8px; display: flex; gap: 7px; }
-.quick-values button { min-width: 58px; min-height: 34px; border: 1px solid var(--line); border-radius: 6px; color: var(--purple); background: #fff; cursor: pointer; font-size: 11px; font-weight: 700; }
-.quick-values button.active { border-color: #c5afe8; background: var(--purple-soft); }
+.ai-stablecoin-delegation { margin-top: 12px; padding: 12px; border: 1px solid #d9ccef; border-radius: 7px; display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 10px; background: #fbf9ff; }
+.ai-stablecoin-delegation > span { width: 36px; height: 36px; border-radius: 7px; display: grid; place-items: center; color: var(--purple); background: var(--purple-soft); }
+.ai-stablecoin-delegation > div { min-width: 0; }
+.ai-stablecoin-delegation strong { font-size: 11px; }
+.ai-stablecoin-delegation p { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.stablecoin-candidates { display: flex; gap: 5px; }
+.stablecoin-candidates span { padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); background: #fff; font-size: 9px; font-weight: 700; }
 .option-field, .segmented-field { margin: 12px 0 0; padding: 0; border: 0; }
 .option-field legend, .segmented-field legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .option-field > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -315,6 +319,22 @@
 .strategy-review-intro, .approval-intro { padding: 24px 22px 16px; }
 .strategy-review-intro h2, .approval-intro h2 { margin: 5px 0; font-size: 24px; font-weight: 600; }
 .strategy-review-intro p, .approval-intro p { max-width: 620px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.stablecoin-recommendation { margin: 0 22px 18px; padding: 14px; border: 1px solid #cdb8eb; border-radius: 8px; display: grid; grid-template-columns: 40px minmax(0, 1fr) 132px; align-items: start; gap: 12px; background: #fbf9ff; }
+.stablecoin-recommendation-icon { width: 40px; height: 40px; border-radius: 7px; display: grid; place-items: center; color: var(--purple); background: var(--purple-soft); }
+.stablecoin-recommendation-copy { min-width: 0; }
+.stablecoin-recommendation-copy > span, .stablecoin-recommendation aside > span { color: var(--muted); font-size: 9px; text-transform: uppercase; }
+.stablecoin-recommendation-copy > div { margin-top: 2px; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.stablecoin-recommendation h3 { margin: 0; font-family: Kanit, Inter, sans-serif; font-size: 24px; font-weight: 600; }
+.stablecoin-recommendation-copy b, .stablecoin-recommendation-copy em { padding: 3px 6px; border-radius: 4px; font-size: 9px; font-style: normal; }
+.stablecoin-recommendation-copy b { color: #14775a; background: var(--mint-soft); }
+.stablecoin-recommendation-copy em { color: var(--purple); background: var(--purple-soft); }
+.stablecoin-recommendation-copy p { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.stablecoin-factor-list { margin-top: 7px; display: flex; flex-wrap: wrap; gap: 5px 9px; }
+.stablecoin-factor-list span { display: inline-flex; align-items: center; gap: 3px; color: var(--ink); font-size: 9px; }
+.stablecoin-factor-list svg { color: #14775a; }
+.stablecoin-recommendation aside { padding-left: 12px; border-left: 1px solid var(--line); display: grid; gap: 2px; }
+.stablecoin-recommendation aside strong { font-family: Kanit, Inter, sans-serif; font-size: 20px; font-weight: 600; }
+.stablecoin-recommendation aside small { margin-bottom: 7px; color: var(--muted); font-size: 8px; line-height: 1.3; overflow-wrap: anywhere; }
 .strategy-review-allocation { border-bottom: 1px solid var(--line); }
 .review-actions article { min-height: 92px; padding: 14px 22px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 12px; }
 .review-actions article > div strong { font-size: 12px; }
@@ -480,6 +500,8 @@
   .navigation-scrim { position: fixed; inset: 0; z-index: 60; display: block; visibility: hidden; border: 0; opacity: 0; background: rgba(40,13,95,.34); transition: opacity .2s ease, visibility 0s linear .2s; }
   .navigation-scrim.visible { visibility: visible; opacity: 1; transition-delay: 0s; }
   .about-section { grid-template-columns: 1fr; gap: 24px; }
+  .configurator-grid { grid-template-columns: 1fr; }
+  .strategy-preview { border-top: 1px solid var(--line); border-left: 0; }
 }
 
 @media (max-width: 760px) {
@@ -544,12 +566,18 @@
   .strategy-preview { border-top: 1px solid var(--line); border-left: 0; }
   .config-section { padding: 18px 16px; }
   .config-section-heading { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .ai-stablecoin-delegation { grid-template-columns: 36px minmax(0, 1fr); }
+  .stablecoin-candidates { grid-column: 2; }
   .option-field > div, .config-pair { grid-template-columns: 1fr; }
   .option-field button { min-height: 76px; }
   .config-actions { padding: 12px 16px; align-items: stretch; flex-direction: column; }
   .config-actions > div { justify-content: center; }
   .config-actions > button { width: 100%; }
   .strategy-review-intro, .approval-intro { padding: 20px 16px 14px; }
+  .stablecoin-recommendation { margin: 0 16px 16px; grid-template-columns: 36px minmax(0, 1fr); }
+  .stablecoin-recommendation-icon { width: 36px; height: 36px; }
+  .stablecoin-recommendation aside { grid-column: 2; padding: 10px 0 0; border-top: 1px solid var(--line); border-left: 0; grid-template-columns: 1fr auto; align-items: baseline; }
+  .stablecoin-recommendation aside small { grid-column: 1 / -1; }
   .review-actions article { padding: 14px 16px; }
   .advanced-policy summary { padding: 0 16px; }
   .advanced-policy-grid { padding: 0 16px 16px; grid-template-columns: 1fr; }

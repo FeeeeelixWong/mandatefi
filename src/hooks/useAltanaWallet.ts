@@ -8,7 +8,6 @@ import type { StablecoinSymbol } from '../lib/tokens'
 
 export type AltanaStage = 'idle' | 'creating' | 'recovering' | 'funding' | 'normalizing' | 'granting' | 'executing' | 'revoking' | 'withdrawing' | 'error'
 
-const fundingAmount = parseEther('0.01')
 const minimumBalance = parseEther('0.003')
 
 function operationErrorMessage(error: unknown) {
@@ -91,7 +90,7 @@ export function useAltanaWallet() {
     }
   }, [refreshBalance])
 
-  const fund = useCallback(async (provider: Eip1193Provider, from: Address, amount = fundingAmount) => {
+  const fund = useCallback(async (provider: Eip1193Provider, from: Address, amount: bigint) => {
     if (!profile) throw new Error('Create or recover the Altana wallet first.')
     setStage('funding')
     setError('')

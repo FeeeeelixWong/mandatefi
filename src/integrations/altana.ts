@@ -28,7 +28,6 @@ import { BSC_TESTNET_WBNB as CONFIGURED_WBNB, stablecoinConfig, type StablecoinS
 const STORAGE_KEY = 'mandatefi.altana-wallet.v1'
 
 export const ALTANA_CHAIN_ID = BNB_TESTNET.chainId
-export const ALTANA_FUNDING_AMOUNT = parseEther('0.01')
 export const ALTANA_MINIMUM_BALANCE = parseEther('0.003')
 export const ALTANA_NATIVE_FEE_CAP = parseEther('0.003')
 export const ALTANA_KEYSTORE = BNB_TESTNET.keyStore
@@ -415,6 +414,30 @@ export async function readPortfolioSnapshot(address: Address, symbol: Stablecoin
   }
 }
 
+export async function quoteFundingNormalization(
+  symbol: StablecoinSymbol,
+  amountIn: bigint,
+): Promise<PortfolioRebalanceQuote> {
+  if (amountIn <= 0n) throw new Error('Enter a funding amount before comparing stablecoin routes.')
+  const stablecoin = stablecoinConfig(symbol)
+  const amounts = await bscTestnetClient.readContract({
+    address: stablecoin.router,
+    abi: pancakeRouterAbi,
+    functionName: 'getAmountsOut',
+    args: [amountIn, [BSC_TESTNET_WBNB, stablecoin.address]],
+  })
+  const quotedOut = amounts.at(-1)
+  if (!quotedOut || quotedOut <= 0n) throw new Error(`PancakeSwap returned no executable tBNB to ${symbol} quote.`)
+  return {
+    amountIn,
+    quotedOut,
+    minimumOut: minimumOutputFor(quotedOut, 100n),
+    slippageBps: 100n,
+    inputSymbol: 'tBNB',
+    outputSymbol: symbol,
+  }
+}
+
 async function waitForStablecoinIncrease(address: Address, symbol: StablecoinSymbol, before: bigint) {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const current = await readStablecoinBalance(address, symbol)
@@ -438,24 +461,8 @@ export async function normalizeAltanaFunding(
   symbol: StablecoinSymbol,
   amountIn: bigint,
 ): Promise<AltanaNormalizationProof> {
-  if (amountIn <= 0n) throw new Error('No tBNB is available for startup conversion.')
   const stablecoin = stablecoinConfig(symbol)
-  const amounts = await bscTestnetClient.readContract({
-    address: stablecoin.router,
-    abi: pancakeRouterAbi,
-    functionName: 'getAmountsOut',
-    args: [amountIn, [BSC_TESTNET_WBNB, stablecoin.address]],
-  })
-  const quotedOut = amounts.at(-1)
-  if (!quotedOut || quotedOut <= 0n) throw new Error(`PancakeSwap returned no executable tBNB to ${symbol} quote.`)
-  const quote: PortfolioRebalanceQuote = {
-    amountIn,
-    quotedOut,
-    minimumOut: minimumOutputFor(quotedOut, 100n),
-    slippageBps: 100n,
-    inputSymbol: 'tBNB',
-    outputSymbol: symbol,
-  }
+  const quote = await quoteFundingNormalization(symbol, amountIn)
   const outputBefore = await readStablecoinBalance(profile.wallet.address, symbol)
   const deadline = BigInt(Math.floor(Date.now() / 1000) + SAFE_REBALANCE_DEADLINE_SECONDS)
   const transaction = await altanaClient.execute({

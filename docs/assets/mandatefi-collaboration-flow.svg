@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
   <title id="title">MandateFi user, system, agent, and execution collaboration flow</title>
-  <desc id="desc">The owner deposits tBNB into an owner-controlled Passkey smart account. An owner-signed startup transaction converts capital to USDT or USDC while retaining a protected gas reserve, then a revocable AI mandate begins. MandateFi collects live evidence and triggers five specialist agents. A deterministic risk gate controls PancakeSwap execution, including recorded gas refills.</desc>
+  <desc id="desc">The owner manually enters a tBNB amount and mandate preferences. A stablecoin allocation agent compares USDT and USDC evidence before the owner reviews and signs the startup conversion. MandateFi then triggers five specialist agents and a portfolio manager. A deterministic risk gate controls PancakeSwap execution, including recorded gas refills.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
       <path d="M0 0 L10 5 L0 10 Z" fill="#7645d9"/>
@@ -28,7 +28,7 @@
   <rect width="1600" height="900" fill="#f7f7fb"/>
   <rect x="0" y="0" width="1600" height="112" fill="#ffffff"/>
   <text x="56" y="53" class="title">How MandateFi works</text>
-  <text x="56" y="84" class="subtitle">The owner defines authority. AI analyzes evidence. Deterministic policy controls execution.</text>
+  <text x="56" y="84" class="subtitle">You set the mandate. AI selects the base and manages the strategy. Deterministic policy controls execution.</text>
 
   <!-- Column backgrounds -->
   <rect x="48" y="144" width="286" height="624" rx="8" fill="#ffffff" stroke="#dedbe8" stroke-width="2"/>
@@ -54,13 +54,13 @@
   <rect x="76" y="324" width="230" height="176" rx="8" fill="#faf9fd" stroke="#e4e0ec"/>
   <text x="96" y="354" class="small">MANDATE INPUTS</text>
   <circle cx="96" cy="384" r="4" fill="#7645d9"/><text x="110" y="389" class="body">Deposit tBNB</text>
-  <circle cx="96" cy="417" r="4" fill="#7645d9"/><text x="110" y="422" class="body">Owner converts → USDT / USDC</text>
-  <circle cx="96" cy="450" r="4" fill="#7645d9"/><text x="110" y="455" class="body">Keep 0.003 tBNB Gas target</text>
-  <circle cx="96" cy="483" r="4" fill="#7645d9"/><text x="110" y="488" class="body">Goal, risk, term, spend limits</text>
+  <circle cx="96" cy="417" r="4" fill="#7645d9"/><text x="110" y="422" class="body">Goal, risk, term, spend limits</text>
+  <circle cx="96" cy="450" r="4" fill="#7645d9"/><text x="110" y="455" class="body">Review AI-selected USDT / USDC</text>
+  <circle cx="96" cy="483" r="4" fill="#7645d9"/><text x="110" y="488" class="body">Keep 0.003 tBNB Gas target</text>
 
   <rect x="76" y="526" width="230" height="54" rx="8" fill="#7645d9"/>
   <path d="M98 546 h18 v18 h-18 z M102 546 v-5 a5 5 0 0 1 10 0 v5" fill="none" stroke="#ffffff" stroke-width="2"/>
-  <text x="130" y="559" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="700" fill="#ffffff">Normalize + sign</text>
+  <text x="130" y="559" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="700" fill="#ffffff">Approve choice + sign</text>
 
   <rect x="76" y="658" width="230" height="76" rx="8" fill="#fff5f6" stroke="#f2bcc5"/>
   <path d="M96 682 l12 12 M108 682 l-12 12" stroke="#d84b62" stroke-width="3" stroke-linecap="round"/>
@@ -73,9 +73,9 @@
 
   <rect x="390" y="246" width="288" height="100" rx="8" fill="#eefbfc" stroke="#b7e9ed"/>
   <path d="M414 275 h22 M414 287 h16 M414 299 h26" stroke="#159ca7" stroke-width="3" stroke-linecap="round"/>
-  <text x="454" y="278" class="card-title">Live evidence</text>
-  <text x="454" y="301" class="body">Prices, portfolio, LP, Farm, Earn</text>
-  <text x="454" y="323" class="body">gas, routes, timestamps</text>
+  <text x="454" y="278" class="card-title">Stablecoin allocator</text>
+  <text x="454" y="301" class="body">USDT vs USDC yield, TVL and peg</text>
+  <text x="454" y="323" class="body">live routes, confidence, rationale</text>
 
   <rect x="390" y="368" width="288" height="100" rx="8" fill="#f7f6fb" stroke="#dedbe8"/>
   <circle cx="426" cy="404" r="15" fill="none" stroke="#7645d9" stroke-width="3"/>

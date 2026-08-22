@@ -4,20 +4,37 @@
 
 MandateFi separates portfolio judgment from transaction authority. An asset-management expert may recommend a typed action, but it cannot create arbitrary calldata, sign a transaction, loosen a mandate, or declare an unfinished adapter executable.
 
-The Vercel runtime calls DeepSeek behind a server-only API key. Five specialist agents reason independently and a sixth portfolio-manager agent synthesizes their reports. The original deterministic engine remains as a safe fallback and implements the same structured output contract, so a model outage cannot broaden permissions or disable the risk gate.
+The Vercel runtime calls DeepSeek behind a server-only API key. A pre-mandate allocation agent first compares USDT and USDC. After activation, five specialist agents reason independently and a sixth portfolio-manager agent synthesizes their reports. Every model boundary has a typed deterministic fallback, so an outage cannot broaden permissions or disable the risk gate.
+
+## Pre-mandate stablecoin allocation
+
+The owner does not need to predict which stablecoin has the better opportunity set. After the owner manually enters the funding amount and chooses the mandate preferences, `api/strategy/stablecoin.ts`:
+
+1. reads timestamped USDT and USDC prices from the official PancakeSwap market feed;
+2. measures peg deviation for both candidates;
+3. filters LP and Farm opportunities by the selected risk profile and minimum TVL;
+4. compares observed APR, liquidity depth, and the count of eligible opportunities;
+5. obtains both BSC Testnet tBNB normalization quotes;
+6. asks a dedicated DeepSeek allocation agent for one typed choice, confidence, rationale, and key factors;
+7. falls back to deterministic risk-adjusted scoring if the model is unavailable.
+
+The output is evidence, not authority. The owner reviews the result before the Passkey signs the startup conversion, and the final session permits only that one reviewed token. Observed APR is not a forecast or guaranteed return.
 
 ## Decision pipeline
 
 ```mermaid
 flowchart LR
-  M["One-minute monitor"] --> T["Trigger engine"]
+  U["Owner amount and preferences"] --> S["USDT / USDC allocation agent"]
+  S --> O1["Owner reviews selected base"]
+  O1 --> M["One-minute monitor"]
+  M --> T["Trigger engine"]
   T -->|"No trigger"| N["No review and no transaction"]
   T -->|"Schedule, drift, event, or owner request"| C["Five parallel DeepSeek specialist agents"]
   C --> P["DeepSeek portfolio-manager agent"]
   P --> R["Typed recommendation"]
   R --> G["Deterministic risk gate"]
   G -->|"AUTO_EXECUTE"| X["Reviewed live adapter"]
-  G -->|"APPROVAL_REQUIRED"| O["Owner review"]
+  G -->|"APPROVAL_REQUIRED"| O2["Owner reviews proposed action"]
   G -->|"DEFERRED"| C["Cooldown"]
   G -->|"BLOCKED"| B["No live adapter"]
   G -->|"HOLD"| H["Record rationale only"]

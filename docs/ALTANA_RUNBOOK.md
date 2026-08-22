@@ -4,16 +4,18 @@
 
 The current live path proves the owner-controlled foundation of the broader multi-strategy product:
 
-1. The owner selects a tBNB funding amount, USDT or USDC as the portfolio base, an outcome, risk, liquidity access, and duration.
-2. MandateFi generates a four-sleeve PancakeSwap strategy and explicit guardrails.
-3. The UI labels each action as live, owner approval, or adapter planned.
-4. A device passkey controls an Altana smart wallet.
-5. The owner deposits tBNB into the Passkey smart account; any existing tBNB in this dedicated account counts toward the target.
-6. On activation, the owner Passkey converts all tBNB above `0.003 tBNB` to the selected stablecoin before granting AI authority.
-7. The live Swap adapter reads selected stablecoin and tBNB Gas balances plus a PancakeSwap V2 quote.
-8. An expiring Altana session can execute only the selected token and permitted Swap path, including a bounded Gas refill below `0.0015 tBNB`.
-9. Startup conversion, portfolio rebalancing, and Gas refill are separate Activity records with public transaction evidence.
-10. The owner can inspect decisions, pause local checks, revoke the session onchain, or return assets through the owner-only Passkey path.
+1. The owner manually enters a tBNB funding amount, outcome, risk, liquidity access, and duration. The product provides no preset deposit amounts.
+2. A dedicated allocation agent compares USDT and USDC yield, TVL, peg deviation, eligible opportunities, and live PancakeSwap normalization quotes.
+3. The owner reviews the AI-selected base asset and its evidence; this recommendation does not grant wallet authority.
+4. MandateFi generates a four-sleeve PancakeSwap strategy and explicit guardrails.
+5. The UI labels each action as live, owner approval, or adapter planned.
+6. A device passkey controls an Altana smart wallet.
+7. The owner deposits tBNB into the Passkey smart account; any existing tBNB in this dedicated account counts toward the target.
+8. On activation, the owner Passkey converts all tBNB above `0.003 tBNB` to the reviewed AI-selected stablecoin before granting AI authority.
+9. The live Swap adapter reads that stablecoin and tBNB Gas balances plus a PancakeSwap V2 quote.
+10. An expiring Altana session can execute only the selected token and permitted Swap path, including a bounded Gas refill below `0.0015 tBNB`.
+11. Stablecoin selection, startup conversion, portfolio rebalancing, and Gas refill are separate evidence or Activity records.
+12. The owner can inspect decisions, pause local checks, revoke the session onchain, or return assets through the owner-only Passkey path.
 
 This runbook does not claim that Infinity Liquidity, Farms, or Earn adapters are already autonomous. They are part of the generated strategy and are clearly marked by their current coverage.
 
@@ -26,10 +28,10 @@ This runbook does not claim that Infinity Liquidity, Farms, or Earn adapters are
 | Liquid-reserve target | Reserve sleeve from the composed owner strategy | Swap evaluator |
 | Drift and action limits | Selected risk profile | Swap evaluator |
 | Funding | tBNB deposited into the owner Passkey account | Injected-wallet transfer |
-| Portfolio base | Test USDT `0x337610...34dDd` or test USDC `0xCA8eB2...623D` | Owner-signed startup conversion and token-specific policy |
+| Portfolio base | AI-selected test USDT `0x337610...34dDd` or test USDC `0xCA8eB2...623D` | Typed selection evidence, owner review, owner-signed startup conversion, and token-specific policy |
 | Gas | Target `0.003 tBNB`; refill trigger below `0.0015 tBNB` | Deterministic balance check and recorded reverse Swap |
 | Router | Token-specific verified PancakeSwap V2 testnet router | Altana call permission |
-| Methods | Two Swap methods plus selected stablecoin approval | Altana call permission |
+| Methods | Two Swap methods plus approval for the reviewed AI-selected stablecoin only | Altana call permission |
 | Native and token daily caps | Derived from managed value and risk | Altana spend permission |
 | Recipient | Active Altana smart wallet | Transaction builder |
 | Slippage | 0.5%, 1%, or 1.5% by risk profile | PancakeSwap calldata |
@@ -39,24 +41,25 @@ This runbook does not claim that Infinity Liquidity, Farms, or Earn adapters are
 
 1. Open MandateFi over HTTPS or `localhost` in a passkey-capable browser.
 2. Select **Build my strategy**.
-3. Enter the managed amount, objective, risk, liquidity access, and duration.
-4. Review the four-sleeve allocation, ordered PancakeSwap actions, coverage, and hard limits.
-5. Continue to approval and inspect the exact live Swap permissions.
-6. Connect an injected wallet and switch to BNB Smart Chain Testnet.
-7. Create or recover the Altana passkey smart wallet.
-8. Deposit the missing tBNB needed to reach the displayed funding target. Existing tBNB in this dedicated account may be reused.
-9. Select **Normalize and start** and approve the owner Passkey startup conversion.
-10. Approve the second Passkey prompt that grants the bounded, expiring AI session.
-11. Wait for the grant and any approved initial strategy action to confirm.
-12. Inspect **Portfolio**, **Activity**, and **Guardrails**.
-13. Select **Revoke onchain** to remove AI authority, or **Exit assets** to revoke first and return stablecoin plus excess Gas to the connected owner wallet.
+3. Manually enter the managed amount, objective, risk, liquidity access, and duration.
+4. Let the allocation agent compare USDT and USDC, then review its selected base asset, confidence, rationale, and evidence.
+5. Review the four-sleeve allocation, ordered PancakeSwap actions, coverage, and hard limits.
+6. Continue to approval and inspect the exact live Swap permissions for the selected token.
+7. Connect an injected wallet and switch to BNB Smart Chain Testnet.
+8. Create or recover the Altana passkey smart wallet.
+9. Deposit the missing tBNB needed to reach the displayed funding target. Existing tBNB in this dedicated account may be reused.
+10. Select **Normalize and start** and approve the owner Passkey startup conversion.
+11. Approve the second Passkey prompt that grants the bounded, expiring AI session.
+12. Wait for the grant and any approved initial strategy action to confirm.
+13. Inspect **Portfolio**, **Activity**, and **Guardrails**.
+14. Select **Revoke onchain** to remove AI authority, or **Exit assets** to revoke first and return stablecoin plus excess Gas to the connected owner wallet.
 
 If the grant succeeds but execution fails, MandateFi retains the public grant information and keeps revoke available. A partial activation never becomes an invisible authorization.
 
 ## Custody and Runtime Boundary
 
 - The injected wallet only deposits tBNB into the owner's smart account and receives assets on owner exit.
-- Initial tBNB-to-stablecoin normalization is owner-signed and occurs before the scoped AI session exists.
+- Stablecoin selection is advisory and produces no transaction permission. Initial tBNB-to-stablecoin normalization remains owner-signed and occurs before the scoped AI session exists.
 - Stablecoin capital and the protected tBNB Gas reserve remain separate in planning, reporting, and caps.
 - Every future stablecoin-to-tBNB Gas refill has purpose `GAS_TOP_UP` and a dedicated Activity record.
 - The owner passkey remains in the device authenticator.

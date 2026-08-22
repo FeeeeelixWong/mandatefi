@@ -1,5 +1,6 @@
 import type { InvestmentCommittee } from './domain/investmentCommittee'
 import type { PortfolioAsset } from './domain/portfolio'
+import type { StablecoinSelectionEvidence } from './domain/stablecoinAllocator'
 import type { StablecoinSymbol } from './lib/tokens'
 
 export interface Mandate {
@@ -8,6 +9,7 @@ export interface Mandate {
   goal: 'preserve' | 'balanced-growth' | 'maximize-growth'
   riskProfile: 'conservative' | 'balanced' | 'growth'
   stablecoin: StablecoinSymbol
+  stablecoinSelection?: StablecoinSelectionEvidence
   managedAmount: string
   managedStableCap: string
   duration: number
