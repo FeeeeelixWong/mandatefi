@@ -10,7 +10,7 @@
 
 MandateFi lets an owner enter a tBNB funding amount, set risk and liquidity preferences, and approve a revocable mandate for an owner-controlled Passkey smart account. Before any wallet permission is requested, a dedicated allocation agent compares USDT and USDC using current yield, TVL, peg stability, eligible PancakeSwap opportunities, and live execution quotes. The owner reviews that evidence; an owner-signed PancakeSwap transaction then converts funded tBNB above a protected `0.003 tBNB` Gas reserve into the AI-selected stablecoin. The strategy engine constructs a portfolio across four sleeves: liquid reserve, market exposure, liquidity yield, and farm/earn positions.
 
-PancakeSwap is the execution venue, not the strategy itself. Stablecoin-to-tBNB and tBNB-to-stablecoin swaps are the first live adapters used to prove scoped execution on BSC Testnet. Liquidity, Farms, and Earn are represented as separate strategy actions with honest coverage labels until their adapters are complete.
+PancakeSwap is the execution venue, not the strategy itself. During owner-approved activation, MandateFi now executes the complete testnet portfolio path: bounded Swap, CAKE/WBNB V2 liquidity minting, MasterChef V2 PID 4 staking, and flexible CAKE Pool deposit. Each module has a typed contract adapter, position reader, transaction receipt, and owner-only unwind path.
 
 ## Product Structure
 
@@ -20,7 +20,7 @@ PancakeSwap is the execution venue, not the strategy itself. Stablecoin-to-tBNB 
 - **MandateFi system:** gathers timestamped evidence, detects review triggers, validates model outputs, and applies the deterministic policy gate.
 - **AI allocation agent:** compares USDT and USDC before activation and produces a typed choice, confidence, rationale, and evidence record.
 - **AI committee:** five independent specialists analyze separate evidence domains; the portfolio manager synthesizes a typed recommendation but cannot sign or expand authority.
-- **Execution layer:** only the AI-selected stablecoin reviewed by the owner, its PancakeSwap router, and methods inside the signed mandate can execute; receipts and audit evidence return to the owner.
+- **Execution layer:** only the owner-reviewed stablecoin plus the fixed CAKE/WBNB V2, MasterChef V2 PID 4, and flexible CakePool targets and selectors can execute; receipts and audit evidence return to the owner.
 
 ## Funds and Custody
 
@@ -29,11 +29,13 @@ MandateFi is not a pooled vault and the Vercel backend never receives assets or 
 1. The user connects an EOA only to create and fund their own Passkey smart account with tBNB.
 2. The allocation agent ranks USDT and USDC from timestamped opportunity, peg, liquidity, and execution evidence. This recommendation grants no wallet authority.
 3. After owner review, the owner Passkey converts all account tBNB above the `0.003 tBNB` Gas target into the recommended stablecoin. This startup conversion occurs before the AI session exists.
-4. The owner Passkey grants a separate, expiring Altana session limited to that token, router, methods, daily caps, and mandate term.
-5. DeepSeek returns typed recommendations only. A deterministic gate decides whether a reviewed adapter may execute.
-6. If native Gas later falls below `0.0015 tBNB`, the engine proposes a capped stablecoin-to-tBNB route that restores the target reserve. It is labelled `GAS_TOP_UP` and recorded separately from portfolio rebalancing.
-7. Every stablecoin choice, startup conversion, portfolio swap, and Gas refill records its evidence or transaction result in **Activity**.
-8. The owner can pause locally, revoke the session onchain, or use **Exit assets** to revoke first and return stablecoins plus excess Gas to the connected owner wallet.
+4. The owner Passkey sets bounded token allowances for the exact official PancakeSwap targets. The AI session has no `approve` permission and cannot raise those allowances.
+5. The owner Passkey grants a separate, expiring Altana session limited to bounded Swap, CAKE/WBNB LP minting, MasterChef V2 PID 4 staking, flexible CAKE Pool deposits, risk-derived spend caps, and the mandate term. Withdrawal and LP-removal selectors are deliberately absent.
+6. Activation deploys all four sleeves in order and stops safely at the first failed stage instead of hiding a partial portfolio.
+7. DeepSeek returns typed recommendations only. A deterministic gate decides whether a reviewed recurring action may execute.
+8. If native Gas later falls below `0.0015 tBNB`, the engine proposes a capped stablecoin-to-tBNB route that restores the target reserve. It is labelled `GAS_TOP_UP` and recorded separately from portfolio rebalancing.
+9. Every stablecoin choice, startup conversion, Swap, LP mint, Farm stake, Earn deposit, and unwind records its transaction result in **Activity**.
+10. The owner can pause locally, revoke the session onchain, or use **Exit assets** to withdraw Earn and Farm positions, remove LP, and return liquid assets to the connected owner wallet.
 
 The current hackathon build uses BSC Testnet assets. A production release still requires audited smart-account recovery, an audited stablecoin adapter, stronger argument-level allowance constraints or Permit2, monitoring, and an emergency operations policy.
 
@@ -90,7 +92,7 @@ The deploy workflow refreshes `public/data/pancake-research.json` every 15 minut
 5. Publishes a timestamped, schema-validated snapshot with source links.
 6. Selects candidates conservatively by the owner's risk profile, liquidity, token quality, and observed yield.
 
-Displayed APRs are short-window annualized observations, not forecasts or guaranteed returns. Before any future LP, Farm, or Earn execution, MandateFi must revalidate pool state and execution costs on the execution network.
+Displayed APRs are short-window annualized observations, not forecasts or guaranteed returns. Initial testnet LP, Farm, and Earn deployment uses fresh route and reserve reads; any later migration must revalidate product state and total execution cost on the execution network.
 
 ## Strategy Sleeves
 
@@ -98,8 +100,8 @@ Displayed APRs are short-window annualized observations, not forecasts or guaran
 | --- | --- | --- | --- |
 | Liquid reserve | Withdrawals and defensive reallocation | Swap | Stable allocation and withdrawal need |
 | Market exposure | Diversified spot exposure | Swap | Asset approval, volatility, slippage, position cap |
-| Liquidity yield | Fee-generating LP positions | Infinity Liquidity | Depth, volume, range, fee tier, impermanent-loss limit |
-| Farm and earn | Incentives and single-token yield | Farms and Earn | Emissions, lock terms, exit liquidity, gas-adjusted return |
+| Liquidity yield | Fee-generating LP positions | CAKE/WBNB V2 Liquidity | Pair depth, slippage, impermanent-loss limit, exit quote |
+| Farm and earn | Incentives and single-token yield | MasterChef V2 PID 4 + flexible CAKE Pool | Emissions, lock terms, exit liquidity, gas-adjusted return |
 
 The strategy model is deterministic for the same inputs. The displayed model APY is a scenario estimate used for comparison, not a live quote or guaranteed return.
 
@@ -128,7 +130,7 @@ The strategy cannot loosen its own permissions. Depending on the selected profil
 - no leverage;
 - owner approval for actions without a live autonomous adapter.
 
-The live Altana session permits only the reviewed PancakeSwap V2 Swap methods, the AI-selected USDT or USDC approval reviewed by the owner, risk-derived daily caps, and the selected expiry. The allocation agent cannot add another token or broaden permissions. Assets remain in the Passkey-controlled smart account. The owner can revoke the session onchain and return assets with the owner Passkey path.
+The live Altana session permits only the reviewed Swap routes, CAKE/WBNB V2 liquidity minting, MasterChef V2 PID 4 staking, flexible CAKE Pool deposits, risk-derived spend caps, and the selected expiry. Token approvals, Farm/Earn withdrawals, and LP removal are owner-Passkey calls and are deliberately absent from the AI session. The allocation agent cannot add another token, contract, selector, or broader allowance. Assets and protocol position tokens remain attributable to the Passkey smart account.
 
 ## Execution Coverage
 
@@ -140,12 +142,13 @@ The live Altana session permits only the reviewed PancakeSwap V2 Swap methods, t
 | Portfolio-manager orchestration | **Live through DeepSeek with safe fallback** | Runs a sixth manager prompt, validates strict JSON, and retains event triggers, cooldowns, and a deterministic execution gate |
 | tBNB funding normalization | **Live owner-signed path on BSC Testnet** | Converts a manually entered tBNB amount above the protected Gas target into the AI-selected USDT/USDC after owner review and before any AI authority is granted |
 | PancakeSwap quote, bounded Swap, and Gas refill | **Live on BSC Testnet** | Reads selected USDT/USDC and tBNB Gas balances, distinguishes `PORTFOLIO_REBALANCE` from `GAS_TOP_UP`, calculates minimum output, and executes through a scoped Altana session |
-| Infinity liquidity position | **Research live; owner approval required** | Mainnet pools are ranked; autonomous liquidity execution is intentionally not claimed |
-| Farms position | **Research live; adapter planned** | Active MasterChef PIDs and emissions are verified; no live staking claim |
-| Earn and reward compounding | **Research live; adapter planned** | Active Syrup Pool yield and TVL are verified; no live compounding claim |
-| Pause, onchain revoke, and owner exit | **Live** | Owner can stop the local runtime, revoke the scoped session, and return stablecoin principal plus excess Gas |
+| CAKE/WBNB V2 liquidity | **Live activation and owner exit** | Converts the liquidity sleeve, mints official V2 LP tokens with bounded minimums, reads the position, and removes it with reserve-derived exit minimums |
+| MasterChef V2 Farm | **Live activation and owner exit** | Stakes minted LP in official testnet PID 4, reads `userInfo`, and withdraws LP plus pending rewards during owner exit |
+| Flexible CAKE Pool Earn | **Live activation and owner exit** | Converts the Earn sleeve to CAKE, deposits with zero lock, reads shares and CAKE value, and withdraws all shares during owner exit |
+| Recurring LP/Farm/Earn migrations | **Owner approval required** | Agents may recommend a change, but the current MVP does not autonomously migrate a position between products |
+| Pause, onchain revoke, and owner exit | **Live** | Owner can stop the local runtime, revoke the scoped session, unwind Earn/Farm/LP, and return liquid assets |
 
-This separation is deliberate: the UI shows the intended full product without presenting planned integrations as already operational.
+The dashboard reads each protocol position independently and shows per-module confirmation receipts. Testnet execution proves adapter behavior and policy boundaries; it does not represent production yield or audited mainnet readiness.
 
 ## Two-Layer Safety Model
 
@@ -163,7 +166,7 @@ This separation is deliberate: the UI shows the intended full product without pr
 | Passkey admin and scoped session grant | Confirmed in Altana KeyStore | [View transaction](https://testnet.bscscan.com/tx/0x726ed597395ef065e84ac93c1cbbbbadbed6680f690e77c12c86e440cdb7e263) |
 | Session-key verification execution | Confirmed | [View transaction](https://testnet.bscscan.com/tx/0xfd00b2341d4366840f0125ba0279c50ef0aaf8d7f522d9658332fdf14cf5dc3a) |
 
-These receipts prove the wallet and scoped-session lifecycle. A new owner-authorized Swap receipt for this exact build remains an operator step and is not represented as already completed.
+These existing receipts prove the wallet and scoped-session lifecycle. The next acceptance run must append fresh Swap, LP, Farm, and Earn transaction links from this exact build; the repository does not substitute older verification receipts for those protocol actions.
 
 ## Architecture Boundaries
 
@@ -185,12 +188,13 @@ These receipts prove the wallet and scoped-session lifecycle. A new owner-author
 - `scripts/refresh-pancake-research.mjs` assembles the official-data snapshot from PancakeSwap Explorer, MasterChef V3, Syrup Pool configuration, and BNB Chain RPC evidence.
 - `src/lib/tokens.ts` pins supported test USDT/USDC contracts to their verified PancakeSwap V2 testnet routers.
 - `src/integrations/altana.ts` quotes both candidate normalization routes, performs the owner-signed conversion into the reviewed AI-selected stablecoin, reads token and Gas balances, builds token-specific permissions, executes scoped swaps and Gas refills, revokes, and provides an owner-only exit path.
+- `src/integrations/pancakeExecutor.ts` prepares bounded owner allowances, grants exact module permissions, deploys Swap/LP/Farm/Earn sequentially, reads live protocol positions, and unwinds all protocol positions through the owner Passkey.
 - `src/hooks/useAltanaWallet.ts` manages the passkey wallet lifecycle and safe UI states.
 - `src/App.tsx` provides portfolio, strategy creation, activity, and guardrail journeys.
 
 The frontend and AI API are designed to deploy together on Vercel. The scoped session signer still stays only in browser memory: Vercel receives normalized market and mandate evidence but never receives the owner passkey, private key, or unrestricted transaction authority. Scheduled server-side monitoring can be added later without changing that custody boundary; execution still requires the scoped wallet runtime or explicit owner approval.
 
-See [the AI strategy runtime](docs/AI_STRATEGY.md), [the production integration plan](docs/INTEGRATION_PLAN.md), and [the BSC Testnet runbook](docs/ALTANA_RUNBOOK.md).
+See [the delivery acceptance checklist](docs/ACCEPTANCE.md), [the AI strategy runtime](docs/AI_STRATEGY.md), [the production integration plan](docs/INTEGRATION_PLAN.md), and [the BSC Testnet runbook](docs/ALTANA_RUNBOOK.md).
 
 ## Run Locally
 
@@ -219,6 +223,7 @@ Quality checks:
 npm run lint
 npm test
 npm run build
+npm run verify:pancake -- 0xYourPasskeySmartWallet
 ```
 
 ## License

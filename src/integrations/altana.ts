@@ -104,17 +104,6 @@ const erc20BalanceAbi = [{
   outputs: [{ type: 'uint256' }],
 }] as const
 
-const erc20ApproveAbi = [{
-  name: 'approve',
-  type: 'function',
-  stateMutability: 'nonpayable',
-  inputs: [
-    { name: 'spender', type: 'address' },
-    { name: 'amount', type: 'uint256' },
-  ],
-  outputs: [{ type: 'bool' }],
-}] as const
-
 const erc20TransferAbi = [{
   name: 'transfer',
   type: 'function',
@@ -275,7 +264,6 @@ export function buildPortfolioPermissions(plan: PortfolioPlan) {
   return {
     calls: [
       { to: stablecoin.router, signature: 'swapExactETHForTokens(uint256,address[],address,uint256)' },
-      { to: stablecoin.address, signature: 'approve(address,uint256)' },
       { to: stablecoin.router, signature: 'swapExactTokensForETH(uint256,uint256,address[],address,uint256)' },
     ],
     spend: [
@@ -533,26 +521,15 @@ export async function executePortfolioPlanWithSession(
         args: [quote.minimumOut, [BSC_TESTNET_WBNB, stablecoin.address], session.walletAddress, deadline],
       }),
     }]
-    : [
-      {
-        to: stablecoin.address,
-        value: 0n,
-        data: encodeFunctionData({
-          abi: erc20ApproveAbi,
-          functionName: 'approve',
-          args: [stablecoin.router, plan.amountIn],
-        }),
-      },
-      {
-        to: stablecoin.router,
-        value: 0n,
-        data: encodeFunctionData({
-          abi: pancakeRouterAbi,
-          functionName: 'swapExactTokensForETH',
-          args: [plan.amountIn, quote.minimumOut, [stablecoin.address, BSC_TESTNET_WBNB], session.walletAddress, deadline],
-        }),
-      },
-    ]
+    : [{
+      to: stablecoin.router,
+      value: 0n,
+      data: encodeFunctionData({
+        abi: pancakeRouterAbi,
+        functionName: 'swapExactTokensForETH',
+        args: [plan.amountIn, quote.minimumOut, [stablecoin.address, BSC_TESTNET_WBNB], session.walletAddress, deadline],
+      }),
+    }]
 
   const outputBefore = plan.action === 'BUY_STABLE'
     ? await readStablecoinBalance(session.walletAddress, plan.stablecoin)

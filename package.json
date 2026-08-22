@@ -9,6 +9,7 @@
     "build": "tsc -b && tsc -p tsconfig.api.json && vite build",
     "lint": "oxlint",
     "research:refresh": "node scripts/refresh-pancake-research.mjs",
+    "verify:pancake": "node scripts/verify-pancake-testnet.mjs",
     "test": "vitest run",
     "preview": "vite preview"
   },

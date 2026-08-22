@@ -47,6 +47,8 @@ import {
 import { fetchPancakeMarket, type PancakeMarketSnapshot } from './integrations/pancakeMarket'
 import { requestDeepSeekReview } from './integrations/agentReview'
 import { buildLocalStablecoinSelection, requestStablecoinSelection } from './integrations/stablecoinSelection'
+import type { PancakeDeploymentProof, PancakePositionSnapshot } from './integrations/pancakeExecutor'
+import { completedPancakeModules, latestPancakeModuleReceipt } from './domain/pancakeReceipts'
 import type { DecisionRecord, Mandate } from './types'
 import './App.css'
 
@@ -77,8 +79,9 @@ const altanaStageCopy: Record<AltanaStage, string> = {
   recovering: 'Recovering passkey wallet...',
   funding: 'Funding the smart wallet...',
   normalizing: 'Converting tBNB into the AI-selected stablecoin...',
+  approving: 'Authorizing bounded PancakeSwap adapters with your Passkey...',
   granting: 'Registering the scoped policy onchain...',
-  executing: 'Executing the approved PancakeSwap route...',
+  executing: 'Deploying Swap, LP, Farm, and Earn positions...',
   revoking: 'Revoking the policy onchain...',
   withdrawing: 'Returning assets to the owner wallet...',
   error: 'Action required',
@@ -91,10 +94,10 @@ const liquidityOptions: Array<{ id: LiquidityNeed; name: string; description: st
 ]
 
 const toolNames = {
-  'smart-router': 'PancakeSwap Swap',
-  'infinity-liquidity': 'Infinity Liquidity',
-  'universal-farms': 'Universal Farms',
-  'cake-earn': 'CAKE Earn',
+  'v2-router': 'PancakeSwap V2 Router',
+  'v2-liquidity': 'CAKE/WBNB V2 LP',
+  'masterchef-v2': 'MasterChef V2 · PID 4',
+  'cake-pool': 'Flexible CAKE Pool',
 } as const
 
 function loadMandates(): Mandate[] {
@@ -127,6 +130,13 @@ function allocationLabel(bps: bigint | number) {
   return `${Number(bps) / 100}%`
 }
 
+function formatProtocolAmount(value: bigint, maximumFractionDigits = 4) {
+  if (value === 0n) return '0'
+  const numeric = Number(formatUnits(value, 18))
+  if (numeric > 0 && numeric < 10 ** -maximumFractionDigits) return `<${(10 ** -maximumFractionDigits).toFixed(maximumFractionDigits)}`
+  return numeric.toLocaleString('en-US', { maximumFractionDigits })
+}
+
 function executionActionLabel(action: PortfolioPlan['action']) {
   if (action === 'BUY_STABLE') return 'Build liquid reserve'
   if (action === 'BUY_NATIVE') return 'Increase market exposure'
@@ -134,9 +144,47 @@ function executionActionLabel(action: PortfolioPlan['action']) {
 }
 
 function coverageLabel(coverage: ExecutionCoverage) {
-  if (coverage === 'LIVE') return 'Live executor'
-  if (coverage === 'APPROVAL_REQUIRED') return 'Owner approval'
-  return 'Adapter planned'
+  return coverage === 'LIVE' ? 'Live executor' : 'Unavailable'
+}
+
+function buildDeploymentDecision(
+  plan: PortfolioPlan,
+  proof: PancakeDeploymentProof,
+  review: StrategyReview,
+): DecisionRecord {
+  const completedModules = completedPancakeModules(proof.receipts)
+  const confirmed = completedModules.size === 4
+  const failed = proof.receipts.some((item) => item.state === 'FAILED')
+  const transactionHash = [...proof.receipts].reverse().find((item) => item.transactionHash)?.transactionHash
+  const modules = [...completedModules]
+  return {
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    action: 'BUY_NATIVE',
+    purpose: 'PORTFOLIO_REBALANCE',
+    state: confirmed ? 'CONFIRMED' : failed ? 'FAILED' : 'POLICY_ONLY',
+    rationale: proof.receipts.length
+      ? `The investment committee approved a typed initial deployment. Confirmed modules: ${modules.join(', ') || 'none'}. Each adapter has its own contract target, spend cap, receipt, position read, and owner exit path.`
+      : `${review.recommendation.rationale} The policy was registered, but no DeFi module executed because the deterministic gate did not authorize deployment.`,
+    currentStableBps: 10_000,
+    targetStableBps: Number(plan.targetStableBps),
+    projectedStableBps: Number(plan.targetStableBps),
+    amountIn: formatStable(proof.deployment.stableAllowance),
+    inputAsset: proof.deployment.stablecoin,
+    outputAsset: 'tBNB',
+    transactionHash,
+    reviewSource: review.source,
+    triggers: review.triggers.map((trigger) => trigger.kind),
+    expertAction: 'DEPLOY_PANCAKE_PORTFOLIO',
+    confidence: review.recommendation.confidence,
+    gateStatus: review.gate.status,
+    promptVersion: review.promptVersion,
+    modelMode: review.modelMode,
+    modelName: review.modelName,
+    agentRunId: review.runId,
+    agentInputHash: review.inputHash,
+    committee: review.committee,
+  }
 }
 
 function buildDecision(
@@ -345,10 +393,10 @@ const aboutAgents = [
 ] as const
 
 const aboutCoverage = [
-  { name: 'Swap', status: 'Live', detail: 'Auto-execute', icon: ArrowDownUp, tone: 'live' },
-  { name: 'Liquidity', status: 'Approval', detail: 'Owner confirms', icon: Waves, tone: 'approval' },
-  { name: 'Farms', status: 'Next', detail: 'Adapter planned', icon: Layers3, tone: 'planned' },
-  { name: 'Earn', status: 'Next', detail: 'Adapter planned', icon: Leaf, tone: 'planned' },
+  { name: 'Swap', status: 'Live', detail: 'Bounded V2 routes', icon: ArrowDownUp, tone: 'live' },
+  { name: 'Liquidity', status: 'Live', detail: 'CAKE/WBNB V2 LP', icon: Waves, tone: 'live' },
+  { name: 'Farms', status: 'Live', detail: 'MasterChef V2 PID 4', icon: Layers3, tone: 'live' },
+  { name: 'Earn', status: 'Live', detail: 'Flexible CAKE Pool', icon: Leaf, tone: 'live' },
 ] as const
 
 const aboutFaqs = [
@@ -429,9 +477,10 @@ function AboutPage({ onCreate }: { onCreate: () => void }) {
   </div>
 }
 
-function PortfolioOverview({ mandate, snapshot, executionPlan, pancakeResearch, pancakeMarket, loading, runtimeAvailable, checking, onCreate, onCheck, onOpenPolicies }: {
+function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancakeResearch, pancakeMarket, loading, runtimeAvailable, checking, onCreate, onCheck, onOpenPolicies }: {
   mandate: Mandate | null
   snapshot: PortfolioSnapshot | null
+  positions: PancakePositionSnapshot | null
   executionPlan: PortfolioPlan | null
   pancakeResearch: PancakeResearchSnapshot | null
   pancakeMarket: PancakeMarketSnapshot | null
@@ -445,21 +494,32 @@ function PortfolioOverview({ mandate, snapshot, executionPlan, pancakeResearch, 
   if (!mandate) return <ProductHome onCreate={onCreate} />
   const strategy = planForMandate(mandate)
   const latest = mandate.decisions[0]
-  const managedValue = executionPlan?.managedValue ?? safeParseStable(mandate.managedStableCap)
+  const mandateCapital = safeParseStable(mandate.managedStableCap)
   const recommendationTitle = latest?.expertAction ? latest.expertAction.replaceAll('_', ' ') : executionPlan ? executionActionLabel(executionPlan.action) : 'Reading portfolio'
   const gateStatus = latest?.gateStatus ?? (executionPlan?.action === 'HOLD' ? 'HOLD' : 'PENDING REVIEW')
   const liveFallbackCommittee = executionPlan
     ? buildInvestmentCommittee({ strategy, executionPlan, snapshot, pancakeResearch, pancakeMarket })
     : null
   const committee: InvestmentCommittee | null = latest?.committee ?? liveFallbackCommittee
+  const marketNative = positions && positions.nativeBalance > GAS_RESERVE ? positions.nativeBalance - GAS_RESERVE : 0n
+  const lpPosition = positions ? positions.lpWalletBalance + positions.farmStaked : 0n
+  const moduleReceipt = (module: 'SWAP' | 'LIQUIDITY' | 'FARM' | 'EARN') => latestPancakeModuleReceipt(mandate.moduleReceipts, module)
+  const confirmedModules = completedPancakeModules(mandate.moduleReceipts).size
   return <div className="dashboard-page">
     <div className="page-title-row"><div><span className="eyebrow">Managed strategy</span><h1>{mandate.name}</h1><p>{strategy.summary} Capital remains in the passkey smart wallet.</p></div><div className="title-actions"><button className="secondary-button" onClick={onOpenPolicies}><Settings2 size={16} /> Guardrails</button><button className="primary-button" disabled={checking || mandate.status !== 'Active'} onClick={onCheck}>{checking ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run live review</button></div></div>
-    <section className="portfolio-hero-panel"><div className="portfolio-value-block"><span>Managed portfolio</span><strong>{loading ? 'Refreshing...' : `${formatStable(managedValue)} ${mandate.stablecoin}`}</strong><small>AI-selected base · normalized from {mandate.managedAmount} tBNB</small></div><Metric label="Gas reserve" value={snapshot ? `${formatNative(snapshot.nativeBalance)} tBNB` : 'Refreshing...'} detail={`Auto-refill below ${formatNative(GAS_LOW_WATERMARK)} tBNB`} /><Metric label="Strategy risk" value={`${strategy.riskScore}/10`} detail={`${riskProfiles[mandate.riskProfile].name} mandate`} /><Metric label="Next review" value={strategy.reviewCadence} detail={runtimeAvailable ? 'Local executor online' : 'Owner approval required'} /></section>
+    <section className="portfolio-hero-panel"><div className="portfolio-value-block"><span>Mandate capital</span><strong>{`${formatStable(mandateCapital)} ${mandate.stablecoin}`}</strong><small>Initial stable-value budget · normalized from {mandate.managedAmount} tBNB</small></div><Metric label="Gas reserve" value={loading ? 'Refreshing...' : snapshot ? `${formatNative(snapshot.nativeBalance)} tBNB` : 'Unavailable'} detail={`Auto-refill below ${formatNative(GAS_LOW_WATERMARK)} tBNB`} /><Metric label="Strategy risk" value={`${strategy.riskScore}/10`} detail={`${riskProfiles[mandate.riskProfile].name} mandate`} /><Metric label="Next review" value={strategy.reviewCadence} detail={runtimeAvailable ? 'Local executor online' : 'Owner approval required'} /></section>
     <div className="dashboard-layout">
       <section className="workspace-panel allocation-panel"><header className="panel-header"><div><span>AI portfolio construction</span><h2>Where the capital works</h2></div><span className="status-chip active"><i /> Active mandate</span></header><StrategyBar plan={strategy} /><div className="sleeve-grid">{strategy.sleeves.map((sleeve) => <article key={sleeve.id}><div className={`sleeve-icon sleeve-${sleeve.id}`}>{sleeve.id === 'reserve' ? <Vault size={18} /> : sleeve.id === 'market' ? <TrendingUp size={18} /> : sleeve.id === 'liquidity' ? <Waves size={18} /> : <Leaf size={18} />}</div><span>{sleeve.name}</span><strong>{formatBps(sleeve.allocationBps)}</strong><p>{sleeve.purpose}</p><small>{toolNames[sleeve.tool]}</small></article>)}</div></section>
       <aside className="workspace-panel ai-panel"><header className="panel-header"><div><span>Latest expert review</span><h2>{recommendationTitle}</h2></div><BrainCircuit size={23} /></header>{(latest || executionPlan) && <><p>{latest?.rationale ?? executionPlan?.rationale}</p>{latest?.triggers?.length ? <div className="trigger-chips" aria-label="Active review triggers">{latest.triggers.map((trigger) => <span key={trigger}>{trigger.replaceAll('_', ' ')}</span>)}</div> : <div className="trigger-chips"><span>NO ACTIVE EVENT RISK</span></div>}<div className="ai-signals"><div><span>Portfolio data</span><strong>{snapshot ? 'Live snapshot' : 'Waiting'}</strong></div><div><span>Reasoning</span><strong>{latest?.modelMode === 'DEEPSEEK' ? latest.modelName : latest?.modelMode === 'HYBRID_FALLBACK' ? 'DeepSeek + rules' : 'Rules fallback'}</strong></div><div><span>Confidence</span><strong>{latest?.confidence !== undefined ? `${latest.confidence}%` : '—'}</strong></div><div><span>Risk gate</span><strong>{gateStatus.replaceAll('_', ' ')}</strong></div></div><div className={`ai-decision ${latest?.gateStatus === 'AUTO_EXECUTE' ? 'trade' : 'hold'}`}>{latest?.gateStatus === 'AUTO_EXECUTE' ? <ArrowDownUp size={17} /> : <CircleCheck size={17} />}<span>{latest?.gateStatus === 'AUTO_EXECUTE' && executionPlan ? `${executionPlan.inputAsset} to ${executionPlan.outputAsset} adapter authorised` : latest?.gateStatus === 'APPROVAL_REQUIRED' ? 'Waiting for explicit owner approval' : latest?.gateStatus === 'BLOCKED' ? 'Recommendation blocked until its adapter is live' : latest?.gateStatus === 'DEFERRED' ? 'Execution delayed by the cooldown policy' : 'No automatic action authorised'}</span></div></>}</aside>
       {committee && <section className="workspace-panel committee-panel"><header className="panel-header"><div><span>Investment committee</span><h2>Five agents, one bounded decision</h2></div><span className="coverage-note">{committee.readyAgents}/5 current · {committee.modelMode === 'DEEPSEEK' ? 'DeepSeek agents' : committee.modelMode === 'HYBRID_FALLBACK' ? 'Hybrid reasoning' : 'Rules preview'}</span></header><div className="committee-summary"><div><span>Committee view</span><strong>{committee.summary}</strong></div><div><span>Execution cost</span><strong>{committee.executionCostBps === null ? 'Run live review' : formatBps(committee.executionCostBps)}</strong></div><div><span>Cost ceiling</span><strong>{formatBps(strategy.guardrails.maximumExecutionCostBps)}</strong></div><div><span>Best observed signal</span><strong>{committee.grossBenefitBps === null ? 'Not measurable' : formatBps(committee.grossBenefitBps - committee.riskCostBps)}</strong><small>24h annualized snapshot, not a forecast</small></div></div><div className="committee-grid">{committee.reports.map((report) => <article key={report.agentId}><div className="committee-agent-icon">{report.agentId === 'market' ? <BarChart3 size={17} /> : report.agentId === 'liquidity' ? <Waves size={17} /> : report.agentId === 'farms' ? <Layers3 size={17} /> : report.agentId === 'earn' ? <Leaf size={17} /> : <Fuel size={17} />}</div><div className="committee-agent-head"><strong>{report.name}</strong><span className={`agent-status agent-${report.status.toLowerCase()}`}>{report.status}</span></div><p>{report.headline}</p>{report.findings[0] && <span className="committee-evidence">{report.findings[0]}</span>}<footer><small>{report.inference?.mode === 'DEEPSEEK' ? 'DeepSeek' : 'Rules'} · Every {report.cadenceMinutes < 60 ? `${report.cadenceMinutes} min` : `${report.cadenceMinutes / 60} hr`}</small>{report.sourceUrl && <a href={report.sourceUrl} target="_blank" rel="noreferrer">{report.sourceLabel ?? 'Source'} <ExternalLink size={10} /></a>}</footer></article>)}</div></section>}
-      <section className="workspace-panel action-panel"><header className="panel-header"><div><span>Execution plan</span><h2>PancakeSwap action queue</h2></div><span className="coverage-note">1 live · 3 staged</span></header><div className="action-queue">{strategy.actions.map((action) => <article key={action.id}><span className="action-order">{action.order}</span><div className="action-copy"><div><strong>{action.title}</strong><span>{toolNames[action.tool]}</span></div><p>{action.detail}</p></div><div className="action-meta"><strong>{formatBps(action.allocationBps)}</strong><span className={`coverage coverage-${action.coverage.toLowerCase().replace('_', '-')}`}>{coverageLabel(action.coverage)}</span></div></article>)}</div></section>
+      <section className="workspace-panel positions-panel"><header className="panel-header"><div><span>Verified onchain positions</span><h2>Capital deployed by module</h2></div><span className={`status-chip ${confirmedModules === 4 ? 'active' : ''}`}><i /> {confirmedModules}/4 modules confirmed</span></header><div className="position-grid">
+        <article><span className="position-icon reserve"><Vault size={18} /></span><div><small>Liquid reserve</small><strong>{positions ? `${formatProtocolAmount(positions.stableBalance)} ${mandate.stablecoin}` : 'Reading chain...'}</strong><p>Available in the Passkey wallet</p></div></article>
+        <article><span className="position-icon market"><TrendingUp size={18} /></span><div><small>Market sleeve</small><strong>{positions ? `${formatProtocolAmount(marketNative)} tBNB` : 'Reading chain...'}</strong><p>{moduleReceipt('SWAP')?.state === 'CONFIRMED' ? 'Router receipt confirmed' : moduleReceipt('SWAP')?.state === 'FAILED' ? 'Router execution failed' : 'Awaiting deployment proof'}</p></div></article>
+        <article><span className="position-icon liquidity"><Waves size={18} /></span><div><small>CAKE/WBNB LP</small><strong>{positions ? `${formatProtocolAmount(lpPosition, 6)} LP` : 'Reading chain...'}</strong><p>{moduleReceipt('LIQUIDITY')?.state === 'CONFIRMED' ? 'Liquidity minted onchain' : moduleReceipt('LIQUIDITY')?.state === 'FAILED' ? 'Liquidity execution failed' : 'Awaiting deployment proof'}</p></div></article>
+        <article><span className="position-icon farm"><Layers3 size={18} /></span><div><small>MasterChef PID 4</small><strong>{positions ? positions.farmStaked > 0n ? 'Staked' : 'No stake' : 'Reading chain...'}</strong><p>{moduleReceipt('FARM')?.state === 'FAILED' ? 'Farm execution failed' : positions ? `${formatProtocolAmount(positions.farmStaked, 6)} LP earning rewards` : 'Farm position unavailable'}</p></div></article>
+        <article><span className="position-icon earn"><Leaf size={18} /></span><div><small>Flexible CAKE Pool</small><strong>{positions ? `${formatProtocolAmount(positions.earnCakeValue, 6)} CAKE` : 'Reading chain...'}</strong><p>{moduleReceipt('EARN')?.state === 'FAILED' ? 'Earn execution failed' : positions ? `${formatProtocolAmount(positions.earnShares, 6)} shares` : 'Earn position unavailable'}</p></div></article>
+      </div></section>
+      <section className="workspace-panel action-panel"><header className="panel-header"><div><span>Execution plan</span><h2>PancakeSwap action queue</h2></div><span className="coverage-note">4 live adapters</span></header><div className="action-queue">{strategy.actions.map((action) => <article key={action.id}><span className="action-order">{action.order}</span><div className="action-copy"><div><strong>{action.title}</strong><span>{toolNames[action.tool]}</span></div><p>{action.detail}</p></div><div className="action-meta"><strong>{formatBps(action.allocationBps)}</strong><span className={`coverage coverage-${action.coverage.toLowerCase().replace('_', '-')}`}>{coverageLabel(action.coverage)}</span></div></article>)}</div></section>
       <aside className="workspace-panel policy-panel"><header className="panel-header"><div><span>Hard limits</span><h2>What AI cannot cross</h2></div><ShieldCheck size={22} /></header><dl className="policy-facts"><div><dt>Minimum liquid reserve</dt><dd>{formatBps(strategy.guardrails.minimumReserveBps)}</dd></div><div><dt>Maximum LP exposure</dt><dd>{formatBps(strategy.guardrails.maximumLiquidityBps)}</dd></div><div><dt>Single position cap</dt><dd>{formatBps(strategy.guardrails.maximumSinglePositionBps)}</dd></div><div><dt>Execution cost ceiling</dt><dd>{formatBps(strategy.guardrails.maximumExecutionCostBps)}</dd></div><div><dt>Leverage</dt><dd>Blocked</dd></div></dl>{latest && <div className="latest-proof"><span>Latest onchain proof</span><strong>{latest.state.replace('_', ' ')}</strong>{latest.transactionHash ? <a href={txUrl(latest.transactionHash)} target="_blank" rel="noreferrer">View transaction <ExternalLink size={12} /></a> : <small>No transaction required</small>}</div>}</aside>
     </div>
     {!runtimeAvailable && mandate.status === 'Active' && <div className="runtime-notice"><AlertTriangle size={18} /><div><strong>The execution key is not available in this browser session.</strong><span>The onchain policy remains active and revocable. Create a replacement runtime to resume automatic reviews.</span></div><button onClick={onCreate}>Replace runtime</button></div>}
@@ -628,14 +688,14 @@ function MandateWizard({
         </>}
 
         {step === 3 && <>
-          <div className="approval-intro"><span className="eyebrow">Owner approval</span><h2>Fund once, then activate</h2><p>tBNB enters your own Passkey smart account. The allocation agent selected {draft.stablecoin}; your Passkey approves that conversion, retains Gas, and only then grants the revocable AI session.</p></div>
+          <div className="approval-intro"><span className="eyebrow">Owner approval</span><h2>Fund once, deploy four modules</h2><p>tBNB enters your Passkey smart account. After stablecoin allocation, your Passkey authorizes bounded allowances to the official V2 Router, MasterChef V2, and CAKE Pool. The revocable AI session cannot call approve.</p></div>
           <div className="approval-checklist">
             <div className={account && isTargetNetwork ? 'complete' : ''}><span>{account && isTargetNetwork ? <Check size={16} /> : <Wallet size={16} />}</span><div><strong>Funding wallet</strong><small>{account ? `${shortAddress(account)} · ${isTargetNetwork ? 'BNB Testnet' : 'wrong network'}` : 'Connect an injected wallet'}</small></div>{!account ? <button onClick={onConnect}>Connect</button> : !isTargetNetwork ? <button onClick={onSwitchNetwork}>Switch</button> : null}</div>
             <div className={altanaAddress ? 'complete' : ''}><span>{altanaAddress ? <Check size={16} /> : <Fingerprint size={16} />}</span><div><strong>Passkey smart wallet</strong><small>{altanaAddress ? shortAddress(altanaAddress) : 'Owner-controlled account'}</small></div>{!altanaAddress && <div className="inline-actions"><button disabled={!isPasskeySupported || busy} onClick={onCreateAltana}>Create</button><button disabled={!isPasskeySupported || busy} onClick={onRecoverAltana}>Recover</button></div>}</div>
             <div className={fundingReady ? 'complete' : ''}><span>{fundingReady ? <Check size={16} /> : <Vault size={16} />}</span><div><strong>tBNB funding</strong><small>{altanaAddress ? `${altanaBalance} tBNB available · target ${draft.amount || '0'} tBNB` : 'Fund after wallet creation'}</small></div>{altanaAddress && !fundingReady && <button disabled={busy || !account || !amountValid} onClick={() => void onFundAltana(draft)}>Deposit missing tBNB</button>}</div>
             <div className={smartStableBalance > 0n ? 'complete' : ''}><span>{smartStableBalance > 0n ? <Check size={16} /> : <ArrowDownUp size={16} />}</span><div><strong>AI-selected startup conversion</strong><small>{smartStableBalance > 0n ? `${formatStable(smartStableBalance)} ${draft.stablecoin} already available` : `Convert funded tBNB to ${draft.stablecoin}; keep ${formatNative(GAS_RESERVE)} tBNB for Gas`}</small></div><b className="checklist-state">{smartStableBalance > 0n ? 'Recorded' : `${draft.stablecoinSelection?.confidence ?? 0}% confidence`}</b></div>
           </div>
-          <div className="approval-boundary"><KeyRound size={18} /><div><strong>Exact scope granted today</strong><span>The allocator chose {draft.stablecoin}, but it cannot grant itself broader access. Only {draft.stablecoin} approval and PancakeSwap V2 Swap calls through {shortAddress(selectedStable.router)} are permitted, including a bounded Gas refill below 0.0015 tBNB. Every conversion is recorded, daily capped, expires in {draft.duration} days, and remains revocable by your Passkey.</span></div></div>
+          <div className="approval-boundary"><KeyRound size={18} /><div><strong>Exact scope granted today</strong><span>The allocator chose {draft.stablecoin}, but it cannot grant itself broader access. The session is pinned to {shortAddress(selectedStable.router)}, the official CAKE router, CAKE/WBNB LP, MasterChef V2 PID 4, and flexible CAKE Pool methods. It cannot approve tokens, call arbitrary contracts, use leverage, or exceed daily caps.</span></div></div>
           {busy && <div className="operation-status"><LoaderCircle className="spin" size={16} /> {starting ? 'Starting the strategy...' : altanaStageCopy[altanaStage]}</div>}
           {!isPasskeySupported && <div className="inline-error"><AlertTriangle size={16} /> This browser does not expose WebAuthn passkeys.</div>}
           {(walletError || altanaError) && <div className="inline-error"><AlertTriangle size={16} /> {walletError || altanaError}</div>}
@@ -649,19 +709,42 @@ function MandateWizard({
         <StrategyBar plan={strategy} />
         <div className="preview-metrics"><div><span>Model yield</span><strong>{formatBps(strategy.modelYieldBps)}</strong></div><div><span>Risk score</span><strong>{strategy.riskScore}/10</strong></div><div><span>Review</span><strong>{strategy.reviewCadence}</strong></div></div>
         <div className="preview-live-route"><Route size={17} /><div><span>{draft.stablecoinSelection ? 'Live executor' : 'Stablecoin allocator'}</span><strong>{draft.stablecoinSelection ? executionActionLabel(executionPlan.action) : 'USDT vs USDC'}</strong><small>{draft.stablecoinSelection ? usableQuote ? `Quoted ${usableQuote.outputSymbol}` : executionPlan.action === 'HOLD' ? 'No swap required' : snapshotLoading ? 'Loading quote...' : 'Quote pending' : 'Yield · TVL · peg · route cost'}</small></div></div>
-        <div className="preview-guardrail"><ShieldCheck size={17} /><span>The AI can recommend opportunities only inside these allocations and limits. Automatic execution also requires a live, owner-approved adapter.</span></div>
+        <div className="preview-guardrail"><ShieldCheck size={17} /><span>Swap, CAKE/WBNB LP, Farm PID 4, and flexible CAKE Earn are executable on BSC Testnet. Each action remains bounded by the mandate and owner-approved allowance.</span></div>
       </aside>
     </div>
   </div>
 }
 
 function DecisionLog({ mandates }: { mandates: Mandate[] }) {
-  const decisions = mandates.flatMap((mandate) => mandate.decisions.map((decision) => ({ mandate, decision }))).sort((a, b) => b.decision.createdAt.localeCompare(a.decision.createdAt))
-  return <div className="list-page"><div className="page-title-row"><div><span className="eyebrow">Execution evidence</span><h1>Activity</h1><p>Startup conversion, AI rebalancing, and automatic Gas refills remain distinguishable in one audit trail.</p></div></div>{decisions.length === 0 ? <div className="simple-empty"><Activity size={26} /><h2>No activity yet</h2><p>Create a strategy to generate its first decision.</p></div> : <div className="decision-log">{decisions.map(({ mandate, decision }) => { const activityName = decision.purpose === 'INITIAL_NORMALIZATION' ? 'Startup conversion' : decision.purpose === 'GAS_TOP_UP' ? 'Gas reserve top-up' : decision.expertAction?.replaceAll('_', ' ') ?? executionActionLabel(decision.action); return <article key={decision.id}><div className={`decision-icon ${decision.action.toLowerCase()}`}>{decision.action === 'HOLD' ? <Pause size={17} /> : decision.purpose === 'GAS_TOP_UP' ? <Fuel size={17} /> : <ArrowDownUp size={17} />}</div><div className="decision-copy"><div><strong>{activityName}</strong><span>{mandate.name}</span></div><p>{decision.rationale}</p><div className="decision-tags"><span>{decision.purpose.replaceAll('_', ' ')}</span>{decision.purpose === 'PORTFOLIO_REBALANCE' && <span>Reserve {allocationLabel(decision.currentStableBps)}</span>}{decision.gateStatus && <span>Gate: {decision.gateStatus.replaceAll('_', ' ')}</span>}{decision.reviewSource && <span>{decision.reviewSource}</span>}{decision.triggers?.map((trigger) => <span key={trigger}>{trigger.replaceAll('_', ' ')}</span>)}{decision.amountIn !== '0' && <span>{decision.amountIn} {decision.inputAsset}</span>}</div></div><div className="decision-evidence"><strong className={`evidence-${decision.state.toLowerCase()}`}>{decision.state.replace('_', ' ')}</strong><span>{new Date(decision.createdAt).toLocaleString()}</span>{decision.promptVersion && <span>{decision.promptVersion}</span>}{decision.transactionHash && <a href={txUrl(decision.transactionHash)} target="_blank" rel="noreferrer">Explorer <ExternalLink size={12} /></a>}</div></article> })}</div>}</div>
+  const decisions = mandates
+    .flatMap((mandate) => mandate.decisions.map((decision) => ({ mandate, decision })))
+    .sort((a, b) => b.decision.createdAt.localeCompare(a.decision.createdAt))
+  const moduleReceipts = mandates
+    .flatMap((mandate) => (mandate.moduleReceipts ?? []).map((moduleReceipt) => ({ mandate, moduleReceipt })))
+    .sort((a, b) => b.moduleReceipt.createdAt.localeCompare(a.moduleReceipt.createdAt))
+  const hasActivity = decisions.length > 0 || moduleReceipts.length > 0
+
+  return <div className="list-page">
+    <div className="page-title-row"><div><span className="eyebrow">Execution evidence</span><h1>Activity</h1><p>Every Swap, LP, Farm, Earn, policy, and exit action keeps its own onchain receipt.</p></div></div>
+    {!hasActivity ? <div className="simple-empty"><Activity size={26} /><h2>No activity yet</h2><p>Create a strategy to generate its first decision.</p></div> : <div className="decision-log">
+      {moduleReceipts.map(({ mandate, moduleReceipt }) => {
+        const Icon = moduleReceipt.module === 'SWAP' ? ArrowDownUp : moduleReceipt.module === 'LIQUIDITY' ? Waves : moduleReceipt.module === 'FARM' ? Layers3 : Leaf
+        return <article key={moduleReceipt.id}>
+          <div className={`decision-icon ${moduleReceipt.state === 'CONFIRMED' ? 'buy_native' : 'hold'}`}><Icon size={17} /></div>
+          <div className="decision-copy"><div><strong>{moduleReceipt.module} · {moduleReceipt.operation.replaceAll('_', ' ')}</strong><span>{mandate.name}</span></div><p>{moduleReceipt.note}</p><div className="decision-tags"><span>{shortAddress(moduleReceipt.contract)}</span>{moduleReceipt.inputAmount && <span>{moduleReceipt.inputAmount} {moduleReceipt.inputAsset}</span>}{moduleReceipt.outputAmount && <span>Received {moduleReceipt.outputAmount} {moduleReceipt.outputAsset}</span>}</div></div>
+          <div className="decision-evidence"><strong className={`evidence-${moduleReceipt.state.toLowerCase()}`}>{moduleReceipt.state}</strong><span>{new Date(moduleReceipt.createdAt).toLocaleString()}</span>{moduleReceipt.transactionHash && <a href={txUrl(moduleReceipt.transactionHash)} target="_blank" rel="noreferrer">Explorer <ExternalLink size={12} /></a>}</div>
+        </article>
+      })}
+      {decisions.map(({ mandate, decision }) => {
+        const activityName = decision.purpose === 'INITIAL_NORMALIZATION' ? 'Startup conversion' : decision.purpose === 'GAS_TOP_UP' ? 'Gas reserve top-up' : decision.expertAction?.replaceAll('_', ' ') ?? executionActionLabel(decision.action)
+        return <article key={decision.id}><div className={`decision-icon ${decision.action.toLowerCase()}`}>{decision.action === 'HOLD' ? <Pause size={17} /> : decision.purpose === 'GAS_TOP_UP' ? <Fuel size={17} /> : <ArrowDownUp size={17} />}</div><div className="decision-copy"><div><strong>{activityName}</strong><span>{mandate.name}</span></div><p>{decision.rationale}</p><div className="decision-tags"><span>{decision.purpose.replaceAll('_', ' ')}</span>{decision.purpose === 'PORTFOLIO_REBALANCE' && <span>Reserve {allocationLabel(decision.currentStableBps)}</span>}{decision.gateStatus && <span>Gate: {decision.gateStatus.replaceAll('_', ' ')}</span>}{decision.reviewSource && <span>{decision.reviewSource}</span>}{decision.triggers?.map((trigger) => <span key={trigger}>{trigger.replaceAll('_', ' ')}</span>)}{decision.amountIn !== '0' && <span>{decision.amountIn} {decision.inputAsset}</span>}</div></div><div className="decision-evidence"><strong className={`evidence-${decision.state.toLowerCase()}`}>{decision.state.replace('_', ' ')}</strong><span>{new Date(decision.createdAt).toLocaleString()}</span>{decision.promptVersion && <span>{decision.promptVersion}</span>}{decision.transactionHash && <a href={txUrl(decision.transactionHash)} target="_blank" rel="noreferrer">Explorer <ExternalLink size={12} /></a>}</div></article>
+      })}
+    </div>}
+  </div>
 }
 
 function Policies({ mandates, revokingId, exitingId, onPause, onRevoke, onExit, onCreate }: { mandates: Mandate[]; revokingId: string; exitingId: string; onPause: (id: string) => void; onRevoke: (id: string) => void; onExit: (id: string) => void; onCreate: () => void }) {
-  return <div className="list-page"><div className="page-title-row"><div><span className="eyebrow">Owner control</span><h1>Guardrails</h1><p>AI strategy selection is flexible. Triggers, execution adapters, position limits, Gas reserve, expiry, and revocation remain deterministic.</p></div><button className="primary-button" onClick={onCreate}><Plus size={16} /> New strategy</button></div>{mandates.length === 0 ? <div className="simple-empty"><ShieldCheck size={26} /><h2>No active mandates</h2><p>Create a strategy to register a scoped session on BNB Testnet.</p></div> : <><section className="trigger-policy-band"><header><BrainCircuit size={20} /><div><strong>When the manager wakes up</strong><span>One-minute monitoring scans these conditions. It does not trade by itself.</span></div><b>Prompt v3</b></header><div><span><RefreshCw size={15} /><strong>Schedule</strong><small>4h, 8h, or daily</small></span><span><Fuel size={15} /><strong>Gas reserve</strong><small>Refill below 0.0015 tBNB</small></span><span><BarChart3 size={15} /><strong>Allocation drift</strong><small>Outside approved band</small></span><span><Waves size={15} /><strong>LP risk</strong><small>Range edge or IL limit</small></span><span><TrendingUp size={15} /><strong>Yield change</strong><small>Net benefit improves 2.5%</small></span><span><AlertTriangle size={15} /><strong>Protocol risk</strong><small>Depeg or liquidity drop</small></span></div></section><div className="policy-list">{mandates.map((mandate) => { const strategy = planForMandate(mandate); return <article key={mandate.id}><div className="policy-head"><div className="policy-icon"><ShieldCheck size={20} /></div><div><strong>{mandate.name}</strong><span>{riskProfiles[mandate.riskProfile].name} · {mandate.managedAmount} tBNB funded → {mandate.stablecoin}</span></div><strong className={`status-${mandate.status.toLowerCase()}`}><i /> {mandate.status}</strong></div><div className="policy-details"><div><span>Review cadence</span><strong>{strategy.reviewCadence}</strong></div><div><span>AI-selected base</span><strong>{mandate.stablecoin}{mandate.stablecoinSelection ? ` · ${mandate.stablecoinSelection.confidence}%` : ''}</strong></div><div><span>Gas target</span><strong>0.003 tBNB</strong></div><div><span>Expiry</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div></div><div className="policy-scope"><span><Check size={14} /> {mandate.stablecoin} route only</span><span><Check size={14} /> Recorded Gas refill</span><span><Check size={14} /> LP owner approval</span><span><Check size={14} /> No leverage</span><span><Check size={14} /> Daily onchain caps</span></div><footer><div>{mandate.grantTxHash && <a href={txUrl(mandate.grantTxHash)} target="_blank" rel="noreferrer">Grant transaction <ExternalLink size={12} /></a>}{mandate.exitTxHash && <a href={txUrl(mandate.exitTxHash)} target="_blank" rel="noreferrer">Exit transaction <ExternalLink size={12} /></a>}</div><div>{mandate.status !== 'Revoked' && <button className="secondary-button" onClick={() => onPause(mandate.id)}>{mandate.status === 'Paused' ? <Play size={15} /> : <Pause size={15} />}{mandate.status === 'Paused' ? 'Resume locally' : 'Pause locally'}</button>}<button className="secondary-button" disabled={exitingId === mandate.id} onClick={() => onExit(mandate.id)}>{exitingId === mandate.id ? <LoaderCircle className="spin" size={15} /> : <Vault size={15} />} {exitingId === mandate.id ? 'Returning assets' : 'Exit assets'}</button><button className="danger-button" disabled={mandate.status === 'Revoked' || revokingId === mandate.id} onClick={() => onRevoke(mandate.id)}>{revokingId === mandate.id ? <LoaderCircle className="spin" size={15} /> : <X size={15} />} {revokingId === mandate.id ? 'Revoking' : 'Revoke onchain'}</button></div></footer></article> })}</div></>}</div>
+  return <div className="list-page"><div className="page-title-row"><div><span className="eyebrow">Owner control</span><h1>Guardrails</h1><p>AI strategy selection is flexible. Triggers, execution adapters, position limits, Gas reserve, expiry, and revocation remain deterministic.</p></div><button className="primary-button" onClick={onCreate}><Plus size={16} /> New strategy</button></div>{mandates.length === 0 ? <div className="simple-empty"><ShieldCheck size={26} /><h2>No active mandates</h2><p>Create a strategy to register a scoped session on BNB Testnet.</p></div> : <><section className="trigger-policy-band"><header><BrainCircuit size={20} /><div><strong>When the manager wakes up</strong><span>One-minute monitoring scans these conditions. It does not trade by itself.</span></div><b>Prompt v3</b></header><div><span><RefreshCw size={15} /><strong>Schedule</strong><small>4h, 8h, or daily</small></span><span><Fuel size={15} /><strong>Gas reserve</strong><small>Refill below 0.0015 tBNB</small></span><span><BarChart3 size={15} /><strong>Allocation drift</strong><small>Outside approved band</small></span><span><Waves size={15} /><strong>LP risk</strong><small>Range edge or IL limit</small></span><span><TrendingUp size={15} /><strong>Yield change</strong><small>Net benefit improves 2.5%</small></span><span><AlertTriangle size={15} /><strong>Protocol risk</strong><small>Depeg or liquidity drop</small></span></div></section><div className="policy-list">{mandates.map((mandate) => { const strategy = planForMandate(mandate); return <article key={mandate.id}><div className="policy-head"><div className="policy-icon"><ShieldCheck size={20} /></div><div><strong>{mandate.name}</strong><span>{riskProfiles[mandate.riskProfile].name} · {mandate.managedAmount} tBNB funded → {mandate.stablecoin}</span></div><strong className={`status-${mandate.status.toLowerCase()}`}><i /> {mandate.status}</strong></div><div className="policy-details"><div><span>Review cadence</span><strong>{strategy.reviewCadence}</strong></div><div><span>AI-selected base</span><strong>{mandate.stablecoin}{mandate.stablecoinSelection ? ` · ${mandate.stablecoinSelection.confidence}%` : ''}</strong></div><div><span>Gas target</span><strong>0.003 tBNB</strong></div><div><span>Expiry</span><strong>{new Date(mandate.expiry * 1000).toLocaleDateString()}</strong></div></div><div className="policy-scope"><span><Check size={14} /> Bounded Swap routes</span><span><Check size={14} /> CAKE/WBNB LP only</span><span><Check size={14} /> Farm PID 4 only</span><span><Check size={14} /> Flexible CAKE Earn</span><span><Check size={14} /> No session approve</span><span><Check size={14} /> No leverage</span></div><footer><div>{mandate.grantTxHash && <a href={txUrl(mandate.grantTxHash)} target="_blank" rel="noreferrer">Grant transaction <ExternalLink size={12} /></a>}{mandate.exitTxHash && <a href={txUrl(mandate.exitTxHash)} target="_blank" rel="noreferrer">Exit transaction <ExternalLink size={12} /></a>}</div><div>{mandate.status !== 'Revoked' && <button className="secondary-button" onClick={() => onPause(mandate.id)}>{mandate.status === 'Paused' ? <Play size={15} /> : <Pause size={15} />}{mandate.status === 'Paused' ? 'Resume locally' : 'Pause locally'}</button>}<button className="secondary-button" disabled={exitingId === mandate.id} onClick={() => onExit(mandate.id)}>{exitingId === mandate.id ? <LoaderCircle className="spin" size={15} /> : <Vault size={15} />} {exitingId === mandate.id ? 'Returning assets' : 'Exit assets'}</button><button className="danger-button" disabled={mandate.status === 'Revoked' || revokingId === mandate.id} onClick={() => onRevoke(mandate.id)}>{revokingId === mandate.id ? <LoaderCircle className="spin" size={15} /> : <X size={15} />} {revokingId === mandate.id ? 'Revoking' : 'Revoke onchain'}</button></div></footer></article> })}</div></>}</div>
 }
 
 function App() {
@@ -671,6 +754,7 @@ function App() {
   const [snapshot, setSnapshot] = useState<PortfolioSnapshot | null>(null)
   const [snapshotLoading, setSnapshotLoading] = useState(false)
   const [snapshotError, setSnapshotError] = useState('')
+  const [pancakePositions, setPancakePositions] = useState<PancakePositionSnapshot | null>(null)
   const [pancakeResearch, setPancakeResearch] = useState<PancakeResearchSnapshot | null>(null)
   const [pancakeMarket, setPancakeMarket] = useState<PancakeMarketSnapshot | null>(null)
   const [notice, setNotice] = useState('')
@@ -686,6 +770,7 @@ function App() {
   const altana = useAltanaWallet()
   const activeMandate = mandates.find((mandate) => mandate.status !== 'Revoked') ?? null
   const activeStablecoin = activeMandate?.stablecoin ?? DEFAULT_STABLECOIN
+  const portfolioAddress = altana.address ?? activeMandate?.smartWallet ?? null
 
   useEffect(() => { localStorage.setItem(mandateStorageKey, JSON.stringify(mandates)) }, [mandates])
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'auto' }) }, [view])
@@ -702,12 +787,12 @@ function App() {
   }
 
   const refreshSnapshot = useCallback(async (stablecoin: StablecoinSymbol = activeStablecoin) => {
-    if (!altana.address) { setSnapshot(null); return null }
+    if (!portfolioAddress) { setSnapshot(null); return null }
     setSnapshotLoading(true)
     setSnapshotError('')
     try {
       const { readPortfolioSnapshot } = await import('./integrations/altana')
-      const next = await readPortfolioSnapshot(altana.address, stablecoin)
+      const next = await readPortfolioSnapshot(portfolioAddress, stablecoin)
       setSnapshot(next)
       return next
     } catch (error) {
@@ -716,13 +801,32 @@ function App() {
     } finally {
       setSnapshotLoading(false)
     }
-  }, [activeStablecoin, altana.address])
+  }, [activeStablecoin, portfolioAddress])
+
+  const refreshPancakePositions = useCallback(async (stablecoin: StablecoinSymbol = activeStablecoin) => {
+    if (!portfolioAddress) { setPancakePositions(null); return null }
+    try {
+      const { readPancakePositions } = await import('./integrations/pancakeExecutor')
+      const next = await readPancakePositions(portfolioAddress, stablecoin)
+      setPancakePositions(next)
+      return next
+    } catch {
+      setPancakePositions(null)
+      return null
+    }
+  }, [activeStablecoin, portfolioAddress])
 
   useEffect(() => {
     const initialRefresh = window.setTimeout(() => { void refreshSnapshot() }, 0)
-    const interval = altana.address ? window.setInterval(() => { void refreshSnapshot() }, 30_000) : null
+    const interval = portfolioAddress ? window.setInterval(() => { void refreshSnapshot() }, 30_000) : null
     return () => { window.clearTimeout(initialRefresh); if (interval !== null) window.clearInterval(interval) }
-  }, [altana.address, refreshSnapshot])
+  }, [portfolioAddress, refreshSnapshot])
+
+  useEffect(() => {
+    const initialRefresh = window.setTimeout(() => { void refreshPancakePositions() }, 0)
+    const interval = portfolioAddress ? window.setInterval(() => { void refreshPancakePositions() }, 30_000) : null
+    return () => { window.clearTimeout(initialRefresh); if (interval !== null) window.clearInterval(interval) }
+  }, [portfolioAddress, refreshPancakePositions])
 
   const refreshPancakeResearch = useCallback(async () => {
     try {
@@ -922,11 +1026,17 @@ function App() {
       executionPlan,
       committee,
     }, latestSnapshot)
-    const proof = await altana.activatePortfolio(draft.duration, executionPlan, review.gate.status === 'AUTO_EXECUTE')
+    const proof = await altana.activateDeFiPortfolio(
+      draft.duration,
+      strategy,
+      latestSnapshot,
+      executionPlan,
+      review.gate.status === 'AUTO_EXECUTE',
+    )
     const id = crypto.randomUUID()
     runtimeSessions.current.set(id, proof.session)
     setRuntimeMandateIds((current) => [...current, id])
-    const decision = buildDecision(executionPlan, proof, review)
+    const decision = buildDeploymentDecision(executionPlan, proof, review)
     const goalName = goalOptions.find((goal) => goal.id === draft.goal)?.name ?? 'Managed portfolio'
     const strategyAllocations = Object.fromEntries(strategy.sleeves.map((sleeve) => [sleeve.id, sleeve.allocationBps])) as Record<StrategySleeveId, number>
     const mandate: Mandate = {
@@ -955,12 +1065,17 @@ function App() {
       dailyNativeCap: formatNative(executionPlan.dailyNativeCap),
       dailyStableCap: formatStable(executionPlan.dailyStableCap),
       grantTxHash: proof.grant.transactionHash,
+      moduleReceipts: proof.receipts,
       decisions: normalizationDecision ? [decision, normalizationDecision] : [decision],
     }
+    setPancakePositions(proof.positions)
     setMandates((current) => [mandate, ...current])
     await refreshSnapshot(draft.stablecoin)
     setView('overview')
-    setNotice(proof.execution?.status === 'CONFIRMED' ? `The allocation agent selected ${draft.stablecoin}; funding was normalized and the first live route confirmed.` : executionPlan.action === 'HOLD' ? `The allocation agent selected ${draft.stablecoin}; funding was normalized with its Gas reserve protected.` : `The allocation agent selected ${draft.stablecoin}; the strategy is active. Review Activity for execution details.`)
+    const confirmedModules = completedPancakeModules(proof.receipts)
+    setNotice(confirmedModules.size === 4
+      ? `The allocation agent selected ${draft.stablecoin}; Swap, LP, Farm, and Earn all confirmed on BSC Testnet.`
+      : `The strategy is active with ${confirmedModules.size}/4 modules confirmed. Review Activity before retrying any incomplete adapter.`)
   }
 
   async function revokeMandate(id: string) {
@@ -990,7 +1105,7 @@ function App() {
       setNotice('Recover the Passkey smart account that owns this mandate before exiting assets.')
       return
     }
-    if (!window.confirm(`Return all available ${mandate.stablecoin} and excess tBNB gas to ${shortAddress(wallet.account)}?`)) return
+    if (!window.confirm(`Revoke AI access, withdraw Earn and Farm, remove LP, then return liquid assets to ${shortAddress(wallet.account)}?`)) return
     setExitingId(id)
     try {
       let revokeTxHash = mandate.revokeTxHash
@@ -1008,8 +1123,9 @@ function App() {
         status: 'Revoked',
         revokeTxHash,
         exitTxHash: result.transaction.transactionHash,
+        moduleReceipts: [...result.receipts, ...(item.moduleReceipts ?? [])],
       } : item))
-      await Promise.all([wallet.refresh(), refreshSnapshot(mandate.stablecoin)])
+      await Promise.all([wallet.refresh(), refreshSnapshot(mandate.stablecoin), refreshPancakePositions(mandate.stablecoin)])
       setNotice(`Assets returned to ${shortAddress(wallet.account)}. The revoked AI session cannot act again.`)
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Could not return assets to the owner wallet.')
@@ -1032,7 +1148,7 @@ function App() {
     </header>
     <button className={`navigation-scrim ${menuOpen ? 'visible' : ''}`} onClick={closeMobileMenu} aria-label="Close navigation" />
     <main className="main-area" inert={menuOpen ? true : undefined} aria-hidden={menuOpen ? true : undefined}><div className="page-content">
-      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
+      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} positions={pancakePositions} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
       {view === 'create' && <MandateWizard snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} altanaAddress={altana.address} altanaBalance={altana.balance} altanaBalanceWei={altana.balanceWei} altanaStage={altana.stage} altanaError={altana.error} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} isPasskeySupported={altana.isPasskeySupported} onConnect={() => void wallet.connect()} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={fundAltanaWallet} onStart={startMandate} onCancel={() => setView('overview')} />}
       {view === 'decisions' && <DecisionLog mandates={mandates} />}
       {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} exitingId={exitingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onExit={(id) => void exitMandateAssets(id)} onCreate={() => setView('create')} />}

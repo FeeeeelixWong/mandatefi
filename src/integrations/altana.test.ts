@@ -116,16 +116,12 @@ describe('Dynamic portfolio mandate', () => {
     risk: 'balanced',
   })
 
-  it('allows only the selected PancakeSwap directions and USDT approval', () => {
+  it('allows only the selected PancakeSwap directions and excludes token approval', () => {
     const usdt = stablecoinConfig('USDT')
     expect(buildPortfolioPermissions(plan).calls).toEqual([
       {
         to: usdt.router,
         signature: 'swapExactETHForTokens(uint256,address[],address,uint256)',
-      },
-      {
-        to: usdt.address,
-        signature: 'approve(address,uint256)',
       },
       {
         to: usdt.router,

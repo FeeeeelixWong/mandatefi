@@ -31,7 +31,25 @@ export interface Mandate {
   grantTxHash?: `0x${string}`
   revokeTxHash?: `0x${string}`
   exitTxHash?: `0x${string}`
+  moduleReceipts?: PancakeModuleReceipt[]
   decisions: DecisionRecord[]
+}
+
+export type PancakeModule = 'SWAP' | 'LIQUIDITY' | 'FARM' | 'EARN'
+
+export interface PancakeModuleReceipt {
+  id: string
+  module: PancakeModule
+  operation: 'ALLOCATE' | 'ADD_LIQUIDITY' | 'STAKE_LP' | 'DEPOSIT_EARN' | 'WITHDRAW' | 'REMOVE_LIQUIDITY'
+  state: 'CONFIRMED' | 'FAILED' | 'SKIPPED'
+  createdAt: string
+  contract: `0x${string}`
+  transactionHash?: `0x${string}`
+  inputAmount?: string
+  inputAsset?: string
+  outputAmount?: string
+  outputAsset?: string
+  note: string
 }
 
 export interface DecisionRecord {

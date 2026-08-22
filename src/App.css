@@ -210,6 +210,19 @@
 .ai-decision.trade { color: #8a5700; background: var(--yellow-soft); }
 .action-panel { grid-column: 1; }
 .committee-panel { grid-column: 1 / -1; }
+.positions-panel { grid-column: 1 / -1; }
+.position-grid { padding: 12px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.position-grid article { min-width: 0; min-height: 112px; padding: 13px; border: 1px solid var(--line); border-radius: 7px; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-content: start; gap: 10px; }
+.position-icon { width: 34px; height: 34px; border-radius: 7px; display: grid; place-items: center; color: #fff; }
+.position-icon.reserve { background: var(--cyan); }
+.position-icon.market { background: var(--purple); }
+.position-icon.liquidity { background: var(--mint); }
+.position-icon.farm { background: #ec9f05; }
+.position-icon.earn { background: #27a671; }
+.position-grid article > div { min-width: 0; display: grid; align-content: start; gap: 4px; }
+.position-grid small { color: var(--muted); font-size: 9px; font-weight: 650; }
+.position-grid strong { overflow: hidden; font-family: Kanit, Inter, sans-serif; font-size: 16px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.position-grid p { margin: 4px 0 0; grid-column: 1 / -1; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .committee-summary { min-height: 70px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1.6fr repeat(3, .7fr); }
 .committee-summary > div { min-width: 0; padding: 13px 18px; display: grid; align-content: center; gap: 3px; }
 .committee-summary > div + div { border-left: 1px solid var(--line); }
@@ -246,7 +259,7 @@
 .coverage-live { color: #14775a; background: var(--mint-soft); }
 .coverage-approval-required { color: #8a5700; background: var(--yellow-soft); }
 .coverage-adapter-planned { color: var(--muted); background: var(--soft); }
-.policy-panel { grid-column: 2; grid-row: 3; align-self: start; }
+.policy-panel { grid-column: 2; align-self: start; }
 .policy-facts { margin: 0; padding: 10px 20px 0; }
 .policy-facts > div { min-height: 43px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .policy-facts dt { color: var(--muted); font-size: 11px; }
@@ -475,8 +488,9 @@
   .portfolio-hero-panel { grid-template-columns: 1.2fr 1fr 1fr; }
   .portfolio-hero-panel .metric:last-child { grid-column: 1 / -1; border-top: 1px solid var(--line); border-left: 0; }
   .dashboard-layout { grid-template-columns: 1fr; }
-  .policy-panel, .action-panel, .committee-panel { grid-column: 1; grid-row: auto; }
+  .policy-panel, .action-panel, .committee-panel, .positions-panel { grid-column: 1; grid-row: auto; }
   .committee-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .position-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .configurator-grid { grid-template-columns: minmax(0, 1fr) 330px; }
 }
 
@@ -599,6 +613,7 @@
   .committee-summary > div:nth-child(n+3) { border-top: 1px solid var(--line); }
   .committee-grid { grid-template-columns: 1fr; }
   .committee-grid article { min-height: 112px; }
+  .position-grid { grid-template-columns: 1fr 1fr; }
   .toast { right: 13px; bottom: 13px; left: 13px; max-width: none; }
 }
 
@@ -612,6 +627,7 @@
   .metric:nth-child(2) { border-top: 0; }
   .sleeve-grid { grid-template-columns: 1fr; }
   .sleeve-grid article { min-height: 145px; }
+  .position-grid { grid-template-columns: 1fr; }
   .strategy-allocation-legend { grid-template-columns: 1fr; }
   .title-actions { flex-direction: column; }
   .title-actions button { width: 100%; }

@@ -11,9 +11,9 @@ The strategy engine can already compose a complete portfolio across reserve, spo
 | Adapter | Responsibility | Current coverage | Production completion |
 | --- | --- | --- | --- |
 | Swap | Build spot and reserve baskets | Live on BSC Testnet | Universal Router/Permit2 review, route simulation, broader token registry |
-| Infinity Liquidity | Create, adjust, and exit LP positions | Owner approval required | Position manager adapter, range model, fee and IL accounting |
-| Farms | Stake eligible LP positions and claim incentives | Planned | Farm discovery, reward valuation, approval and unstake paths |
-| Earn | Allocate eligible single-token positions and compound | Planned | Product registry, lock/exit checks, harvest threshold, receipt reconciliation |
+| V2 Liquidity | Create and exit CAKE/WBNB LP positions | Live activation and owner exit on BSC Testnet | Mainnet pair registry, fee and IL accounting, migration simulation |
+| Farms | Stake and withdraw CAKE/WBNB LP in MasterChef V2 PID 4 | Live activation and owner exit on BSC Testnet | Farm discovery, reward valuation, harvest and migration paths |
+| Earn | Deposit and withdraw CAKE in the flexible CakePool | Live activation and owner exit on BSC Testnet | Product registry, compound threshold, reward accounting, audited mainnet product selection |
 
 ## Runtime Boundaries
 
@@ -49,12 +49,12 @@ The strategy engine can already compose a complete portfolio across reserve, spo
 - Use an idempotency key per mandate, adapter, and decision window.
 - Lock each mandate during execution to prevent concurrent actions.
 
-### 2. Complete PancakeSwap adapters
+### 2. Productionize PancakeSwap adapters
 
 - Upgrade Swap routing to the reviewed production router stack.
-- Add Infinity liquidity create, increase, decrease, collect, and exit actions.
-- Add Farms discovery, stake, unstake, and reward-claim actions.
-- Add Earn allocation and compounding only for reviewed products with explicit exit semantics.
+- Add Infinity liquidity create, increase, decrease, collect, and exit actions after the V2 reference path is audited.
+- Extend the live Farm stake/withdraw path with discovery, reward valuation, harvest, and migration.
+- Extend the live flexible CakePool deposit/withdraw path with a reviewed product registry and cost-aware compounding.
 - Version each adapter manifest with contracts, selectors, tokens, and risk assumptions.
 
 ### 3. Reliable strategy inputs
@@ -84,5 +84,5 @@ The strategy engine can already compose a complete portfolio across reserve, spo
 - An expired or revoked session cannot execute.
 - Concurrent checks produce at most one onchain action.
 - Every action, approval request, or HOLD has inputs, rationale, policy version, and evidence.
-- Planned adapters are never displayed as live.
+- Activation adapters are displayed as live only when they have an execution call, position reader, receipt, and owner exit path.
 - No private key appears in browser storage, application logs, or analytics.

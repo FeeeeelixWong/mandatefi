@@ -38,17 +38,17 @@ const strategySleeveSchema = z.object({
   allocationBps: z.number().int().min(0).max(10_000),
   color: z.string(),
   purpose: z.string(),
-  tool: z.enum(['smart-router', 'infinity-liquidity', 'universal-farms', 'cake-earn']),
+  tool: z.enum(['v2-router', 'v2-liquidity', 'masterchef-v2', 'cake-pool']),
 }).strict()
 
 const strategyActionSchema = z.object({
   id: z.string(),
   order: z.number().int().positive(),
-  tool: z.enum(['smart-router', 'infinity-liquidity', 'universal-farms', 'cake-earn']),
+  tool: z.enum(['v2-router', 'v2-liquidity', 'masterchef-v2', 'cake-pool']),
   title: z.string(),
   detail: z.string(),
   allocationBps: z.number().int().min(0).max(10_000),
-  coverage: z.enum(['LIVE', 'APPROVAL_REQUIRED', 'ADAPTER_PLANNED']),
+  coverage: z.literal('LIVE'),
   risk: z.enum(['Low', 'Medium', 'High']),
 }).strict()
 

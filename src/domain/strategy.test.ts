@@ -46,7 +46,7 @@ describe('AI strategy composition', () => {
     }
   })
 
-  it('exposes execution coverage instead of presenting planned adapters as live', () => {
+  it('exposes all four typed PancakeSwap adapters as live', () => {
     const plan = buildStrategyPlan({
       goal: 'balanced-growth',
       risk: 'balanced',
@@ -54,7 +54,12 @@ describe('AI strategy composition', () => {
       horizonDays: 14,
     })
 
-    expect(plan.actions.find((action) => action.tool === 'smart-router')?.coverage).toBe('LIVE')
-    expect(plan.actions.find((action) => action.tool === 'universal-farms')?.coverage).toBe('ADAPTER_PLANNED')
+    expect(plan.actions.every((action) => action.coverage === 'LIVE')).toBe(true)
+    expect(plan.actions.map((action) => action.tool)).toEqual([
+      'v2-router',
+      'v2-liquidity',
+      'masterchef-v2',
+      'cake-pool',
+    ])
   })
 })

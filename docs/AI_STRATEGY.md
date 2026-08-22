@@ -84,9 +84,9 @@ This build intentionally separates networks:
 | --- | --- | --- |
 | Opportunity research | BNB Chain mainnet | Rank real PancakeSwap LP, Farm, and Earn opportunities |
 | Live market prices | BNB Chain mainnet | Read BNB, CAKE, USDT, and USDC USD prices through the official PancakeSwap SDK |
-| Demonstration execution | BNB Smart Chain Testnet | Prove scoped Swap execution, gas review, session limits, and revocation |
+| Demonstration execution | BNB Smart Chain Testnet | Prove scoped Swap, CAKE/WBNB V2 LP, MasterChef V2 Farm, flexible CakePool Earn, position reads, owner unwind, session limits, and revocation |
 
-A mainnet opportunity cannot authorize a testnet or mainnet transaction. Any executable action must be reconstructed from a fresh execution-network snapshot, priced again, supported by a reviewed adapter, and pass the deterministic mandate gate.
+A mainnet opportunity cannot authorize a testnet or mainnet transaction. Initial testnet deployment uses a fixed, reviewed contract registry and fresh execution-network quotes. Any recurring action must be reconstructed from a fresh execution-network snapshot, priced again, supported by a reviewed adapter, and pass the deterministic mandate gate. LP/Farm/Earn migrations remain owner-approved in this MVP.
 
 ## Expert prompt contract
 
@@ -133,4 +133,4 @@ The runtime never receives the owner passkey or unrestricted transaction authori
 
 ### Production model proof
 
-On August 22, 2026, production smoke run `dead2ca4-d1c0-480f-b712-3f81d6acb99e` completed with all five specialists on `deepseek-v4-flash`, the portfolio manager on `deepseek-v4-pro`, and final `modelMode: DEEPSEEK`. The manager returned `HOLD` because verified LP, Farm, Earn, and execution-cost evidence was absent. This proves both the complete model path and the fail-closed behavior without claiming unavailable DeFi integrations.
+On August 22, 2026, production smoke run `dead2ca4-d1c0-480f-b712-3f81d6acb99e` completed with all five specialists on `deepseek-v4-flash`, the portfolio manager on `deepseek-v4-pro`, and final `modelMode: DEEPSEEK`. The manager returned `HOLD` because fresh decision evidence was absent. That run proves the complete model path and fail-closed behavior; protocol execution evidence is recorded separately by the Swap, LP, Farm, and Earn adapter receipts.

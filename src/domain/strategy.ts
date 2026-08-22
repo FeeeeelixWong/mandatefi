@@ -2,8 +2,8 @@ import type { InvestmentGoal, RiskProfileId } from './portfolio'
 
 export type LiquidityNeed = 'anytime' | 'weekly' | 'term'
 export type StrategySleeveId = 'reserve' | 'market' | 'liquidity' | 'earn'
-export type PancakeToolId = 'smart-router' | 'infinity-liquidity' | 'universal-farms' | 'cake-earn'
-export type ExecutionCoverage = 'LIVE' | 'APPROVAL_REQUIRED' | 'ADAPTER_PLANNED'
+export type PancakeToolId = 'v2-router' | 'v2-liquidity' | 'masterchef-v2' | 'cake-pool'
+export type ExecutionCoverage = 'LIVE'
 
 export type StrategySleeve = {
   id: StrategySleeveId
@@ -56,28 +56,28 @@ const sleeveMeta: Record<StrategySleeveId, Omit<StrategySleeve, 'allocationBps'>
     name: 'Liquid reserve',
     color: 'var(--strategy-reserve)',
     purpose: 'Stable liquidity for withdrawals, gas, and defensive reallocation.',
-    tool: 'smart-router',
+    tool: 'v2-router',
   },
   market: {
     id: 'market',
     name: 'Market exposure',
     color: 'var(--strategy-market)',
     purpose: 'A diversified spot basket built with bounded PancakeSwap routes.',
-    tool: 'smart-router',
+    tool: 'v2-router',
   },
   liquidity: {
     id: 'liquidity',
     name: 'Liquidity yield',
     color: 'var(--strategy-liquidity)',
-    purpose: 'Fee-generating concentrated liquidity with range and IL limits.',
-    tool: 'infinity-liquidity',
+    purpose: 'Fee-generating CAKE/WBNB liquidity with position and IL limits.',
+    tool: 'v2-liquidity',
   },
   earn: {
     id: 'earn',
     name: 'Farm and earn',
     color: 'var(--strategy-earn)',
-    purpose: 'Farm incentives and single-token yield with lock-aware sizing.',
-    tool: 'universal-farms',
+    purpose: 'MasterChef incentives and flexible CAKE yield with explicit exits.',
+    tool: 'masterchef-v2',
   },
 }
 
@@ -210,7 +210,7 @@ export function buildStrategyPlan({
     {
       id: 'build-basket',
       order: 1,
-      tool: 'smart-router',
+      tool: 'v2-router',
       title: 'Build the spot and reserve basket',
       detail: 'Route bounded swaps into the approved assets while preserving gas and withdrawal liquidity.',
       allocationBps: allocation.reserve + allocation.market,
@@ -220,31 +220,31 @@ export function buildStrategyPlan({
     {
       id: 'open-liquidity',
       order: 2,
-      tool: 'infinity-liquidity',
-      title: 'Open concentrated liquidity positions',
-      detail: 'Select deep pairs and ranges only when fee yield clears volatility and impermanent-loss limits.',
+      tool: 'v2-liquidity',
+      title: 'Open CAKE/WBNB liquidity',
+      detail: 'Route the approved sleeve into the official testnet pair and mint an onchain LP position.',
       allocationBps: allocation.liquidity,
-      coverage: 'APPROVAL_REQUIRED',
+      coverage: 'LIVE',
       risk: risk === 'growth' ? 'High' : 'Medium',
     },
     {
       id: 'farm-position',
       order: 3,
-      tool: 'universal-farms',
-      title: 'Stake eligible liquidity in Farms',
-      detail: 'Add CAKE incentives only after fees, emissions, lock terms, and exit liquidity pass policy checks.',
-      allocationBps: Math.round(allocation.earn * 0.65),
-      coverage: 'ADAPTER_PLANNED',
+      tool: 'masterchef-v2',
+      title: 'Stake LP in MasterChef V2',
+      detail: 'Deposit the minted CAKE/WBNB LP into official testnet Farm PID 4 and retain a typed withdrawal path.',
+      allocationBps: allocation.liquidity,
+      coverage: 'LIVE',
       risk: 'Medium',
     },
     {
       id: 'compound-rewards',
       order: 4,
-      tool: 'cake-earn',
-      title: 'Harvest and compound rewards',
-      detail: 'Compound above the gas threshold; otherwise retain rewards until the next scheduled review.',
-      allocationBps: Math.round(allocation.earn * 0.35),
-      coverage: 'ADAPTER_PLANNED',
+      tool: 'cake-pool',
+      title: 'Deposit CAKE into flexible Earn',
+      detail: 'Convert the Earn sleeve to CAKE and deposit it into the official share-based CAKE Pool with no lock.',
+      allocationBps: allocation.earn,
+      coverage: 'LIVE',
       risk: 'Low',
     },
   ]

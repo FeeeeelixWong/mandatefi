@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { formatEther, parseEther, type Address, type Hex } from 'viem'
 import type { AltanaWalletProfile } from '../integrations/altana'
 import type { PortfolioPlan } from '../domain/portfolio'
+import type { StrategyPlan } from '../domain/strategy'
+import type { PortfolioSnapshot } from '../domain/portfolio'
 import { bscTestnetClient } from '../lib/chains'
 import { sendNativeTransfer, type Eip1193Provider } from '../lib/wallet'
 import type { StablecoinSymbol } from '../lib/tokens'
 
-export type AltanaStage = 'idle' | 'creating' | 'recovering' | 'funding' | 'normalizing' | 'granting' | 'executing' | 'revoking' | 'withdrawing' | 'error'
+export type AltanaStage = 'idle' | 'creating' | 'recovering' | 'funding' | 'normalizing' | 'approving' | 'granting' | 'executing' | 'revoking' | 'withdrawing' | 'error'
 
 const minimumBalance = parseEther('0.003')
 
@@ -141,6 +143,36 @@ export function useAltanaWallet() {
     }
   }, [profile, refreshBalance])
 
+  const activateDeFiPortfolio = useCallback(async (
+    durationDays: number,
+    strategy: StrategyPlan,
+    snapshot: PortfolioSnapshot,
+    rebalance: PortfolioPlan,
+    executeApprovedPlan = true,
+  ) => {
+    if (!profile) throw new Error('Create or recover the Altana wallet first.')
+    setError('')
+    try {
+      const { grantAndDeployPancakePortfolio } = await import('../integrations/pancakeExecutor')
+      const result = await grantAndDeployPancakePortfolio(
+        profile,
+        durationDays,
+        strategy,
+        snapshot,
+        rebalance,
+        executeApprovedPlan,
+        setStage,
+      )
+      await refreshBalance(profile)
+      setStage('idle')
+      return result
+    } catch (operationError) {
+      setError(operationErrorMessage(operationError))
+      setStage('error')
+      throw operationError
+    }
+  }, [profile, refreshBalance])
+
   const revoke = useCallback(async (publicKey: Hex) => {
     if (!profile) throw new Error('Recover the Altana owner passkey before revoking.')
     setStage('revoking')
@@ -163,8 +195,8 @@ export function useAltanaWallet() {
     setStage('withdrawing')
     setError('')
     try {
-      const { exitAltanaAssets } = await import('../integrations/altana')
-      const result = await exitAltanaAssets(profile, stablecoin, recipient)
+      const { exitPancakePortfolio } = await import('../integrations/pancakeExecutor')
+      const result = await exitPancakePortfolio(profile, stablecoin, recipient)
       await refreshBalance(profile)
       setStage('idle')
       return result
@@ -176,6 +208,7 @@ export function useAltanaWallet() {
   }, [profile, refreshBalance])
 
   return {
+    activateDeFiPortfolio,
     activatePortfolio,
     address: profile?.wallet.address ?? null,
     balance: displayBalance(balanceWei),
