@@ -16,6 +16,7 @@ import {
 } from '../lib/wallet'
 
 export type WalletStatus = 'idle' | 'discovering' | 'connecting' | 'connected' | 'error'
+export type WalletBalanceStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 const walletPreferenceKey = 'mandatefi.injected-wallet.preference'
 
@@ -30,9 +31,11 @@ export function useInjectedWallet() {
   const [account, setAccount] = useState<Address | null>(null)
   const [chainId, setChainId] = useState<number | null>(null)
   const [balance, setBalance] = useState<string | null>(null)
+  const [balanceStatus, setBalanceStatus] = useState<WalletBalanceStatus>('idle')
   const [status, setStatus] = useState<WalletStatus>('discovering')
   const [error, setError] = useState('')
   const preference = useRef(savedPreference())
+  const balanceRequest = useRef(0)
   const selectedWallet = useMemo(
     () => wallets.find((wallet) => wallet.id === selectedWalletId) ?? null,
     [selectedWalletId, wallets],
@@ -64,15 +67,22 @@ export function useInjectedWallet() {
   }, [registerWallet])
 
   const refreshBalance = useCallback(async (address: Address | null, activeChainId: number | null) => {
+    const requestId = ++balanceRequest.current
     if (!address || activeChainId !== TARGET_CHAIN.id) {
       setBalance(null)
+      setBalanceStatus('idle')
       return
     }
+    setBalanceStatus('loading')
     try {
       const wei = await bscTestnetClient.getBalance({ address })
-      setBalance(Number(formatEther(wei)).toLocaleString(undefined, { maximumFractionDigits: 4 }))
+      if (requestId !== balanceRequest.current) return
+      setBalance(Number(formatEther(wei)).toLocaleString(undefined, { maximumFractionDigits: 6 }))
+      setBalanceStatus('ready')
     } catch {
+      if (requestId !== balanceRequest.current) return
       setBalance(null)
+      setBalanceStatus('error')
     }
   }, [])
 
@@ -104,6 +114,7 @@ export function useInjectedWallet() {
     setAccount(null)
     setChainId(null)
     setBalance(null)
+    setBalanceStatus('idle')
     setStatus('connecting')
     setError('')
     try {
@@ -168,6 +179,7 @@ export function useInjectedWallet() {
   return {
     account,
     balance,
+    balanceStatus,
     chainId,
     connect,
     clearError: () => setError(''),

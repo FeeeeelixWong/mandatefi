@@ -527,19 +527,23 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
 }
 
 function WalletPicker({
-  open, wallets, selectedWalletId, connected, targetNetwork, status, error,
-  onClose, onSelect, onSwitchNetwork, onClearError,
+  open, wallets, selectedWalletId, connected, account, balance, balanceStatus, targetNetwork, status, error,
+  onClose, onSelect, onSwitchNetwork, onRefresh, onClearError,
 }: {
   open: boolean
   wallets: InjectedWallet[]
   selectedWalletId: string
   connected: boolean
+  account: `0x${string}` | null
+  balance: string | null
+  balanceStatus: 'idle' | 'loading' | 'ready' | 'error'
   targetNetwork: boolean
   status: 'idle' | 'discovering' | 'connecting' | 'connected' | 'error'
   error: string
   onClose: () => void
   onSelect: (walletId: string) => Promise<void>
   onSwitchNetwork: () => Promise<boolean>
+  onRefresh: () => Promise<void>
   onClearError: () => void
 }) {
   const dialogRef = useRef<HTMLElement>(null)
@@ -597,6 +601,7 @@ function WalletPicker({
             {connecting && active ? <LoaderCircle className="spin" size={18} /> : active && connected ? <span className="wallet-connected"><Check size={14} /> Connected</span> : <ChevronRight size={18} />}
           </button>
         })}</div>}
+        {connected && targetNetwork && account && <div className="wallet-account-summary" aria-live="polite"><span className="wallet-account-icon"><Wallet size={18} /></span><span><small>Available wallet balance</small><strong>{balanceStatus === 'loading' ? 'Reading balance...' : balanceStatus === 'error' ? 'Balance unavailable' : `${balance ?? '0'} tBNB`}</strong><code>{shortAddress(account)}</code></span><button className="icon-button" disabled={balanceStatus === 'loading'} onClick={() => void onRefresh()} aria-label="Refresh wallet balance"><RefreshCw className={balanceStatus === 'loading' ? 'spin' : ''} size={16} /></button></div>}
         {connected && !targetNetwork && <div className="wallet-network-action"><AlertTriangle size={17} /><span><strong>Wrong network</strong><small>MandateFi currently executes on BNB Smart Chain Testnet.</small></span><button onClick={() => void onSwitchNetwork()}>Switch network</button></div>}
         {error && <div className="wallet-dialog-error" role="alert"><AlertTriangle size={16} /><span>{error}</span><button onClick={onClearError} aria-label="Dismiss wallet error"><X size={14} /></button></div>}
       </div>
@@ -606,7 +611,7 @@ function WalletPicker({
 }
 
 function MandateWizard({
-  snapshotLoading, account, isTargetNetwork, walletError, walletName,
+  snapshotLoading, account, isTargetNetwork, walletError, walletName, walletBalance, walletBalanceStatus,
   altanaAddress, altanaBalance, altanaBalanceWei, altanaStage, altanaError,
   pancakeResearch, pancakeMarket,
   isPasskeySupported, onConnect, onSwitchNetwork, onCreateAltana, onRecoverAltana,
@@ -617,6 +622,8 @@ function MandateWizard({
   isTargetNetwork: boolean
   walletError: string
   walletName: string
+  walletBalance: string | null
+  walletBalanceStatus: 'idle' | 'loading' | 'ready' | 'error'
   altanaAddress: `0x${string}` | null
   altanaBalance: string
   altanaBalanceWei: bigint | null
@@ -770,7 +777,7 @@ function MandateWizard({
         {step === 3 && <>
           <div className="approval-intro"><span className="eyebrow">Owner approval</span><h2>Fund once, deploy four modules</h2><p>tBNB enters your Passkey smart account. After stablecoin allocation, your Passkey authorizes bounded allowances to the official V2 Router, MasterChef V2, and CAKE Pool. The revocable AI session cannot call approve.</p></div>
           <div className="approval-checklist">
-            <div className={account && isTargetNetwork ? 'complete' : ''}><span>{account && isTargetNetwork ? <Check size={16} /> : <Wallet size={16} />}</span><div><strong>Funding wallet</strong><small>{account ? `${walletName} · ${shortAddress(account)} · ${isTargetNetwork ? 'BNB Testnet' : 'wrong network'}` : 'Choose an installed wallet'}</small></div>{!account ? <button onClick={onConnect}>Connect</button> : !isTargetNetwork ? <button onClick={onSwitchNetwork}>Switch</button> : null}</div>
+            <div className={account && isTargetNetwork ? 'complete' : ''}><span>{account && isTargetNetwork ? <Check size={16} /> : <Wallet size={16} />}</span><div><strong>Funding wallet</strong><small>{account ? `${walletName} · ${shortAddress(account)} · ${!isTargetNetwork ? 'wrong network' : walletBalanceStatus === 'loading' ? 'reading balance' : walletBalanceStatus === 'error' ? 'balance unavailable' : `${walletBalance ?? '0'} tBNB available`}` : 'Choose an installed wallet'}</small></div>{!account ? <button onClick={onConnect}>Connect</button> : !isTargetNetwork ? <button onClick={onSwitchNetwork}>Switch</button> : null}</div>
             <div className={altanaAddress ? 'complete' : ''}><span>{altanaAddress ? <Check size={16} /> : <Fingerprint size={16} />}</span><div><strong>Passkey smart wallet</strong><small>{altanaAddress ? shortAddress(altanaAddress) : 'Owner-controlled account'}</small></div>{!altanaAddress && <div className="inline-actions"><button disabled={!isPasskeySupported || busy} onClick={onCreateAltana}>Create</button><button disabled={!isPasskeySupported || busy} onClick={onRecoverAltana}>Recover</button></div>}</div>
             <div className={fundingReady ? 'complete' : ''}><span>{fundingReady ? <Check size={16} /> : <Vault size={16} />}</span><div><strong>tBNB funding</strong><small>{altanaAddress ? `${altanaBalance} tBNB available · target ${draft.amount || '0'} tBNB` : 'Fund after wallet creation'}</small></div>{altanaAddress && !fundingReady && <button disabled={busy || !account || !amountValid} onClick={() => void onFundAltana(draft)}>Deposit missing tBNB</button>}</div>
             <div className={smartStableBalance > 0n ? 'complete' : ''}><span>{smartStableBalance > 0n ? <Check size={16} /> : <ArrowDownUp size={16} />}</span><div><strong>AI-selected startup conversion</strong><small>{smartStableBalance > 0n ? `${formatStable(smartStableBalance)} ${draft.stablecoin} already available` : `Convert funded tBNB to ${draft.stablecoin}; keep ${formatNative(GAS_RESERVE)} tBNB for Gas`}</small></div><b className="checklist-state">{smartStableBalance > 0n ? 'Recorded' : `${draft.stablecoinSelection?.confidence ?? 0}% confidence`}</b></div>
@@ -1231,19 +1238,19 @@ function App() {
     <header className="app-header"><div className="app-header-inner">
       <button className="header-brand" onClick={() => setView('overview')}><span className="brand-mark"><BarChart3 size={19} /></span><span><strong>MandateFi</strong><small>AI DeFi Manager</small></span></button>
       <nav className="top-navigation">{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => setView(item.id)}><Icon size={16} /><span>{item.label}</span>{item.id === 'decisions' && mandates.some((mandate) => mandate.decisions.length) && <b>{mandates.reduce((sum, mandate) => sum + mandate.decisions.length, 0)}</b>}</button> })}</nav>
-      <div className="header-actions"><span className="header-network"><i className={wallet.isTargetNetwork ? 'online' : ''} /> BNB Testnet</span><button ref={walletButton} className={wallet.isConnected ? 'wallet-button connected' : 'wallet-button'} disabled={wallet.status === 'connecting'} onClick={openWalletPicker} title={wallet.selectedWallet?.name ?? 'Connect wallet'}><Wallet size={17} /><span>{wallet.status === 'connecting' ? 'Connecting...' : wallet.account ? `${wallet.selectedWallet?.name ?? 'Wallet'} · ${shortAddress(wallet.account)}` : 'Connect wallet'}</span></button><button ref={mobileMenuButton} className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></button></div>
+      <div className="header-actions"><span className="header-network"><i className={wallet.isTargetNetwork ? 'online' : ''} /> BNB Testnet</span><button ref={walletButton} className={wallet.isConnected ? 'wallet-button connected' : 'wallet-button'} disabled={wallet.status === 'connecting'} onClick={openWalletPicker} title={wallet.selectedWallet?.name ?? 'Connect wallet'}><Wallet size={17} /><span className="wallet-button-copy">{wallet.status === 'connecting' ? <strong>Connecting...</strong> : wallet.account ? <><strong>{wallet.selectedWallet?.name ?? 'Wallet'} · {shortAddress(wallet.account)}</strong><small>{!wallet.isTargetNetwork ? 'Switch to BNB Testnet' : wallet.balanceStatus === 'loading' ? 'Reading balance...' : wallet.balanceStatus === 'error' ? 'Balance unavailable' : `${wallet.balance ?? '0'} tBNB`}</small></> : <strong>Connect wallet</strong>}</span></button><button ref={mobileMenuButton} className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu size={20} /></button></div>
     </div>
     <nav className={`mobile-navigation ${menuOpen ? 'open' : ''}`}><div><strong>Navigate</strong><button ref={mobileCloseButton} className="icon-button" onClick={closeMobileMenu} aria-label="Close menu"><X size={18} /></button></div>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? 'active' : ''} onClick={() => { setView(item.id); closeMobileMenu() }}><Icon size={18} /><span>{item.label}</span></button> })}<aside><ShieldCheck size={17} /><span><strong>{activeMandate ? activeMandate.name : 'Owner-controlled by default'}</strong><small>{activeMandate ? `${activeMandate.managedAmount} tBNB → ${activeMandate.stablecoin} · ${riskProfiles[activeMandate.riskProfile].name}` : 'Passkey admin and revocable scope'}</small></span></aside></nav>
     </header>
     <button className={`navigation-scrim ${menuOpen ? 'visible' : ''}`} onClick={closeMobileMenu} aria-label="Close navigation" />
     <main className="main-area" inert={menuOpen ? true : undefined} aria-hidden={menuOpen ? true : undefined}><div className="page-content">
       {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} positions={pancakePositions} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
-      {view === 'create' && <MandateWizard snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} walletName={wallet.selectedWallet?.name ?? 'Browser wallet'} altanaAddress={altana.address} altanaBalance={altana.balance} altanaBalanceWei={altana.balanceWei} altanaStage={altana.stage} altanaError={altana.error} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} isPasskeySupported={altana.isPasskeySupported} onConnect={openWalletPicker} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={fundAltanaWallet} onStart={startMandate} onCancel={() => setView('overview')} />}
+      {view === 'create' && <MandateWizard snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} walletName={wallet.selectedWallet?.name ?? 'Browser wallet'} walletBalance={wallet.balance} walletBalanceStatus={wallet.balanceStatus} altanaAddress={altana.address} altanaBalance={altana.balance} altanaBalanceWei={altana.balanceWei} altanaStage={altana.stage} altanaError={altana.error} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} isPasskeySupported={altana.isPasskeySupported} onConnect={openWalletPicker} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={fundAltanaWallet} onStart={startMandate} onCancel={() => setView('overview')} />}
       {view === 'decisions' && <DecisionLog mandates={mandates} />}
       {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} exitingId={exitingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onExit={(id) => void exitMandateAssets(id)} onCreate={() => setView('create')} />}
       {view === 'about' && <AboutPage onCreate={() => setView('create')} />}
     </div></main>
-    <WalletPicker open={walletPickerOpen} wallets={wallet.wallets} selectedWalletId={wallet.selectedWalletId} connected={wallet.isConnected} targetNetwork={wallet.isTargetNetwork} status={wallet.status} error={wallet.error} onClose={closeWalletPicker} onSelect={selectInjectedWallet} onSwitchNetwork={wallet.switchNetwork} onClearError={wallet.clearError} />
+    <WalletPicker open={walletPickerOpen} wallets={wallet.wallets} selectedWalletId={wallet.selectedWalletId} connected={wallet.isConnected} account={wallet.account} balance={wallet.balance} balanceStatus={wallet.balanceStatus} targetNetwork={wallet.isTargetNetwork} status={wallet.status} error={wallet.error} onClose={closeWalletPicker} onSelect={selectInjectedWallet} onSwitchNetwork={wallet.switchNetwork} onRefresh={wallet.refresh} onClearError={wallet.clearError} />
     {snapshotError && <div className="toast error-toast"><AlertTriangle size={17} /><span>{snapshotError}</span><button onClick={() => void refreshSnapshot()} aria-label="Retry portfolio data"><RefreshCw size={15} /></button></div>}
     {notice && <div className="toast"><CircleCheck size={17} /><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X size={15} /></button></div>}
     {(wallet.error || altana.error) && view !== 'create' && <div className="toast error-toast"><AlertTriangle size={17} /><span>{wallet.error || altana.error}</span><button onClick={() => { wallet.clearError(); altana.clearError() }} aria-label="Dismiss error"><X size={15} /></button></div>}

@@ -17,7 +17,10 @@
 .header-network i, .network-pill i, .status-chip i, .status-active i, .status-paused i, .status-revoked i { width: 7px; height: 7px; border-radius: 50%; background: #a4a0b0; }
 .header-network i.online, .network-pill i, .status-chip.active i, .status-active i { background: var(--mint); box-shadow: 0 0 0 3px rgba(49,208,170,.14); }
 .wallet-button { min-height: 40px; padding: 0 13px; border: 1px solid var(--purple); border-radius: 7px; display: inline-flex; align-items: center; gap: 7px; color: #fff; background: var(--purple); cursor: pointer; font-size: 13px; font-weight: 700; }
-.wallet-button > span { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wallet-button-copy { max-width: 210px; display: grid; gap: 1px; overflow: hidden; text-align: left; }
+.wallet-button-copy strong, .wallet-button-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wallet-button-copy strong { font-size: 12px; line-height: 1.2; }
+.wallet-button-copy small { color: inherit; font-size: 9px; font-weight: 600; line-height: 1.2; opacity: .72; }
 .wallet-button.connected { color: var(--purple); border-color: #d6c9ec; background: var(--purple-soft); }
 .wallet-button:disabled { cursor: wait; opacity: .58; }
 .wallet-button:focus-visible, .wallet-options button:focus-visible, .wallet-network-action button:focus-visible, .wallet-dialog-error button:focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; }
@@ -43,6 +46,13 @@
 .wallet-options small { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .wallet-options > button > svg { color: #9b91ad; }
 .wallet-connected { display: inline-flex; align-items: center; gap: 4px; color: #14775a; font-size: 10px; font-weight: 800; }
+.wallet-account-summary { min-height: 72px; padding: 11px 12px; border: 1px solid #b9dfd3; border-radius: 8px; display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center; gap: 11px; background: #f4fcf9; }
+.wallet-account-icon { width: 40px; height: 40px; border-radius: 8px; display: grid; place-items: center; color: #14775a; background: #ddf6ed; }
+.wallet-account-summary > span:nth-child(2) { min-width: 0; display: grid; gap: 2px; }
+.wallet-account-summary small { color: var(--muted); font-size: 9px; font-weight: 700; }
+.wallet-account-summary strong { overflow: hidden; color: #14775a; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.wallet-account-summary code { color: var(--muted); font-family: inherit; font-size: 9px; }
+.wallet-account-summary .icon-button { background: #fff; }
 .wallet-discovery { display: grid; gap: 8px; }
 .wallet-discovery span { height: 66px; border-radius: 8px; background: linear-gradient(90deg, var(--soft) 25%, #fff 50%, var(--soft) 75%); background-size: 200% 100%; animation: wallet-loading 1.1s linear infinite; }
 @keyframes wallet-loading { to { background-position: -200% 0; } }
@@ -661,7 +671,8 @@
 @media (max-width: 430px) {
   .header-brand strong { font-size: 16px; }
   .wallet-button { max-width: 142px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .wallet-button > span { max-width: 96px; }
+  .wallet-button-copy { max-width: 96px; }
+  .wallet-button-copy small { display: none; }
   .wallet-dialog-layer { align-items: end; padding: 0; }
   .wallet-dialog { width: 100%; max-height: min(82vh, 680px); border-right: 0; border-bottom: 0; border-left: 0; border-radius: 8px 8px 0 0; padding-bottom: env(safe-area-inset-bottom); }
   .wallet-dialog > header { padding: 16px; }
