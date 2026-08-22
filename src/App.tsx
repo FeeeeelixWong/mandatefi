@@ -177,29 +177,31 @@ function buildDeploymentDecision(
   review: StrategyReview,
 ): DecisionRecord {
   const completedModules = completedPancakeModules(proof.receipts)
-  const confirmed = completedModules.size === 4
+  const confirmed = completedModules.size === 4 || proof.recoveredExistingPositions
   const failed = proof.receipts.some((item) => item.state === 'FAILED')
-  const transactionHash = [...proof.receipts].reverse().find((item) => item.transactionHash)?.transactionHash
+  const transactionHash = [...proof.receipts].reverse().find((item) => item.transactionHash)?.transactionHash ?? (proof.recoveredExistingPositions ? proof.grant.transactionHash : undefined)
   const modules = [...completedModules]
   return {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
-    action: 'BUY_NATIVE',
+    action: proof.recoveredExistingPositions ? 'HOLD' : 'BUY_NATIVE',
     purpose: 'PORTFOLIO_REBALANCE',
     state: confirmed ? 'CONFIRMED' : failed ? 'FAILED' : 'POLICY_ONLY',
-    rationale: proof.receipts.length
+    rationale: proof.recoveredExistingPositions
+      ? 'Existing PancakeSwap positions were detected before execution. MandateFi preserved them without repeating a Swap, LP, Farm, or Earn allocation, then registered a replacement revocable AI session for continued monitoring and owner-controlled recovery.'
+      : proof.receipts.length
       ? `The investment committee approved a typed initial deployment. Confirmed modules: ${modules.join(', ') || 'none'}. Each adapter has its own contract target, spend cap, receipt, position read, and owner exit path.`
       : `${review.recommendation.rationale} The policy was registered, but no DeFi module executed because the deterministic gate did not authorize deployment.`,
     currentStableBps: 10_000,
     targetStableBps: Number(plan.targetStableBps),
     projectedStableBps: Number(plan.targetStableBps),
-    amountIn: formatStable(proof.deployment.stableAllowance),
+    amountIn: proof.recoveredExistingPositions ? '0' : formatStable(proof.deployment.stableAllowance),
     inputAsset: proof.deployment.stablecoin,
     outputAsset: 'tBNB',
     transactionHash,
     reviewSource: review.source,
     triggers: review.triggers.map((trigger) => trigger.kind),
-    expertAction: 'DEPLOY_PANCAKE_PORTFOLIO',
+    expertAction: proof.recoveredExistingPositions ? 'RECOVER_EXISTING_PORTFOLIO' : 'DEPLOY_PANCAKE_PORTFOLIO',
     confidence: review.recommendation.confidence,
     gateStatus: review.gate.status,
     promptVersion: review.promptVersion,
@@ -850,7 +852,7 @@ function DecisionLog({ mandates, activationAttempts }: { mandates: Mandate[]; ac
         const latestHash = attempt.moduleReceipts?.findLast((item) => item.transactionHash)?.transactionHash ?? attempt.grantTxHash ?? attempt.approvalTxHash ?? attempt.normalizationDecision?.transactionHash
         return <article key={attempt.id}>
           <div className="decision-icon hold">{attempt.phase === 'FAILED' ? <AlertTriangle size={17} /> : <LoaderCircle className="spin" size={17} />}</div>
-          <div className="decision-copy"><div><strong>Strategy activation · {activationPhaseCopy[attempt.phase]}</strong><span>{attempt.name}</span></div><p>{attempt.error ?? 'Confirmed stages are journaled immediately. Closing or refreshing this page will not erase the visible evidence.'}</p><div className="decision-tags"><span>{attempt.stablecoin}</span><span>{attempt.fundingAmount} tBNB funded</span><span>{shortAddress(attempt.smartWallet)}</span>{attempt.normalizationDecision && <span>Startup conversion confirmed</span>}{attempt.grantTxHash && <span>Policy registered</span>}{attempt.moduleReceipts?.length ? <span>{completedPancakeModules(attempt.moduleReceipts).size}/4 modules</span> : null}</div></div>
+          <div className="decision-copy"><div><strong>Strategy activation · {activationPhaseCopy[attempt.phase]}</strong><span>{attempt.name}</span></div><p>{attempt.error ?? 'Confirmed stages are journaled immediately. Closing or refreshing this page will not erase the visible evidence.'}</p><div className="decision-tags"><span>{attempt.stablecoin}</span><span>{attempt.fundingAmount} tBNB funded</span><span>{shortAddress(attempt.smartWallet)}</span>{attempt.recoveryDetected && <span>Existing positions preserved</span>}{attempt.normalizationDecision && <span>Startup conversion confirmed</span>}{attempt.grantTxHash && <span>Policy registered</span>}{attempt.moduleReceipts?.length ? <span>{completedPancakeModules(attempt.moduleReceipts).size}/4 modules</span> : null}</div></div>
           <div className="decision-evidence"><strong className={attempt.phase === 'FAILED' ? 'evidence-failed' : 'evidence-policy_only'}>{attempt.phase === 'FAILED' ? 'NEEDS ATTENTION' : 'IN PROGRESS'}</strong><span>{new Date(attempt.updatedAt).toLocaleString()}</span>{latestHash && <a href={txUrl(latestHash)} target="_blank" rel="noreferrer">Latest proof <ExternalLink size={12} /></a>}</div>
         </article>
       })}
@@ -1145,6 +1147,12 @@ function App() {
     if (!latestSnapshot || latestSnapshot.stableBalance <= 0n) {
       throw new Error(`The owner startup conversion did not produce ${draft.stablecoin}. Review the wallet transaction before retrying.`)
     }
+    const [{ hasExistingPancakeExposure }, existingPositions] = await Promise.all([
+      import('./integrations/pancakeExecutor'),
+      refreshPancakePositions(draft.stablecoin),
+    ])
+    const preserveExistingPositions = existingPositions ? hasExistingPancakeExposure(existingPositions) : false
+    if (preserveExistingPositions) updateAttempt({ recoveryDetected: true, phase: 'REVIEWING' })
     if (latestSnapshot.nativeBalance < GAS_LOW_WATERMARK) {
       throw new Error('Startup conversion left too little tBNB for safe execution. Add tBNB before retrying.')
     }
@@ -1197,6 +1205,7 @@ function App() {
       executionPlan,
       review.gate.status === 'AUTO_EXECUTE',
       recordActivationProgress,
+      preserveExistingPositions,
     )
     const id = crypto.randomUUID()
     runtimeSessions.current.set(id, proof.session)
@@ -1238,7 +1247,9 @@ function App() {
     await refreshSnapshot(draft.stablecoin)
     setView('overview')
     const confirmedModules = completedPancakeModules(proof.receipts)
-    setNotice(confirmedModules.size === 4
+    setNotice(proof.recoveredExistingPositions
+      ? 'Existing PancakeSwap positions were preserved and attached to a replacement revocable AI policy. No portfolio allocation was repeated.'
+      : confirmedModules.size === 4
       ? `The allocation agent selected ${draft.stablecoin}; Swap, LP, Farm, and Earn all confirmed on BSC Testnet.`
       : `The strategy is active with ${confirmedModules.size}/4 modules confirmed. Review Activity before retrying any incomplete adapter.`)
     } catch (error) {

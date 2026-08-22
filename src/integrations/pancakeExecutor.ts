@@ -196,6 +196,7 @@ export type PancakeDeploymentProof = {
   deployment: PancakeDeploymentPlan
   receipts: PancakeModuleReceipt[]
   positions: PancakePositionSnapshot
+  recoveredExistingPositions: boolean
 }
 
 export type PancakeActivationProgress = {
@@ -212,6 +213,14 @@ export type PancakeExitProof = {
   cakeAmount: bigint
   nativeAmount: bigint
   transaction: ExecuteResult
+}
+
+export function hasExistingPancakeExposure(positions: PancakePositionSnapshot) {
+  return positions.nativeBalance > GAS_RESERVE ||
+    positions.cakeBalance > 0n ||
+    positions.lpWalletBalance > 0n ||
+    positions.farmStaked > 0n ||
+    positions.earnShares > 0n
 }
 
 function buffered(value: bigint) {
@@ -594,6 +603,7 @@ export async function grantAndDeployPancakePortfolio(
   executeApprovedPlan: boolean,
   onStage?: (stage: 'approving' | 'granting' | 'executing') => void,
   onProgress?: (progress: PancakeActivationProgress) => void,
+  preserveExistingPositions = false,
 ): Promise<PancakeDeploymentProof> {
   const prepared = await preparePancakeDeployment(snapshot, strategy)
   const deployment = {
@@ -616,11 +626,11 @@ export async function grantAndDeployPancakePortfolio(
     register: true,
   })
   onProgress?.({ phase: 'GRANTED', transactionHash: grant.transactionHash })
-  const receipts = executeApprovedPlan
+  const receipts = executeApprovedPlan && !preserveExistingPositions
     ? await deployPancakePortfolio(grant, deployment, onStage, (nextReceipts) => onProgress?.({ phase: 'DEPLOYING', receipts: nextReceipts }))
     : []
   const positions = await readPancakePositions(profile.wallet.address, snapshot.stablecoin)
-  return { session: grant, grant, approval, deployment, receipts, positions }
+  return { session: grant, grant, approval, deployment, receipts, positions, recoveredExistingPositions: preserveExistingPositions }
 }
 
 async function quoteLpRemovalMinimums(lpAmount: bigint) {

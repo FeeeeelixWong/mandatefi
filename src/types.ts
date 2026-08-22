@@ -53,6 +53,7 @@ export interface ActivationAttempt {
   smartWallet: `0x${string}`
   fundingAmount: string
   phase: ActivationPhase
+  recoveryDetected?: boolean
   error?: string
   normalizationDecision?: DecisionRecord
   approvalTxHash?: `0x${string}`

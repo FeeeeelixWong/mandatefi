@@ -151,6 +151,7 @@ export function useAltanaWallet() {
     rebalance: PortfolioPlan,
     executeApprovedPlan = true,
     onProgress?: (progress: PancakeActivationProgress) => void,
+    preserveExistingPositions = false,
   ) => {
     if (!profile) throw new Error('Create or recover the Altana wallet first.')
     setError('')
@@ -165,6 +166,7 @@ export function useAltanaWallet() {
         executeApprovedPlan,
         setStage,
         onProgress,
+        preserveExistingPositions,
       )
       await refreshBalance(profile)
       setStage('idle')

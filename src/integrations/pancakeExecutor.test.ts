@@ -4,6 +4,7 @@ import type { PortfolioPlan } from '../domain/portfolio'
 import { stablecoinConfig } from '../lib/tokens'
 import {
   buildPancakePermissions,
+  hasExistingPancakeExposure,
   PANCAKE_CAKE_POOL,
   PANCAKE_CAKE_WBNB_LP,
   PANCAKE_MASTERCHEF_V2,
@@ -83,5 +84,29 @@ describe('PancakeSwap module permissions', () => {
       period: 'day',
       token: PANCAKE_CAKE_WBNB_LP,
     })
+  })
+})
+
+describe('PancakeSwap activation recovery', () => {
+  const emptyPositions = {
+    stablecoin: 'USDT' as const,
+    stableBalance: parseEther('10'),
+    nativeBalance: parseEther('0.003'),
+    cakeBalance: 0n,
+    lpWalletBalance: 0n,
+    farmStaked: 0n,
+    earnShares: 0n,
+    earnCakeValue: 0n,
+    observedAt: '2026-08-23T00:00:00.000Z',
+  }
+
+  it('does not treat normalized reserve capital as an existing deployment', () => {
+    expect(hasExistingPancakeExposure(emptyPositions)).toBe(false)
+  })
+
+  it('detects any existing PancakeSwap position before retrying deployment', () => {
+    expect(hasExistingPancakeExposure({ ...emptyPositions, farmStaked: 1n })).toBe(true)
+    expect(hasExistingPancakeExposure({ ...emptyPositions, earnShares: 1n })).toBe(true)
+    expect(hasExistingPancakeExposure({ ...emptyPositions, nativeBalance: parseEther('0.0031') })).toBe(true)
   })
 })
