@@ -4,7 +4,7 @@
 
 The current live path proves the owner-controlled foundation of the broader multi-strategy product:
 
-1. The owner manually enters a tBNB funding amount, outcome, risk, liquidity access, and duration. The product provides no preset deposit amounts.
+1. The owner manually enters a tBNB funding amount, outcome, risk, liquidity access, and duration. The product provides no preset deposit amounts or fixed UI maximum; the amount must leave more than the protected Gas reserve, and wallet balance plus the live route determine executable size.
 2. A dedicated allocation agent compares USDT and USDC yield, TVL, peg deviation, eligible opportunities, and live PancakeSwap normalization quotes.
 3. The owner reviews the AI-selected base asset and its evidence; this recommendation does not grant wallet authority.
 4. MandateFi generates a four-sleeve PancakeSwap strategy and explicit guardrails.

@@ -16,7 +16,7 @@ PancakeSwap is the execution venue, not the strategy itself. Stablecoin-to-tBNB 
 
 ![MandateFi collaboration flow showing the owner, control plane, five specialist agents, portfolio manager, deterministic risk gate, PancakeSwap adapters, and BNB Chain](docs/assets/mandatefi-collaboration-flow.svg)
 
-- **Owner:** manually enters a tBNB funding amount and defines goals, risk, liquidity, term, and approval boundaries. The UI provides no preset deposit amounts.
+- **Owner:** manually enters a tBNB funding amount and defines goals, risk, liquidity, term, and approval boundaries. The UI provides no preset deposit amounts or fixed maximum; wallet balance and the live route determine executable size.
 - **MandateFi system:** gathers timestamped evidence, detects review triggers, validates model outputs, and applies the deterministic policy gate.
 - **AI allocation agent:** compares USDT and USDC before activation and produces a typed choice, confidence, rationale, and evidence record.
 - **AI committee:** five independent specialists analyze separate evidence domains; the portfolio manager synthesizes a typed recommendation but cannot sign or expand authority.
