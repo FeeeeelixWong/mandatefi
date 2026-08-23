@@ -587,10 +587,10 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
       </div>
     </section>
     <section className="portfolio-health-strip" aria-label="Portfolio operating status">
-      <div><Fuel size={15} aria-hidden="true" /><span>Gas reserve</span><strong>{loading ? 'Refreshing…' : snapshot ? `${formatNative(snapshot.nativeBalance)} tBNB` : 'Unavailable'}</strong><small>Refill below {formatNative(GAS_LOW_WATERMARK)} tBNB</small></div>
-      <div><Gauge size={15} aria-hidden="true" /><span>Strategy risk</span><strong>{strategy.riskScore}/10</strong><small>{riskProfiles[mandate.riskProfile].name} mandate</small></div>
-      <div><RefreshCw size={15} aria-hidden="true" /><span>Next review</span><strong>{strategy.reviewCadence}</strong><small>{runtimeAvailable ? 'Executor online' : 'Owner approval required'}</small></div>
-      <div><CircleCheck size={15} aria-hidden="true" /><span>Onchain modules</span><strong>{confirmedModules}/4 confirmed</strong><small>Verified execution receipts</small></div>
+      <div><Fuel size={15} aria-hidden="true" /><span>Gas reserve</span><strong>{loading ? 'Refreshing…' : snapshot ? `${formatNative(snapshot.nativeBalance)} tBNB` : 'Unavailable'}</strong></div>
+      <div><Gauge size={15} aria-hidden="true" /><span>Strategy risk</span><strong>{strategy.riskScore}/10</strong></div>
+      <div><RefreshCw size={15} aria-hidden="true" /><span>Next review</span><strong>{strategy.reviewCadence}</strong></div>
+      <div><CircleCheck size={15} aria-hidden="true" /><span>Onchain modules</span><strong>{confirmedModules}/4 confirmed</strong></div>
     </section>
     {(deploymentIncomplete || !runtimeAvailable) && mandate.status === 'Active' && <section className="resume-strategy-notice"><div className="resume-strategy-icon"><RefreshCw size={20} /></div><div><span>Existing strategy detected</span><strong>{deploymentIncomplete ? `${confirmedModules}/4 PancakeSwap modules are already confirmed` : 'All modules are confirmed; the local executor needs recovery'}</strong><p>This reuses {mandate.name}, its current Passkey wallet, funds, risk limits, and history. It does not create or fund another strategy.</p></div><button className="primary-button" disabled={resuming} onClick={onResume}>{resuming ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} {resuming ? 'Recovering strategy' : deploymentIncomplete ? 'Resume existing deployment' : 'Recover executor'}</button></section>}
     <div className="dashboard-layout">

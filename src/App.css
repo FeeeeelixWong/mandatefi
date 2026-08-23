@@ -243,7 +243,7 @@
 .portfolio-health-strip > div { min-width: 0; padding: 10px 14px; border-left: 1px solid var(--line); display: grid; grid-template-columns: 18px minmax(0, 1fr); align-content: center; column-gap: 7px; }
 .portfolio-health-strip > div:first-child { border-left: 0; }
 .portfolio-health-strip svg { grid-row: 1 / 3; align-self: center; color: var(--purple); }
-.portfolio-health-strip span, .portfolio-health-strip small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.portfolio-health-strip span { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .portfolio-health-strip strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-layout { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(320px, .8fr); gap: 14px; }
 .workspace-panel { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
