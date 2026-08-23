@@ -99,24 +99,40 @@ export function evaluateOwnerApprovedInitialDeployment(
   ]
   const blockers: string[] = []
   const warnings: string[] = []
+  const marketReport = committee?.reports.find((report) => report.agentId === 'market')
+  const costReport = committee?.reports.find((report) => report.agentId === 'execution-cost')
+  const blockingReports = committee?.reports.filter((report) => report.stance === 'BLOCK') ?? []
+  const ownerApprovedTestnetCostOverride = Boolean(
+    committee &&
+    !committee.costGatePassed &&
+    marketReport?.status === 'READY' &&
+    marketReport.stance !== 'BLOCK' &&
+    costReport?.status === 'READY' &&
+    blockingReports.every((report) => report.agentId === 'execution-cost'),
+  )
 
   if (review.source !== 'ACTIVATION') blockers.push('This authorization is only valid during initial activation')
   if (review.gate.status === 'BLOCKED') blockers.push('The strategy review is blocked')
-  if (review.gate.status === 'DEFERRED') blockers.push('The strategy review is deferred by a deterministic guardrail')
+  if (review.gate.status === 'DEFERRED' && !ownerApprovedTestnetCostOverride) blockers.push('The strategy review is deferred by a deterministic guardrail')
   if (!committee) {
     blockers.push('The five-agent investment committee is unavailable')
   } else {
     if (committee.readyAgents !== committee.reports.length) {
       warnings.push(`Only ${committee.readyAgents}/${committee.reports.length} specialist data feeds are fresh; stale opportunity data is advisory during an explicit owner-approved testnet deployment`)
     }
-    if (!committee.costGatePassed) blockers.push('Fresh market, depeg, and execution-cost hard gates did not pass')
+    if (!committee.costGatePassed && !ownerApprovedTestnetCostOverride) blockers.push('Fresh market, depeg, and execution-cost hard gates did not pass')
+    if (ownerApprovedTestnetCostOverride) {
+      warnings.push('The route exceeds the economic cost ceiling for this small testnet notional. The owner may still complete the typed LP, Farm, and Earn verification flow; autonomous rebalancing remains blocked by the original ceiling')
+    }
     for (const report of committee.reports.filter((item) => item.stance === 'BLOCK')) {
       warnings.push(`${report.name} returned BLOCK: ${report.headline}`)
     }
   }
 
   if (blockers.length === 0) {
-    checks.push('Fresh stablecoin, route, Gas, slippage, and execution-cost hard gates passed')
+    checks.push(ownerApprovedTestnetCostOverride
+      ? 'Fresh stablecoin, route, Gas, and slippage gates passed; the owner accepted testnet-only relative cost overhead'
+      : 'Fresh stablecoin, route, Gas, slippage, and execution-cost hard gates passed')
     checks.push('Stale yield-opportunity evidence cannot authorize autonomous rebalancing')
   }
 

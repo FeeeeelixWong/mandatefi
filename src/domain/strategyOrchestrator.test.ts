@@ -214,6 +214,37 @@ describe('AI strategy orchestrator', () => {
     expect(authorization.warnings[0]).toContain('4/5')
   })
 
+  it('lets the owner complete typed testnet modules when only relative cost exceeds the economic ceiling', () => {
+    const reports = committee().reports.map((report) => report.agentId === 'execution-cost'
+      ? { ...report, stance: 'BLOCK' as const, headline: 'Worst-case execution cost: 6.91%.' }
+      : report)
+    const review = orchestrateStrategyReview({
+      source: 'ACTIVATION', nowMs, mandate, strategy, executionPlan: executionPlan('0'),
+      committee: committee({
+        reports,
+        costGatePassed: false,
+        executionCostBps: 691,
+        dissentingAgents: ['execution-cost'],
+      }),
+    })
+    const authorization = evaluateOwnerApprovedInitialDeployment(review)
+    expect(review.gate.status).toBe('DEFERRED')
+    expect(authorization.authorized).toBe(true)
+    expect(authorization.warnings.join(' ')).toContain('testnet notional')
+    expect(authorization.checks.join(' ')).toContain('testnet-only relative cost overhead')
+  })
+
+  it('still blocks testnet completion when execution-cost evidence is missing', () => {
+    const reports = committee().reports.map((report) => report.agentId === 'execution-cost'
+      ? { ...report, status: 'UNAVAILABLE' as const, stance: 'BLOCK' as const, headline: 'A live cost estimate is required.' }
+      : report)
+    const review = orchestrateStrategyReview({
+      source: 'ACTIVATION', nowMs, mandate, strategy, executionPlan: executionPlan('1.25'),
+      committee: committee({ reports, readyAgents: 4, unavailableAgents: 1, costGatePassed: false, dissentingAgents: ['execution-cost'] }),
+    })
+    expect(evaluateOwnerApprovedInitialDeployment(review).authorized).toBe(false)
+  })
+
   it('fails initial deployment closed when a specialist blocks or the cost gate fails', () => {
     const blockedReports = committee().reports.map((report) => report.agentId === 'market'
       ? { ...report, stance: 'BLOCK' as const, headline: 'Stablecoin depeg detected.' }

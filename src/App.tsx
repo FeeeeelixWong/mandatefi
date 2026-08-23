@@ -560,7 +560,11 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
   const marketNative = positions && positions.nativeBalance > GAS_RESERVE ? positions.nativeBalance - GAS_RESERVE : 0n
   const lpPosition = positions ? positions.lpWalletBalance + positions.farmStaked : 0n
   const moduleReceipt = (module: 'SWAP' | 'LIQUIDITY' | 'FARM' | 'EARN') => latestPancakeModuleReceipt(mandate.moduleReceipts, module)
-  const confirmedModules = completedPancakeModules(mandate.moduleReceipts).size
+  const completedModuleSet = completedPancakeModules(mandate.moduleReceipts)
+  const confirmedModules = completedModuleSet.size
+  const missingModules = (['SWAP', 'LIQUIDITY', 'FARM', 'EARN'] as const)
+    .filter((module) => !completedModuleSet.has(module))
+    .map((module) => module === 'LIQUIDITY' ? 'LP' : module)
   const deploymentIncomplete = confirmedModules < 4
   return <div className="dashboard-page">
     <div className="page-title-row"><div><span className="eyebrow">Managed strategy</span><h1>{mandate.name}</h1><p>{strategy.summary} Capital remains in the passkey smart wallet.</p></div><div className="title-actions"><button className="secondary-button" onClick={onOpenPolicies}><Settings2 size={16} /> Guardrails</button><button className="primary-button" disabled={checking || mandate.status !== 'Active'} onClick={onCheck}>{checking ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run live review</button></div></div>
@@ -592,7 +596,7 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
       <div><RefreshCw size={15} aria-hidden="true" /><span>Next review</span><strong>{strategy.reviewCadence}</strong></div>
       <div><CircleCheck size={15} aria-hidden="true" /><span>Onchain modules</span><strong>{confirmedModules}/4 confirmed</strong></div>
     </section>
-    {(deploymentIncomplete || !runtimeAvailable) && mandate.status === 'Active' && <section className="resume-strategy-notice"><div className="resume-strategy-icon"><RefreshCw size={20} /></div><div><span>Existing strategy detected</span><strong>{deploymentIncomplete ? `${confirmedModules}/4 PancakeSwap modules are already confirmed` : 'All modules are confirmed; the local executor needs recovery'}</strong><p>This reuses {mandate.name}, its current Passkey wallet, funds, risk limits, and history. It does not create or fund another strategy.</p></div><button className="primary-button" disabled={resuming} onClick={onResume}>{resuming ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} {resuming ? 'Recovering strategy' : deploymentIncomplete ? 'Resume existing deployment' : 'Recover executor'}</button></section>}
+    {(deploymentIncomplete || !runtimeAvailable) && mandate.status === 'Active' && <section className="resume-strategy-notice"><div className="resume-strategy-icon"><RefreshCw size={20} /></div><div><span>Existing strategy detected</span><strong>{deploymentIncomplete ? `Complete missing modules: ${missingModules.join(', ')}` : 'All modules are confirmed; the local executor needs recovery'}</strong><p>This reuses {mandate.name}, its current Passkey wallet, funds, risk limits, and history. It does not create or fund another strategy.</p></div><button className="primary-button" disabled={resuming} onClick={onResume}>{resuming ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} {resuming ? 'Completing modules' : deploymentIncomplete ? 'Complete missing modules' : 'Recover executor'}</button></section>}
     <div className="dashboard-layout">
       <section className="workspace-panel allocation-panel"><header className="panel-header"><div><span>AI portfolio construction</span><h2>Where the capital works</h2></div><span className="status-chip active"><i /> Active mandate</span></header><StrategyBar plan={strategy} /><div className="sleeve-grid">{strategy.sleeves.map((sleeve) => <article key={sleeve.id}><div className={`sleeve-icon sleeve-${sleeve.id}`}>{sleeve.id === 'reserve' ? <Vault size={18} /> : sleeve.id === 'market' ? <TrendingUp size={18} /> : sleeve.id === 'liquidity' ? <Waves size={18} /> : <Leaf size={18} />}</div><span>{sleeve.name}</span><strong>{formatBps(sleeve.allocationBps)}</strong><p>{sleeve.purpose}</p><small>{toolNames[sleeve.tool]}</small></article>)}</div></section>
       <aside className="workspace-panel ai-panel"><header className="panel-header"><div><span>Latest expert review</span><h2>{recommendationTitle}</h2></div><BrainCircuit size={23} /></header>{(latest || executionPlan) && <><p>{summarizeActivityText(latest?.rationale ?? executionPlan?.rationale ?? '', 320)}</p>{latest?.triggers?.length ? <div className="trigger-chips" aria-label="Active review triggers">{latest.triggers.map((trigger) => <span key={trigger}>{trigger.replaceAll('_', ' ')}</span>)}</div> : <div className="trigger-chips"><span>NO ACTIVE EVENT RISK</span></div>}<div className="ai-signals"><div><span>Portfolio data</span><strong>{snapshot ? 'Live snapshot' : 'Waiting'}</strong></div><div><span>Reasoning</span><strong>{latest?.modelMode === 'DEEPSEEK' ? latest.modelName : latest?.modelMode === 'HYBRID_FALLBACK' ? 'DeepSeek + rules' : 'Rules fallback'}</strong></div><div><span>Confidence</span><strong>{latest?.confidence !== undefined ? `${latest.confidence}%` : '—'}</strong></div><div><span>Risk gate</span><strong>{gateStatus.replaceAll('_', ' ')}</strong></div></div><div className={`ai-decision ${latest?.gateStatus === 'AUTO_EXECUTE' ? 'trade' : 'hold'}`}>{latest?.gateStatus === 'AUTO_EXECUTE' ? <ArrowDownUp size={17} /> : <CircleCheck size={17} />}<span>{latest?.gateStatus === 'AUTO_EXECUTE' && executionPlan ? `${executionPlan.inputAsset} to ${executionPlan.outputAsset} adapter authorised` : latest?.gateStatus === 'APPROVAL_REQUIRED' ? 'Waiting for explicit owner approval' : latest?.gateStatus === 'BLOCKED' ? 'Recommendation blocked until its adapter is live' : latest?.gateStatus === 'DEFERRED' ? 'Execution delayed by the cooldown policy' : 'No automatic action authorised'}</span></div></>}</aside>
@@ -1384,12 +1388,14 @@ function App() {
         throw new Error(`The recovered Passkey wallet ${shortAddress(ownerProfile.wallet.address)} does not own this strategy.`)
       }
 
-      const [latestSnapshot, latestPositions, refreshedMarket] = await Promise.all([
+      const [latestSnapshot, latestPositions, refreshedMarket, refreshedResearch] = await Promise.all([
         refreshSnapshot(mandate.stablecoin),
         refreshPancakePositions(mandate.stablecoin),
         refreshPancakeMarket(),
+        fetchPancakeResearch().catch(() => null),
       ])
       if (!latestSnapshot || !latestPositions) throw new Error('The existing portfolio could not be read from BSC Testnet.')
+      if (refreshedResearch) setPancakeResearch(refreshedResearch)
       if (latestSnapshot.stableBalance <= 0n) throw new Error(`The existing Passkey wallet has no liquid ${mandate.stablecoin} available for the missing modules.`)
       if (latestSnapshot.nativeBalance < GAS_LOW_WATERMARK) throw new Error('The existing strategy needs a small tBNB Gas top-up before its missing modules can execute.')
 
@@ -1416,7 +1422,7 @@ function App() {
         executionPlan,
         snapshot: latestSnapshot,
         executionCost,
-        pancakeResearch,
+        pancakeResearch: refreshedResearch ?? pancakeResearch,
         pancakeMarket: refreshedMarket ?? pancakeMarket,
       })
       const review = await orchestrateWithAgentRuntime({
