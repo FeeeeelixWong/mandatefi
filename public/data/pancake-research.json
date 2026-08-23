@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-23T14:20:54.389Z",
+  "generatedAt": "2026-08-23T14:49:41.793Z",
   "network": {
     "name": "BNB Chain mainnet",
     "chainId": 56
@@ -18,7 +18,7 @@
     "note": "Research uses an address allowlist, official PancakeSwap pool data, MasterChef V3 onchain emissions, and active Syrup Pool configuration. Execution remains separately constrained by the owner mandate."
   },
   "liquidity": {
-    "observedAt": "2026-08-23T14:20:54.389Z",
+    "observedAt": "2026-08-23T14:49:41.793Z",
     "opportunities": [
       {
         "id": "0x172fcd41e0913e95784454622d1c3724f546f849",
@@ -167,7 +167,7 @@
     ]
   },
   "farms": {
-    "observedAt": "2026-08-23T14:20:54.389Z",
+    "observedAt": "2026-08-23T14:49:41.793Z",
     "opportunities": [
       {
         "id": "0xf2688fb5b81049dfb7703ada5e770543770612c4",
@@ -348,15 +348,15 @@
     ]
   },
   "earn": {
-    "observedAt": "2026-08-23T14:20:54.389Z",
+    "observedAt": "2026-08-23T14:49:41.793Z",
     "opportunities": [
       {
         "id": "462",
         "contractAddress": "0x598a547f0945b43c0f9e2aeca3745c3b583dff9a",
         "stakeSymbol": "CAKE",
         "earnSymbol": "USDT",
-        "tvlUsd": 1472323,
-        "rewardAprBps": 397,
+        "tvlUsd": 1475833,
+        "rewardAprBps": 396,
         "withdrawal": "Flexible while pool remains active",
         "link": "https://pancakeswap.finance/pools?chain=bsc"
       }
