@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { parseEther } from 'viem'
-import { buildInvestmentCommittee, type ExecutionCostEstimate } from './investmentCommittee'
+import { applySpecialistJudgements, buildInvestmentCommittee, type ExecutionCostEstimate } from './investmentCommittee'
 import { buildPortfolioPlan } from './portfolio'
 import { buildStrategyPlan } from './strategy'
 import type { PancakeMarketSnapshot } from '../integrations/pancakeMarket'
 
 const nowMs = Date.parse('2026-08-21T12:00:00.000Z')
 const strategy = buildStrategyPlan({ goal: 'balanced-growth', risk: 'balanced', liquidityNeed: 'weekly', horizonDays: 30 })
+const highRiskStrategy = buildStrategyPlan({ goal: 'balanced-growth', risk: 'growth', liquidityNeed: 'weekly', horizonDays: 30 })
 const pancakeMarket: PancakeMarketSnapshot = {
   provider: 'PancakeSwap Price API SDK', sdkVersion: '11.1.1', chainId: 56,
   observedAt: new Date(nowMs).toISOString(),
@@ -45,6 +46,37 @@ describe('investment committee', () => {
     expect(committee.costGatePassed).toBe(true)
     expect(committee.executionCostBps).toBe(370)
     expect(committee.readyAgents).toBe(2)
+  })
+
+  it('accepts a 6.91% testnet route under the 7.00% hard ceiling', () => {
+    const executionCost: ExecutionCostEstimate = {
+      observedAt: new Date(nowMs).toISOString(), gasPriceGwei: 1, gasUnits: 260_000,
+      gasCostNative: '0.00026', gasCostBps: 580, slippageReserveBps: 100,
+      priceImpactBps: 11, exitCostBps: 0, totalCostBps: 691,
+      source: 'BSC_RPC_AND_PANCAKESWAP_QUOTE', note: 'Small-notional BSC Testnet estimate.',
+    }
+    const committee = buildInvestmentCommittee({ nowMs, strategy: highRiskStrategy, ...context(), executionCost })
+    expect(highRiskStrategy.guardrails.maximumExecutionCostBps).toBe(700)
+    expect(committee.costGatePassed).toBe(true)
+    expect(committee.reports.find((report) => report.agentId === 'execution-cost')?.stance).toBe('SUPPORT')
+  })
+
+  it('does not let model prose override deterministic execution-cost facts', () => {
+    const executionCost: ExecutionCostEstimate = {
+      observedAt: new Date(nowMs).toISOString(), gasPriceGwei: 1, gasUnits: 260_000,
+      gasCostNative: '0.00026', gasCostBps: 580, slippageReserveBps: 100,
+      priceImpactBps: 11, exitCostBps: 0, totalCostBps: 691,
+      source: 'BSC_RPC_AND_PANCAKESWAP_QUOTE', note: 'Small-notional BSC Testnet estimate.',
+    }
+    const committee = buildInvestmentCommittee({ nowMs, strategy: highRiskStrategy, ...context(), executionCost })
+    const result = applySpecialistJudgements(committee, [{
+      agentId: 'execution-cost', stance: 'BLOCK', confidence: 99,
+      headline: '6.91% exceeds the 7.00% ceiling.', findings: ['Contradictory model claim.'], missingInputs: [],
+      inference: { mode: 'DEEPSEEK', model: 'deepseek-chat', promptVersion: 'test', latencyMs: 10 },
+    }], 'run-1')
+    const report = result.reports.find((item) => item.agentId === 'execution-cost')
+    expect(report?.stance).toBe('SUPPORT')
+    expect(report?.headline).toBe('Worst-case execution cost: 6.91%.')
   })
 
   it('marks old market evidence stale', () => {

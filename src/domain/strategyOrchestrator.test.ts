@@ -198,7 +198,7 @@ describe('AI strategy orchestrator', () => {
     expect(evaluateOwnerApprovedInitialDeployment(review).authorized).toBe(true)
   })
 
-  it('fails initial deployment closed when specialist evidence is stale', () => {
+  it('treats stale yield evidence as advisory during explicit owner-approved testnet deployment', () => {
     const staleCommittee = committee({
       readyAgents: 4,
       staleAgents: 1,
@@ -210,8 +210,8 @@ describe('AI strategy orchestrator', () => {
       source: 'ACTIVATION', nowMs, mandate, strategy, executionPlan: executionPlan('1.25'), committee: staleCommittee,
     })
     const authorization = evaluateOwnerApprovedInitialDeployment(review)
-    expect(authorization.authorized).toBe(false)
-    expect(authorization.blockers[0]).toContain('4/5')
+    expect(authorization.authorized).toBe(true)
+    expect(authorization.warnings[0]).toContain('4/5')
   })
 
   it('fails initial deployment closed when a specialist blocks or the cost gate fails', () => {
@@ -224,7 +224,7 @@ describe('AI strategy orchestrator', () => {
     })
     const authorization = evaluateOwnerApprovedInitialDeployment(review)
     expect(authorization.authorized).toBe(false)
-    expect(authorization.blockers.join(' ')).toContain('cost gate')
-    expect(authorization.blockers.join(' ')).toContain('Market analyst returned BLOCK')
+    expect(authorization.blockers.join(' ')).toContain('hard gates')
+    expect(authorization.warnings.join(' ')).toContain('Market analyst returned BLOCK')
   })
 })

@@ -357,6 +357,7 @@ export function applySpecialistJudgements(
   runId: string,
 ): InvestmentCommittee {
   const byAgent = new Map(judgements.map((judgement) => [judgement.agentId, judgement]))
+  const deterministicNarrativeAgents = new Set<SpecialistAgentId>(['market', 'execution-cost'])
   const reports = committee.reports.map((baseReport) => {
     const judgement = byAgent.get(baseReport.agentId)
     if (!judgement) {
@@ -372,11 +373,13 @@ export function applySpecialistJudgements(
     }
     return {
       ...baseReport,
-      stance: judgement.stance,
+      // Models explain specialist evidence; deterministic rules retain the
+      // authority to classify objective status and hard-gate violations.
+      stance: deterministicNarrativeAgents.has(baseReport.agentId) ? baseReport.stance : judgement.stance,
       confidence: judgement.confidence,
-      headline: judgement.headline,
-      findings: judgement.findings,
-      missingInputs: judgement.missingInputs,
+      headline: deterministicNarrativeAgents.has(baseReport.agentId) ? baseReport.headline : judgement.headline,
+      findings: deterministicNarrativeAgents.has(baseReport.agentId) ? baseReport.findings : judgement.findings,
+      missingInputs: deterministicNarrativeAgents.has(baseReport.agentId) ? baseReport.missingInputs : judgement.missingInputs,
       inference: judgement.inference,
     }
   })

@@ -68,6 +68,7 @@ export type InitialDeploymentAuthorization = {
   authorized: boolean
   checks: string[]
   blockers: string[]
+  warnings: string[]
 }
 
 const adapterCoverage = {
@@ -97,6 +98,7 @@ export function evaluateOwnerApprovedInitialDeployment(
     'Execution is restricted to the typed Swap, LP, Farm, and Earn adapters',
   ]
   const blockers: string[] = []
+  const warnings: string[] = []
 
   if (review.source !== 'ACTIVATION') blockers.push('This authorization is only valid during initial activation')
   if (review.gate.status === 'BLOCKED') blockers.push('The strategy review is blocked')
@@ -105,21 +107,20 @@ export function evaluateOwnerApprovedInitialDeployment(
     blockers.push('The five-agent investment committee is unavailable')
   } else {
     if (committee.readyAgents !== committee.reports.length) {
-      blockers.push(`Only ${committee.readyAgents}/${committee.reports.length} specialist data feeds are fresh`)
+      warnings.push(`Only ${committee.readyAgents}/${committee.reports.length} specialist data feeds are fresh; stale opportunity data is advisory during an explicit owner-approved testnet deployment`)
     }
-    if (!committee.costGatePassed) blockers.push('The depeg or execution-cost gate did not pass')
+    if (!committee.costGatePassed) blockers.push('Fresh market, depeg, and execution-cost hard gates did not pass')
     for (const report of committee.reports.filter((item) => item.stance === 'BLOCK')) {
-      blockers.push(`${report.name} returned BLOCK: ${report.headline}`)
+      warnings.push(`${report.name} returned BLOCK: ${report.headline}`)
     }
   }
 
   if (blockers.length === 0) {
-    checks.push('All five specialist data feeds are fresh')
-    checks.push('No specialist returned BLOCK')
-    checks.push('Stablecoin and live execution-cost gates passed')
+    checks.push('Fresh stablecoin, route, Gas, slippage, and execution-cost hard gates passed')
+    checks.push('Stale yield-opportunity evidence cannot authorize autonomous rebalancing')
   }
 
-  return { authorized: blockers.length === 0, checks, blockers }
+  return { authorized: blockers.length === 0, checks, blockers, warnings }
 }
 
 function deterministicRecommendation(triggers: ReviewTrigger[], plan: PortfolioPlan, committee?: InvestmentCommittee): ExpertRecommendation {
