@@ -64,6 +64,12 @@ export type StrategyOrchestratorContext = {
   }
 }
 
+export type InitialDeploymentAuthorization = {
+  authorized: boolean
+  checks: string[]
+  blockers: string[]
+}
+
 const adapterCoverage = {
   SWAP: 'LIVE',
   ADD_LIQUIDITY: 'APPROVAL_REQUIRED',
@@ -76,6 +82,45 @@ const adapterCoverage = {
   PAUSE: 'OWNER_CONTROLLED',
   HOLD: 'NO_EXECUTION',
 } as const
+
+/**
+ * Initial portfolio deployment is an explicit owner action, not an autonomous
+ * rebalance. The model may recommend HOLD, but it cannot override a Passkey
+ * authorization when every deterministic safety input is fresh and unblocked.
+ */
+export function evaluateOwnerApprovedInitialDeployment(
+  review: StrategyReview,
+): InitialDeploymentAuthorization {
+  const committee = review.committee
+  const checks = [
+    'Owner explicitly authorizes the initial BSC Testnet deployment with a Passkey',
+    'Execution is restricted to the typed Swap, LP, Farm, and Earn adapters',
+  ]
+  const blockers: string[] = []
+
+  if (review.source !== 'ACTIVATION') blockers.push('This authorization is only valid during initial activation')
+  if (review.gate.status === 'BLOCKED') blockers.push('The strategy review is blocked')
+  if (review.gate.status === 'DEFERRED') blockers.push('The strategy review is deferred by a deterministic guardrail')
+  if (!committee) {
+    blockers.push('The five-agent investment committee is unavailable')
+  } else {
+    if (committee.readyAgents !== committee.reports.length) {
+      blockers.push(`Only ${committee.readyAgents}/${committee.reports.length} specialist data feeds are fresh`)
+    }
+    if (!committee.costGatePassed) blockers.push('The depeg or execution-cost gate did not pass')
+    for (const report of committee.reports.filter((item) => item.stance === 'BLOCK')) {
+      blockers.push(`${report.name} returned BLOCK: ${report.headline}`)
+    }
+  }
+
+  if (blockers.length === 0) {
+    checks.push('All five specialist data feeds are fresh')
+    checks.push('No specialist returned BLOCK')
+    checks.push('Stablecoin and live execution-cost gates passed')
+  }
+
+  return { authorized: blockers.length === 0, checks, blockers }
+}
 
 function deterministicRecommendation(triggers: ReviewTrigger[], plan: PortfolioPlan, committee?: InvestmentCommittee): ExpertRecommendation {
   const kinds = new Set(triggers.map((trigger) => trigger.kind))

@@ -18,6 +18,7 @@ import {
   type StrategyPlan, type StrategySleeveId,
 } from './domain/strategy'
 import {
+  evaluateOwnerApprovedInitialDeployment,
   orchestrateStrategyReview,
   type StrategyOrchestratorContext,
   type StrategyReview,
@@ -176,6 +177,7 @@ function buildDeploymentDecision(
   plan: PortfolioPlan,
   proof: PancakeDeploymentProof,
   review: StrategyReview,
+  ownerAuthorized: boolean,
 ): DecisionRecord {
   const completedModules = completedPancakeModules(proof.receipts)
   const confirmed = completedModules.size === 4 || proof.recoveredExistingPositions
@@ -191,8 +193,8 @@ function buildDeploymentDecision(
     rationale: proof.recoveredExistingPositions
       ? 'Existing PancakeSwap positions were detected before execution. MandateFi preserved them without repeating a Swap, LP, Farm, or Earn allocation, then registered a replacement revocable AI session for continued monitoring and owner-controlled recovery.'
       : proof.receipts.length
-      ? `The investment committee approved a typed initial deployment. Confirmed modules: ${modules.join(', ') || 'none'}. Each adapter has its own contract target, spend cap, receipt, position read, and owner exit path.`
-      : `${review.recommendation.rationale} The policy was registered, but no DeFi module executed because the deterministic gate did not authorize deployment.`,
+      ? `The owner approved a typed initial BSC Testnet deployment after all five specialist feeds and deterministic safety gates passed. Confirmed modules: ${modules.join(', ') || 'none'}. Each adapter has its own contract target, spend cap, receipt, position read, and owner exit path.`
+      : `${review.recommendation.rationale} The policy was registered, but no DeFi module executed because ${ownerAuthorized ? 'an adapter failed before completing its onchain action' : 'one or more deterministic activation gates did not authorize deployment'}.`,
     currentStableBps: 10_000,
     targetStableBps: Number(plan.targetStableBps),
     projectedStableBps: Number(plan.targetStableBps),
@@ -204,7 +206,7 @@ function buildDeploymentDecision(
     triggers: review.triggers.map((trigger) => trigger.kind),
     expertAction: proof.recoveredExistingPositions ? 'RECOVER_EXISTING_PORTFOLIO' : 'DEPLOY_PANCAKE_PORTFOLIO',
     confidence: review.recommendation.confidence,
-    gateStatus: review.gate.status,
+    gateStatus: proof.receipts.length > 0 ? 'APPROVAL_REQUIRED' : review.gate.status,
     promptVersion: review.promptVersion,
     modelMode: review.modelMode,
     modelName: review.modelName,
@@ -1220,6 +1222,7 @@ function App() {
       executionPlan,
       committee,
     }, latestSnapshot)
+    const initialDeployment = evaluateOwnerApprovedInitialDeployment(review)
     updateAttempt({ phase: 'APPROVING' })
     const recordActivationProgress = (progress: PancakeActivationProgress) => {
       if (progress.phase === 'APPROVED') updateAttempt({ phase: 'GRANTING', approvalTxHash: progress.transactionHash })
@@ -1231,14 +1234,14 @@ function App() {
       strategy,
       latestSnapshot,
       executionPlan,
-      review.gate.status === 'AUTO_EXECUTE',
+      initialDeployment.authorized,
       recordActivationProgress,
       preserveExistingPositions,
     )
     const id = crypto.randomUUID()
     runtimeSessions.current.set(id, proof.session)
     setRuntimeMandateIds((current) => [...current, id])
-    const decision = buildDeploymentDecision(executionPlan, proof, review)
+    const decision = buildDeploymentDecision(executionPlan, proof, review, initialDeployment.authorized)
     const strategyAllocations = Object.fromEntries(strategy.sleeves.map((sleeve) => [sleeve.id, sleeve.allocationBps])) as Record<StrategySleeveId, number>
     const mandate: Mandate = {
       id,
@@ -1279,7 +1282,9 @@ function App() {
       ? 'Existing PancakeSwap positions were preserved and attached to a replacement revocable AI policy. No portfolio allocation was repeated.'
       : confirmedModules.size === 4
       ? `The allocation agent selected ${draft.stablecoin}; Swap, LP, Farm, and Earn all confirmed on BSC Testnet.`
-      : `The strategy is active with ${confirmedModules.size}/4 modules confirmed. Review Activity before retrying any incomplete adapter.`)
+      : initialDeployment.blockers.length > 0
+        ? `The policy is active, but deployment failed closed: ${initialDeployment.blockers.join(' ')}`
+        : `The strategy is active with ${confirmedModules.size}/4 modules confirmed. Review Activity before retrying any incomplete adapter.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Strategy activation did not complete.'
       updateAttempt({ phase: 'FAILED', error: message })

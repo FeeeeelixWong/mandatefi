@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { parseEther } from 'viem'
 import { buildPortfolioPlan } from './portfolio'
 import { buildStrategyPlan } from './strategy'
-import { orchestrateStrategyReview } from './strategyOrchestrator'
-import { buildInvestmentCommittee, type ExecutionCostEstimate } from './investmentCommittee'
+import { evaluateOwnerApprovedInitialDeployment, orchestrateStrategyReview } from './strategyOrchestrator'
+import { buildInvestmentCommittee, type ExecutionCostEstimate, type InvestmentCommittee } from './investmentCommittee'
 
 const nowMs = Date.parse('2026-08-21T12:00:00.000Z')
 const strategy = buildStrategyPlan({ goal: 'balanced-growth', risk: 'balanced', liquidityNeed: 'weekly', horizonDays: 30 })
@@ -26,6 +26,38 @@ function executionPlan(stableBalance: string) {
 }
 
 describe('AI strategy orchestrator', () => {
+  function committee(overrides: Partial<InvestmentCommittee> = {}): InvestmentCommittee {
+    const reports: InvestmentCommittee['reports'] = [
+      ['market', 'Market analyst'],
+      ['liquidity', 'LP analyst'],
+      ['farms', 'Farm analyst'],
+      ['earn', 'Earn analyst'],
+      ['execution-cost', 'Execution cost analyst'],
+    ].map(([agentId, name]) => ({
+      agentId: agentId as InvestmentCommittee['reports'][number]['agentId'],
+      name,
+      remit: name,
+      cadenceMinutes: 5,
+      generatedAt: new Date(nowMs).toISOString(),
+      dataAsOf: new Date(nowMs).toISOString(),
+      status: 'READY',
+      stance: 'SUPPORT',
+      confidence: 90,
+      headline: 'Fresh evidence supports the bounded testnet adapter.',
+      findings: [],
+      missingInputs: [],
+      estimatedGrossBenefitBps: 1_000,
+      estimatedRiskCostBps: 100,
+    }))
+    return {
+      generatedAt: new Date(nowMs).toISOString(), reports, readyAgents: 5,
+      staleAgents: 0, unavailableAgents: 0, grossBenefitBps: 1_000,
+      riskCostBps: 100, executionCostBps: 200, netBenefitBps: 700,
+      minimumNetBenefitBps: 50, costGatePassed: true, dissentingAgents: [],
+      summary: 'All deterministic gates passed.', ...overrides,
+    }
+  }
+
   it('keeps the minute monitor idle when no trigger exists', () => {
     const review = orchestrateStrategyReview({
       source: 'MONITOR', nowMs, mandate, strategy, executionPlan: executionPlan('1.25'),
@@ -151,5 +183,48 @@ describe('AI strategy orchestrator', () => {
       },
     })
     expect(review.gate.status).toBe('BLOCKED')
+  })
+
+  it('lets explicit owner approval deploy the initial typed portfolio even when the manager recommends HOLD', () => {
+    const review = orchestrateStrategyReview({
+      source: 'ACTIVATION', nowMs, mandate, strategy, executionPlan: executionPlan('1.25'),
+      committee: committee(),
+      recommendationOverride: {
+        decision: 'HOLD', action: 'HOLD', confidence: 75,
+        rationale: 'No autonomous rebalance is required.', expectedNetBenefitBps: 0, requiresApproval: false,
+      },
+    })
+    expect(review.gate.status).toBe('HOLD')
+    expect(evaluateOwnerApprovedInitialDeployment(review).authorized).toBe(true)
+  })
+
+  it('fails initial deployment closed when specialist evidence is stale', () => {
+    const staleCommittee = committee({
+      readyAgents: 4,
+      staleAgents: 1,
+      reports: committee().reports.map((report) => report.agentId === 'farms'
+        ? { ...report, status: 'STALE', stance: 'CAUTION' }
+        : report),
+    })
+    const review = orchestrateStrategyReview({
+      source: 'ACTIVATION', nowMs, mandate, strategy, executionPlan: executionPlan('1.25'), committee: staleCommittee,
+    })
+    const authorization = evaluateOwnerApprovedInitialDeployment(review)
+    expect(authorization.authorized).toBe(false)
+    expect(authorization.blockers[0]).toContain('4/5')
+  })
+
+  it('fails initial deployment closed when a specialist blocks or the cost gate fails', () => {
+    const blockedReports = committee().reports.map((report) => report.agentId === 'market'
+      ? { ...report, stance: 'BLOCK' as const, headline: 'Stablecoin depeg detected.' }
+      : report)
+    const review = orchestrateStrategyReview({
+      source: 'ACTIVATION', nowMs, mandate, strategy, executionPlan: executionPlan('1.25'),
+      committee: committee({ reports: blockedReports, costGatePassed: false, dissentingAgents: ['market'] }),
+    })
+    const authorization = evaluateOwnerApprovedInitialDeployment(review)
+    expect(authorization.authorized).toBe(false)
+    expect(authorization.blockers.join(' ')).toContain('cost gate')
+    expect(authorization.blockers.join(' ')).toContain('Market analyst returned BLOCK')
   })
 })

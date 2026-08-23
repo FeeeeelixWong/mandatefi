@@ -1,0 +1,45 @@
+name: Refresh PancakeSwap research
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/30 * * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pancake-research
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Refresh verified PancakeSwap research
+        run: npm run research:refresh
+
+      - name: Commit refreshed snapshot
+        run: |
+          if git diff --quiet -- public/data/pancake-research.json; then
+            exit 0
+          fi
+          git config user.name "mandatefi-data-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/data/pancake-research.json
+          git commit -m "data: refresh PancakeSwap research"
+          git push origin HEAD:main

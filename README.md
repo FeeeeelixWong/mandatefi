@@ -91,7 +91,7 @@ The production boundary accepts either a `0-1` probability or a `0-100` percenta
 
 ### PancakeSwap Research Plane
 
-The deploy workflow refreshes `public/data/pancake-research.json` every 15 minutes because PancakeSwap Explorer does not expose a browser-CORS endpoint. The refresh job:
+GitHub Actions refreshes and commits `public/data/pancake-research.json` every 30 minutes so both the Vercel product and GitHub Pages receive the same reproducible snapshot. PancakeSwap Explorer does not expose a browser-CORS endpoint. The refresh job:
 
 1. Queries official PancakeSwap Explorer data for an address-allowlisted token universe.
 2. Rejects pools below the minimum TVL threshold.
