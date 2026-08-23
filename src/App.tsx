@@ -30,6 +30,7 @@ import {
 } from './domain/investmentCommittee'
 import type { ReviewSource } from './domain/triggerEngine'
 import { hasActivityDetails, summarizeActivityText } from './domain/activity'
+import { buildPortfolioPerformance } from './domain/performance'
 import {
   buildStablecoinSelectionRequest,
   type StablecoinSelectionEvidence,
@@ -161,6 +162,15 @@ function formatProtocolAmount(value: bigint, maximumFractionDigits = 4) {
   const numeric = Number(formatUnits(value, 18))
   if (numeric > 0 && numeric < 10 ** -maximumFractionDigits) return `<${(10 ** -maximumFractionDigits).toFixed(maximumFractionDigits)}`
   return numeric.toLocaleString('en-US', { maximumFractionDigits })
+}
+
+function formatPerformanceAmount(value: number) {
+  if (!Number.isFinite(value)) return '—'
+  if (value > 0 && value < 0.0001) return '<0.0001'
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: value === 0 ? 2 : 0,
+    maximumFractionDigits: Math.abs(value) < 10 ? 4 : 2,
+  })
 }
 
 function executionActionLabel(action: PortfolioPlan['action']) {
@@ -359,10 +369,6 @@ function StrategyBar({ plan }: { plan: StrategyPlan }) {
   </div>
 }
 
-function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return <div className="metric"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>
-}
-
 function ProductHome({ onCreate }: { onCreate: () => void }) {
   return <div className="home-page">
     <section className="home-hero">
@@ -539,6 +545,12 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
   const strategy = planForMandate(mandate)
   const latest = mandate.decisions[0]
   const mandateCapital = safeParseStable(mandate.managedStableCap)
+  const performance = buildPortfolioPerformance({
+    capitalStable: Number(formatUnits(mandateCapital, 18)),
+    durationDays: mandate.duration,
+    estimatedApyBps: mandate.modelYieldBps ?? strategy.modelYieldBps,
+    receipts: mandate.moduleReceipts,
+  })
   const recommendationTitle = latest?.expertAction ? latest.expertAction.replaceAll('_', ' ') : executionPlan ? executionActionLabel(executionPlan.action) : 'Reading portfolio'
   const gateStatus = latest?.gateStatus ?? (executionPlan?.action === 'HOLD' ? 'HOLD' : 'PENDING REVIEW')
   const liveFallbackCommittee = executionPlan
@@ -552,7 +564,34 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
   const deploymentIncomplete = confirmedModules < 4
   return <div className="dashboard-page">
     <div className="page-title-row"><div><span className="eyebrow">Managed strategy</span><h1>{mandate.name}</h1><p>{strategy.summary} Capital remains in the passkey smart wallet.</p></div><div className="title-actions"><button className="secondary-button" onClick={onOpenPolicies}><Settings2 size={16} /> Guardrails</button><button className="primary-button" disabled={checking || mandate.status !== 'Active'} onClick={onCheck}>{checking ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run live review</button></div></div>
-    <section className="portfolio-hero-panel"><div className="portfolio-value-block"><span>Mandate capital</span><strong>{`${formatStable(mandateCapital)} ${mandate.stablecoin}`}</strong><small>Initial stable-value budget · normalized from {mandate.managedAmount} tBNB</small></div><Metric label="Gas reserve" value={loading ? 'Refreshing...' : snapshot ? `${formatNative(snapshot.nativeBalance)} tBNB` : 'Unavailable'} detail={`Auto-refill below ${formatNative(GAS_LOW_WATERMARK)} tBNB`} /><Metric label="Strategy risk" value={`${strategy.riskScore}/10`} detail={`${riskProfiles[mandate.riskProfile].name} mandate`} /><Metric label="Next review" value={strategy.reviewCadence} detail={runtimeAvailable ? 'Local executor online' : 'Owner approval required'} /></section>
+    <section className="performance-hero-panel" aria-label="Portfolio performance">
+      <div className="performance-primary">
+        <span><TrendingUp size={16} aria-hidden="true" /> Estimated APY</span>
+        <strong>{formatBps(performance.estimatedApyBps)}</strong>
+        <small>Weighted strategy model · not guaranteed</small>
+      </div>
+      <div className="performance-stat performance-projected">
+        <span>Projected {mandate.duration}-day income</span>
+        <strong>≈ {formatPerformanceAmount(performance.projectedTermIncomeStable)} <b>{mandate.stablecoin}</b></strong>
+        <small>+{formatBps(performance.projectedTermReturnBps)} for this mandate term</small>
+      </div>
+      <div className="performance-stat performance-realized">
+        <span>Realized return</span>
+        <strong>{performance.realized.amountStable === null ? '—' : formatPerformanceAmount(performance.realized.amountStable)} <b>{mandate.stablecoin}</b></strong>
+        <small>{performance.realized.returnBps === null ? 'Confirmed exit · cost basis reconciliation pending' : `${formatBps(performance.realized.returnBps)} · no claimed reward or closed position yet`}</small>
+      </div>
+      <div className="performance-stat performance-capital">
+        <span>Capital managed</span>
+        <strong>{formatStable(mandateCapital)} <b>{mandate.stablecoin}</b></strong>
+        <small>Initial stable-value cost basis</small>
+      </div>
+    </section>
+    <section className="portfolio-health-strip" aria-label="Portfolio operating status">
+      <div><Fuel size={15} aria-hidden="true" /><span>Gas reserve</span><strong>{loading ? 'Refreshing…' : snapshot ? `${formatNative(snapshot.nativeBalance)} tBNB` : 'Unavailable'}</strong><small>Refill below {formatNative(GAS_LOW_WATERMARK)} tBNB</small></div>
+      <div><Gauge size={15} aria-hidden="true" /><span>Strategy risk</span><strong>{strategy.riskScore}/10</strong><small>{riskProfiles[mandate.riskProfile].name} mandate</small></div>
+      <div><RefreshCw size={15} aria-hidden="true" /><span>Next review</span><strong>{strategy.reviewCadence}</strong><small>{runtimeAvailable ? 'Executor online' : 'Owner approval required'}</small></div>
+      <div><CircleCheck size={15} aria-hidden="true" /><span>Onchain modules</span><strong>{confirmedModules}/4 confirmed</strong><small>Verified execution receipts</small></div>
+    </section>
     {(deploymentIncomplete || !runtimeAvailable) && mandate.status === 'Active' && <section className="resume-strategy-notice"><div className="resume-strategy-icon"><RefreshCw size={20} /></div><div><span>Existing strategy detected</span><strong>{deploymentIncomplete ? `${confirmedModules}/4 PancakeSwap modules are already confirmed` : 'All modules are confirmed; the local executor needs recovery'}</strong><p>This reuses {mandate.name}, its current Passkey wallet, funds, risk limits, and history. It does not create or fund another strategy.</p></div><button className="primary-button" disabled={resuming} onClick={onResume}>{resuming ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} {resuming ? 'Recovering strategy' : deploymentIncomplete ? 'Resume existing deployment' : 'Recover executor'}</button></section>}
     <div className="dashboard-layout">
       <section className="workspace-panel allocation-panel"><header className="panel-header"><div><span>AI portfolio construction</span><h2>Where the capital works</h2></div><span className="status-chip active"><i /> Active mandate</span></header><StrategyBar plan={strategy} /><div className="sleeve-grid">{strategy.sleeves.map((sleeve) => <article key={sleeve.id}><div className={`sleeve-icon sleeve-${sleeve.id}`}>{sleeve.id === 'reserve' ? <Vault size={18} /> : sleeve.id === 'market' ? <TrendingUp size={18} /> : sleeve.id === 'liquidity' ? <Waves size={18} /> : <Leaf size={18} />}</div><span>{sleeve.name}</span><strong>{formatBps(sleeve.allocationBps)}</strong><p>{sleeve.purpose}</p><small>{toolNames[sleeve.tool]}</small></article>)}</div></section>
