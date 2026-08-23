@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { parseEther } from 'viem'
-import { activationFundingRequirement, buildPortfolioPlan, targetStableBpsFor } from './portfolio'
+import { activationFundingRequirement, activationWalletReady, buildPortfolioPlan, targetStableBpsFor } from './portfolio'
 
 const now = '2026-08-20T00:00:00.000Z'
 
 describe('portfolio policy engine', () => {
+  it('does not require an external funding wallet after the portfolio is funded', () => {
+    expect(activationWalletReady(false, false, true)).toBe(true)
+  })
+
+  it('requires a connected target-network wallet before the first deposit', () => {
+    expect(activationWalletReady(false, false, false)).toBe(false)
+    expect(activationWalletReady(true, false, false)).toBe(false)
+    expect(activationWalletReady(true, true, false)).toBe(true)
+  })
+
   it('does not request the original deposit again after startup conversion', () => {
     const requirement = activationFundingRequirement(
       parseEther('0.00294'),

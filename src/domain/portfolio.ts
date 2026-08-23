@@ -75,6 +75,14 @@ export function activationFundingRequirement(
   }
 }
 
+export function activationWalletReady(
+  fundingWalletConnected: boolean,
+  fundingWalletOnTargetNetwork: boolean,
+  portfolioFunded: boolean,
+) {
+  return portfolioFunded || (fundingWalletConnected && fundingWalletOnTargetNetwork)
+}
+
 export const riskProfiles: Record<RiskProfileId, RiskProfile> = {
   conservative: {
     id: 'conservative',

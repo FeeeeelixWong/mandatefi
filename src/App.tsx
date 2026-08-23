@@ -9,7 +9,7 @@ import {
 import { formatEther, formatUnits, parseEther } from 'viem'
 import type { Session } from '@altananetwork/sdk'
 import {
-  activationFundingRequirement, buildPortfolioPlan, formatNative, formatStable, GAS_LOW_WATERMARK, GAS_RESERVE, goalOptions,
+  activationFundingRequirement, activationWalletReady, buildPortfolioPlan, formatNative, formatStable, GAS_LOW_WATERMARK, GAS_RESERVE, goalOptions,
   riskProfiles, type InvestmentGoal, type PortfolioPlan, type PortfolioSnapshot,
   type RiskProfileId,
 } from './domain/portfolio'
@@ -711,7 +711,8 @@ function MandateWizard({
   const amountValid = fundingAmount > GAS_RESERVE
   const fundingRequirement = activationFundingRequirement(altanaBalanceWei ?? 0n, smartStableBalance, fundingAmount)
   const fundingReady = fundingRequirement.ready
-  const ready = Boolean(account && isTargetNetwork && altanaAddress && fundingReady && draft.stablecoinSelection)
+  const externalWalletReady = activationWalletReady(Boolean(account), isTargetNetwork, fundingRequirement.portfolioFunded)
+  const ready = Boolean(externalWalletReady && altanaAddress && fundingReady && draft.stablecoinSelection)
   const selectedGoal = goalOptions.find((goal) => goal.id === draft.goal) ?? goalOptions[1]
   const selectedRisk = riskProfiles[draft.risk]
   const selectedCandidate = draft.stablecoinSelection?.candidates.find((candidate) => candidate.symbol === draft.stablecoin)
@@ -828,7 +829,7 @@ function MandateWizard({
         {step === 3 && <>
           <div className="approval-intro"><span className="eyebrow">Owner approval</span><h2>Fund once, deploy four modules</h2><p>tBNB enters your Passkey smart account. After stablecoin allocation, your Passkey authorizes bounded allowances to the official V2 Router, MasterChef V2, and CAKE Pool. The revocable AI session cannot call approve.</p></div>
           <div className="approval-checklist">
-            <div className={account && isTargetNetwork ? 'complete' : ''}><span>{account && isTargetNetwork ? <Check size={16} /> : <Wallet size={16} />}</span><div><strong>Funding wallet</strong><small>{account ? `${walletName} · ${shortAddress(account)} · ${!isTargetNetwork ? 'wrong network' : walletBalanceStatus === 'loading' ? 'reading balance' : walletBalanceStatus === 'error' ? 'balance unavailable' : `${walletBalance ?? '0'} tBNB available`}` : 'Choose an installed wallet'}</small></div>{!account ? <button onClick={onConnect}>Connect</button> : !isTargetNetwork ? <button onClick={onSwitchNetwork}>Switch</button> : null}</div>
+            <div className={externalWalletReady ? 'complete' : ''}><span>{externalWalletReady ? <Check size={16} /> : <Wallet size={16} />}</span><div><strong>Funding wallet</strong><small>{fundingRequirement.portfolioFunded ? 'Not required · the Passkey wallet already holds managed capital' : account ? `${walletName} · ${shortAddress(account)} · ${!isTargetNetwork ? 'wrong network' : walletBalanceStatus === 'loading' ? 'reading balance' : walletBalanceStatus === 'error' ? 'balance unavailable' : `${walletBalance ?? '0'} tBNB available`}` : 'Choose an installed wallet for the first deposit'}</small></div>{!fundingRequirement.portfolioFunded && (!account ? <button onClick={onConnect}>Connect</button> : !isTargetNetwork ? <button onClick={onSwitchNetwork}>Switch</button> : null)}</div>
             <div className={altanaAddress ? 'complete' : ''}><span>{altanaAddress ? <Check size={16} /> : <Fingerprint size={16} />}</span><div><strong>Passkey smart wallet</strong><small>{altanaAddress ? shortAddress(altanaAddress) : 'Owner-controlled account'}</small></div>{!altanaAddress && <div className="inline-actions"><button disabled={!isPasskeySupported || busy} onClick={onCreateAltana}>Create</button><button disabled={!isPasskeySupported || busy} onClick={onRecoverAltana}>Recover</button></div>}</div>
             <div className={fundingReady ? 'complete' : ''}><span>{fundingReady ? <Check size={16} /> : <Vault size={16} />}</span><div><strong>{fundingRequirement.portfolioFunded ? 'Execution Gas' : 'Initial funding'}</strong><small>{!altanaAddress ? 'Fund after wallet creation' : fundingRequirement.portfolioFunded ? `${altanaBalance} tBNB Gas available · ${fundingReady ? 'execution ready' : `refill to ${formatNative(GAS_RESERVE)} tBNB`}` : `${altanaBalance} tBNB available · target ${draft.amount || '0'} tBNB`}</small></div>{altanaAddress && !fundingReady && <button disabled={busy || !account || !amountValid} onClick={() => void onFundAltana(draft)}>{fundingRequirement.portfolioFunded ? 'Top up Gas reserve' : 'Deposit missing tBNB'}</button>}</div>
             <div className={smartStableBalance > 0n ? 'complete' : ''}><span>{smartStableBalance > 0n ? <Check size={16} /> : <ArrowDownUp size={16} />}</span><div><strong>AI-selected startup conversion</strong><small>{smartStableBalance > 0n ? `${formatStable(smartStableBalance)} ${draft.stablecoin} already available` : `Convert funded tBNB to ${draft.stablecoin}; keep ${formatNative(GAS_RESERVE)} tBNB for Gas`}</small></div><b className="checklist-state">{smartStableBalance > 0n ? 'Recorded' : `${draft.stablecoinSelection?.confidence ?? 0}% confidence`}</b></div>
