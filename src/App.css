@@ -464,17 +464,21 @@
 .simple-empty svg { color: var(--purple); }
 .simple-empty h2 { margin: 5px 0 0; font-size: 21px; }
 .simple-empty p { margin: 0; color: var(--muted); font-size: 12px; }
-.decision-log, .policy-list { display: grid; gap: 10px; }
+.decision-log, .policy-list { min-width: 0; display: grid; gap: 10px; }
 .decision-log article, .policy-list article { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
-.decision-log article { padding: 16px; display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; }
+.decision-log article { max-width: 100%; min-width: 0; overflow: hidden; padding: 16px; display: grid; grid-template-columns: 36px minmax(0, 1fr) minmax(112px, auto); gap: 12px; }
 .decision-icon { width: 34px; height: 34px; border-radius: 7px; display: grid; place-items: center; color: var(--purple); background: var(--purple-soft); }
-.decision-copy > div { display: flex; align-items: baseline; gap: 8px; }
+.decision-copy { min-width: 0; }
+.decision-copy > div { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
 .decision-copy strong { font-size: 13px; }
 .decision-copy > div span { color: var(--muted); font-size: 10px; }
-.decision-copy p { margin: 6px 0 9px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.decision-copy p { max-width: 100%; margin: 6px 0 9px; overflow-wrap: anywhere; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.decision-technical-details { max-width: 100%; min-width: 0; margin: -2px 0 10px; }
+.decision-technical-details summary { width: max-content; cursor: pointer; color: var(--purple); font-size: 9px; font-weight: 700; }
+.decision-technical-details code { max-width: 100%; max-height: 112px; margin-top: 7px; overflow: auto; padding: 9px; border: 1px solid var(--line); border-radius: 6px; display: block; overflow-wrap: anywhere; word-break: break-all; white-space: pre-wrap; color: var(--muted); background: var(--soft); font-size: 9px; line-height: 1.45; }
 .decision-tags { display: flex; flex-wrap: wrap; gap: 5px; }
-.decision-tags span { padding: 4px 6px; border-radius: 5px; color: var(--muted); background: var(--soft); font-size: 9px; }
-.decision-evidence { display: grid; align-content: start; justify-items: end; gap: 5px; }
+.decision-tags span { max-width: 100%; overflow-wrap: anywhere; padding: 4px 6px; border-radius: 5px; color: var(--muted); background: var(--soft); font-size: 9px; }
+.decision-evidence { min-width: 112px; display: grid; align-content: start; justify-items: end; gap: 5px; text-align: right; }
 .decision-evidence > strong, .decision-evidence > span, .decision-evidence a { font-size: 9px; }
 .decision-evidence > span { color: var(--muted); }
 .decision-evidence a, .policy-list a { color: var(--purple); text-decoration: none; }
