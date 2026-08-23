@@ -216,11 +216,15 @@ export type PancakeExitProof = {
 }
 
 export function hasExistingPancakeExposure(positions: PancakePositionSnapshot) {
-  return positions.nativeBalance > GAS_RESERVE ||
-    positions.cakeBalance > 0n ||
+  return positions.cakeBalance > 0n ||
     positions.lpWalletBalance > 0n ||
     positions.farmStaked > 0n ||
     positions.earnShares > 0n
+}
+
+export function pendingPancakeModules(completedModules: ReadonlySet<PancakeModule>) {
+  const orderedModules: PancakeModule[] = ['SWAP', 'LIQUIDITY', 'FARM', 'EARN']
+  return orderedModules.filter((module) => !completedModules.has(module))
 }
 
 function buffered(value: bigint) {
@@ -446,8 +450,10 @@ export async function deployPancakePortfolio(
   deployment: PancakeDeploymentPlan,
   onStage?: (stage: 'executing') => void,
   onReceipt?: (receipts: PancakeModuleReceipt[]) => void,
+  completedModules = new Set<PancakeModule>(),
 ) {
   const receipts: PancakeModuleReceipt[] = []
+  const pendingModules = new Set(pendingPancakeModules(completedModules))
   const stablecoin = stablecoinConfig(deployment.stablecoin)
   const wallet = session.walletAddress
   const deadline = BigInt(Math.floor(Date.now() / 1_000) + DEADLINE_SECONDS)
@@ -457,7 +463,7 @@ export async function deployPancakePortfolio(
     onReceipt?.([...receipts])
   }
 
-  try {
+  if (pendingModules.has('SWAP')) try {
     const nativeBefore = await readAltanaBalance(wallet)
     const result = await executeSession(session, [{
       to: stablecoin.router,
@@ -478,8 +484,10 @@ export async function deployPancakePortfolio(
     return receipts
   }
 
-  let mintedLp = 0n
-  try {
+  let mintedLp = !pendingModules.has('LIQUIDITY')
+    ? await tokenBalance(PANCAKE_CAKE_WBNB_LP, wallet)
+    : 0n
+  if (pendingModules.has('LIQUIDITY')) try {
     const lpBefore = await tokenBalance(PANCAKE_CAKE_WBNB_LP, wallet)
     const result = await executeSession(session, [
       {
@@ -527,7 +535,7 @@ export async function deployPancakePortfolio(
     return receipts
   }
 
-  try {
+  if (pendingModules.has('FARM')) try {
     if (mintedLp <= 0n) throw new Error('No LP token was minted, so Farm staking was stopped.')
     const result = await executeSession(session, [{
       to: PANCAKE_MASTERCHEF_V2,
@@ -542,8 +550,10 @@ export async function deployPancakePortfolio(
     return receipts
   }
 
-  let earnedCake = 0n
-  try {
+  let earnedCake = !pendingModules.has('EARN')
+    ? 0n
+    : await tokenBalance(PANCAKE_TESTNET_CAKE, wallet)
+  if (pendingModules.has('EARN') && earnedCake <= 0n) try {
     const cakeBefore = await tokenBalance(PANCAKE_TESTNET_CAKE, wallet)
     const result = await executeSession(session, [
       {
@@ -575,7 +585,7 @@ export async function deployPancakePortfolio(
     return receipts
   }
 
-  try {
+  if (pendingModules.has('EARN')) try {
     if (earnedCake <= 0n) throw new Error('No CAKE was received, so the Earn deposit was stopped.')
     const sharesBefore = (await bscTestnetClient.readContract({ address: PANCAKE_CAKE_POOL, abi: cakePoolAbi, functionName: 'userInfo', args: [wallet] }))[0]
     const result = await executeSession(session, [{
@@ -604,6 +614,7 @@ export async function grantAndDeployPancakePortfolio(
   onStage?: (stage: 'approving' | 'granting' | 'executing') => void,
   onProgress?: (progress: PancakeActivationProgress) => void,
   preserveExistingPositions = false,
+  completedModules = new Set<PancakeModule>(),
 ): Promise<PancakeDeploymentProof> {
   const prepared = await preparePancakeDeployment(snapshot, strategy)
   const deployment = {
@@ -627,7 +638,7 @@ export async function grantAndDeployPancakePortfolio(
   })
   onProgress?.({ phase: 'GRANTED', transactionHash: grant.transactionHash })
   const receipts = executeApprovedPlan && !preserveExistingPositions
-    ? await deployPancakePortfolio(grant, deployment, onStage, (nextReceipts) => onProgress?.({ phase: 'DEPLOYING', receipts: nextReceipts }))
+    ? await deployPancakePortfolio(grant, deployment, onStage, (nextReceipts) => onProgress?.({ phase: 'DEPLOYING', receipts: nextReceipts }), completedModules)
     : []
   const positions = await readPancakePositions(profile.wallet.address, snapshot.stablecoin)
   return { session: grant, grant, approval, deployment, receipts, positions, recoveredExistingPositions: preserveExistingPositions }

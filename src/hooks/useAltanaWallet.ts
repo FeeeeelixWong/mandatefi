@@ -8,6 +8,7 @@ import { bscTestnetClient } from '../lib/chains'
 import { sendNativeTransfer, type Eip1193Provider } from '../lib/wallet'
 import type { StablecoinSymbol } from '../lib/tokens'
 import type { PancakeActivationProgress } from '../integrations/pancakeExecutor'
+import type { PancakeModule } from '../types'
 
 export type AltanaStage = 'idle' | 'creating' | 'recovering' | 'funding' | 'normalizing' | 'approving' | 'granting' | 'executing' | 'revoking' | 'withdrawing' | 'error'
 
@@ -152,13 +153,16 @@ export function useAltanaWallet() {
     executeApprovedPlan = true,
     onProgress?: (progress: PancakeActivationProgress) => void,
     preserveExistingPositions = false,
+    completedModules = new Set<PancakeModule>(),
+    profileOverride?: AltanaWalletProfile,
   ) => {
-    if (!profile) throw new Error('Create or recover the Altana wallet first.')
+    const activeProfile = profileOverride ?? profile
+    if (!activeProfile) throw new Error('Create or recover the Altana wallet first.')
     setError('')
     try {
       const { grantAndDeployPancakePortfolio } = await import('../integrations/pancakeExecutor')
       const result = await grantAndDeployPancakePortfolio(
-        profile,
+        activeProfile,
         durationDays,
         strategy,
         snapshot,
@@ -167,8 +171,9 @@ export function useAltanaWallet() {
         setStage,
         onProgress,
         preserveExistingPositions,
+        completedModules,
       )
-      await refreshBalance(profile)
+      await refreshBalance(activeProfile)
       setStage('idle')
       return result
     } catch (operationError) {
@@ -178,14 +183,15 @@ export function useAltanaWallet() {
     }
   }, [profile, refreshBalance])
 
-  const revoke = useCallback(async (publicKey: Hex) => {
-    if (!profile) throw new Error('Recover the Altana owner passkey before revoking.')
+  const revoke = useCallback(async (publicKey: Hex, profileOverride?: AltanaWalletProfile) => {
+    const activeProfile = profileOverride ?? profile
+    if (!activeProfile) throw new Error('Recover the Altana owner passkey before revoking.')
     setStage('revoking')
     setError('')
     try {
       const { revokeAltanaMandate } = await import('../integrations/altana')
-      const result = await revokeAltanaMandate(profile, publicKey)
-      await refreshBalance(profile)
+      const result = await revokeAltanaMandate(activeProfile, publicKey)
+      await refreshBalance(activeProfile)
       setStage('idle')
       return result
     } catch (operationError) {

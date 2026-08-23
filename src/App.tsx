@@ -519,7 +519,7 @@ function AboutPage({ onCreate }: { onCreate: () => void }) {
   </div>
 }
 
-function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancakeResearch, pancakeMarket, loading, runtimeAvailable, checking, onCreate, onCheck, onOpenPolicies }: {
+function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancakeResearch, pancakeMarket, loading, runtimeAvailable, checking, resuming, onCreate, onCheck, onResume, onOpenPolicies }: {
   mandate: Mandate | null
   snapshot: PortfolioSnapshot | null
   positions: PancakePositionSnapshot | null
@@ -529,8 +529,10 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
   loading: boolean
   runtimeAvailable: boolean
   checking: boolean
+  resuming: boolean
   onCreate: () => void
   onCheck: () => void
+  onResume: () => void
   onOpenPolicies: () => void
 }) {
   if (!mandate) return <ProductHome onCreate={onCreate} />
@@ -547,9 +549,11 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
   const lpPosition = positions ? positions.lpWalletBalance + positions.farmStaked : 0n
   const moduleReceipt = (module: 'SWAP' | 'LIQUIDITY' | 'FARM' | 'EARN') => latestPancakeModuleReceipt(mandate.moduleReceipts, module)
   const confirmedModules = completedPancakeModules(mandate.moduleReceipts).size
+  const deploymentIncomplete = confirmedModules < 4
   return <div className="dashboard-page">
     <div className="page-title-row"><div><span className="eyebrow">Managed strategy</span><h1>{mandate.name}</h1><p>{strategy.summary} Capital remains in the passkey smart wallet.</p></div><div className="title-actions"><button className="secondary-button" onClick={onOpenPolicies}><Settings2 size={16} /> Guardrails</button><button className="primary-button" disabled={checking || mandate.status !== 'Active'} onClick={onCheck}>{checking ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run live review</button></div></div>
     <section className="portfolio-hero-panel"><div className="portfolio-value-block"><span>Mandate capital</span><strong>{`${formatStable(mandateCapital)} ${mandate.stablecoin}`}</strong><small>Initial stable-value budget · normalized from {mandate.managedAmount} tBNB</small></div><Metric label="Gas reserve" value={loading ? 'Refreshing...' : snapshot ? `${formatNative(snapshot.nativeBalance)} tBNB` : 'Unavailable'} detail={`Auto-refill below ${formatNative(GAS_LOW_WATERMARK)} tBNB`} /><Metric label="Strategy risk" value={`${strategy.riskScore}/10`} detail={`${riskProfiles[mandate.riskProfile].name} mandate`} /><Metric label="Next review" value={strategy.reviewCadence} detail={runtimeAvailable ? 'Local executor online' : 'Owner approval required'} /></section>
+    {(deploymentIncomplete || !runtimeAvailable) && mandate.status === 'Active' && <section className="resume-strategy-notice"><div className="resume-strategy-icon"><RefreshCw size={20} /></div><div><span>Existing strategy detected</span><strong>{deploymentIncomplete ? `${confirmedModules}/4 PancakeSwap modules are already confirmed` : 'All modules are confirmed; the local executor needs recovery'}</strong><p>This reuses {mandate.name}, its current Passkey wallet, funds, risk limits, and history. It does not create or fund another strategy.</p></div><button className="primary-button" disabled={resuming} onClick={onResume}>{resuming ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} {resuming ? 'Recovering strategy' : deploymentIncomplete ? 'Resume existing deployment' : 'Recover executor'}</button></section>}
     <div className="dashboard-layout">
       <section className="workspace-panel allocation-panel"><header className="panel-header"><div><span>AI portfolio construction</span><h2>Where the capital works</h2></div><span className="status-chip active"><i /> Active mandate</span></header><StrategyBar plan={strategy} /><div className="sleeve-grid">{strategy.sleeves.map((sleeve) => <article key={sleeve.id}><div className={`sleeve-icon sleeve-${sleeve.id}`}>{sleeve.id === 'reserve' ? <Vault size={18} /> : sleeve.id === 'market' ? <TrendingUp size={18} /> : sleeve.id === 'liquidity' ? <Waves size={18} /> : <Leaf size={18} />}</div><span>{sleeve.name}</span><strong>{formatBps(sleeve.allocationBps)}</strong><p>{sleeve.purpose}</p><small>{toolNames[sleeve.tool]}</small></article>)}</div></section>
       <aside className="workspace-panel ai-panel"><header className="panel-header"><div><span>Latest expert review</span><h2>{recommendationTitle}</h2></div><BrainCircuit size={23} /></header>{(latest || executionPlan) && <><p>{summarizeActivityText(latest?.rationale ?? executionPlan?.rationale ?? '', 320)}</p>{latest?.triggers?.length ? <div className="trigger-chips" aria-label="Active review triggers">{latest.triggers.map((trigger) => <span key={trigger}>{trigger.replaceAll('_', ' ')}</span>)}</div> : <div className="trigger-chips"><span>NO ACTIVE EVENT RISK</span></div>}<div className="ai-signals"><div><span>Portfolio data</span><strong>{snapshot ? 'Live snapshot' : 'Waiting'}</strong></div><div><span>Reasoning</span><strong>{latest?.modelMode === 'DEEPSEEK' ? latest.modelName : latest?.modelMode === 'HYBRID_FALLBACK' ? 'DeepSeek + rules' : 'Rules fallback'}</strong></div><div><span>Confidence</span><strong>{latest?.confidence !== undefined ? `${latest.confidence}%` : '—'}</strong></div><div><span>Risk gate</span><strong>{gateStatus.replaceAll('_', ' ')}</strong></div></div><div className={`ai-decision ${latest?.gateStatus === 'AUTO_EXECUTE' ? 'trade' : 'hold'}`}>{latest?.gateStatus === 'AUTO_EXECUTE' ? <ArrowDownUp size={17} /> : <CircleCheck size={17} />}<span>{latest?.gateStatus === 'AUTO_EXECUTE' && executionPlan ? `${executionPlan.inputAsset} to ${executionPlan.outputAsset} adapter authorised` : latest?.gateStatus === 'APPROVAL_REQUIRED' ? 'Waiting for explicit owner approval' : latest?.gateStatus === 'BLOCKED' ? 'Recommendation blocked until its adapter is live' : latest?.gateStatus === 'DEFERRED' ? 'Execution delayed by the cooldown policy' : 'No automatic action authorised'}</span></div></>}</aside>
@@ -564,7 +568,6 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
       <section className="workspace-panel action-panel"><header className="panel-header"><div><span>Execution plan</span><h2>PancakeSwap action queue</h2></div><span className="coverage-note">4 live adapters</span></header><div className="action-queue">{strategy.actions.map((action) => <article key={action.id}><span className="action-order">{action.order}</span><div className="action-copy"><div><strong>{action.title}</strong><span>{toolNames[action.tool]}</span></div><p>{action.detail}</p></div><div className="action-meta"><strong>{formatBps(action.allocationBps)}</strong><span className={`coverage coverage-${action.coverage.toLowerCase().replace('_', '-')}`}>{coverageLabel(action.coverage)}</span></div></article>)}</div></section>
       <aside className="workspace-panel policy-panel"><header className="panel-header"><div><span>Hard limits</span><h2>What AI cannot cross</h2></div><ShieldCheck size={22} /></header><dl className="policy-facts"><div><dt>Minimum liquid reserve</dt><dd>{formatBps(strategy.guardrails.minimumReserveBps)}</dd></div><div><dt>Maximum LP exposure</dt><dd>{formatBps(strategy.guardrails.maximumLiquidityBps)}</dd></div><div><dt>Single position cap</dt><dd>{formatBps(strategy.guardrails.maximumSinglePositionBps)}</dd></div><div><dt>Execution cost ceiling</dt><dd>{formatBps(strategy.guardrails.maximumExecutionCostBps)}</dd></div><div><dt>Leverage</dt><dd>Blocked</dd></div></dl>{latest && <div className="latest-proof"><span>Latest onchain proof</span><strong>{latest.state.replace('_', ' ')}</strong>{latest.transactionHash ? <a href={txUrl(latest.transactionHash)} target="_blank" rel="noreferrer">View transaction <ExternalLink size={12} /></a> : <small>No transaction required</small>}</div>}</aside>
     </div>
-    {!runtimeAvailable && mandate.status === 'Active' && <div className="runtime-notice"><AlertTriangle size={18} /><div><strong>The execution key is not available in this browser session.</strong><span>The onchain policy remains active and revocable. Create a replacement runtime to resume automatic reviews.</span></div><button onClick={onCreate}>Replace runtime</button></div>}
   </div>
 }
 
@@ -910,6 +913,7 @@ function App() {
   const [revokingId, setRevokingId] = useState('')
   const [exitingId, setExitingId] = useState('')
   const [checkingId, setCheckingId] = useState('')
+  const [resumingId, setResumingId] = useState('')
   const [runtimeMandateIds, setRuntimeMandateIds] = useState<string[]>([])
   const runtimeSessions = useRef(new Map<string, Session>())
   const runtimeBusy = useRef(false)
@@ -920,7 +924,7 @@ function App() {
   const altana = useAltanaWallet()
   const activeMandate = mandates.find((mandate) => mandate.status !== 'Revoked') ?? null
   const activeStablecoin = activeMandate?.stablecoin ?? DEFAULT_STABLECOIN
-  const portfolioAddress = altana.address ?? activeMandate?.smartWallet ?? null
+  const portfolioAddress = activeMandate?.smartWallet ?? altana.address ?? null
   const openWalletPicker = useCallback(() => setWalletPickerOpen(true), [])
   const closeWalletPicker = useCallback(() => setWalletPickerOpen(false), [])
 
@@ -1295,6 +1299,163 @@ function App() {
     }
   }
 
+  async function resumeMandateDeployment(id: string) {
+    const mandate = mandates.find((item) => item.id === id)
+    if (!mandate || resumingId) return
+    if (mandate.status !== 'Active') {
+      setNotice('Only an active strategy can resume deployment.')
+      return
+    }
+    const remainingDays = Math.ceil((mandate.expiry * 1_000 - Date.now()) / (24 * 60 * 60 * 1_000))
+    if (remainingDays <= 0) {
+      setNotice('This strategy has expired. Its old permissions cannot be extended; create a new mandate only if you want to continue managing the portfolio.')
+      return
+    }
+
+    setResumingId(id)
+    setNotice('Recovering the existing strategy and checking its confirmed onchain modules...')
+    const attemptId = crypto.randomUUID()
+    const now = new Date().toISOString()
+    const updateAttempt = (patch: Partial<ActivationAttempt>) => {
+      setActivationAttempts((current) => current.map((item) => item.id === attemptId ? {
+        ...item,
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      } : item))
+    }
+    setActivationAttempts((current) => [{
+      id: attemptId,
+      name: `Resume · ${mandate.name}`,
+      createdAt: now,
+      updatedAt: now,
+      stablecoin: mandate.stablecoin,
+      smartWallet: mandate.smartWallet,
+      fundingAmount: mandate.managedAmount,
+      phase: 'PREPARING',
+      recoveryDetected: true,
+      moduleReceipts: mandate.moduleReceipts,
+    }, ...current])
+
+    try {
+      let ownerProfile = altana.profile
+      if (!ownerProfile || ownerProfile.wallet.address.toLowerCase() !== mandate.smartWallet.toLowerCase()) {
+        ownerProfile = await altana.recover()
+      }
+      if (ownerProfile.wallet.address.toLowerCase() !== mandate.smartWallet.toLowerCase()) {
+        throw new Error(`The recovered Passkey wallet ${shortAddress(ownerProfile.wallet.address)} does not own this strategy.`)
+      }
+
+      const [latestSnapshot, latestPositions, refreshedMarket] = await Promise.all([
+        refreshSnapshot(mandate.stablecoin),
+        refreshPancakePositions(mandate.stablecoin),
+        refreshPancakeMarket(),
+      ])
+      if (!latestSnapshot || !latestPositions) throw new Error('The existing portfolio could not be read from BSC Testnet.')
+      if (latestSnapshot.stableBalance <= 0n) throw new Error(`The existing Passkey wallet has no liquid ${mandate.stablecoin} available for the missing modules.`)
+      if (latestSnapshot.nativeBalance < GAS_LOW_WATERMARK) throw new Error('The existing strategy needs a small tBNB Gas top-up before its missing modules can execute.')
+
+      const completedModules = completedPancakeModules(mandate.moduleReceipts)
+      updateAttempt({ phase: 'REVIEWING', moduleReceipts: mandate.moduleReceipts })
+      const strategy = planForMandate(mandate)
+      const executionPlan = buildPortfolioPlan({
+        snapshot: latestSnapshot,
+        managedAmount: safeParseStable(mandate.managedStableCap),
+        goal: mandate.goal,
+        risk: mandate.riskProfile,
+        targetReserveBps: BigInt(allocationFor(strategy, 'reserve')),
+      })
+      let executionCost: ExecutionCostEstimate | null = null
+      try {
+        const { estimatePortfolioExecutionCost, quotePortfolioPlan } = await import('./integrations/altana')
+        const quote = await quotePortfolioPlan(executionPlan)
+        executionCost = await estimatePortfolioExecutionCost(executionPlan, quote)
+      } catch {
+        // Missing execution evidence makes the deterministic activation gate fail closed.
+      }
+      const committee = buildInvestmentCommittee({
+        strategy,
+        executionPlan,
+        snapshot: latestSnapshot,
+        executionCost,
+        pancakeResearch,
+        pancakeMarket: refreshedMarket ?? pancakeMarket,
+      })
+      const review = await orchestrateWithAgentRuntime({
+        source: 'ACTIVATION',
+        mandate: {
+          goal: mandate.goal,
+          riskProfile: mandate.riskProfile,
+          stablecoin: mandate.stablecoin,
+          managedAmount: mandate.managedStableCap,
+          horizonDays: remainingDays,
+          liquidityNeed: mandate.liquidityNeed ?? 'weekly',
+          expiry: mandate.expiry,
+        },
+        strategy,
+        executionPlan,
+        lastReviewAt: mandate.decisions[0]?.createdAt,
+        lastExecutionAt: mandate.decisions.find((decision) => decision.gateStatus === 'AUTO_EXECUTE')?.createdAt,
+        committee,
+      }, latestSnapshot)
+      const authorization = evaluateOwnerApprovedInitialDeployment(review)
+      if (!authorization.authorized) {
+        throw new Error(`The existing strategy was recovered, but its missing modules remain fail-closed: ${authorization.blockers.join(' ')}`)
+      }
+
+      updateAttempt({ phase: 'APPROVING' })
+      const revoke = await altana.revoke(mandate.sessionPublicKey, ownerProfile)
+      if (revoke.status === 'FAILED') throw new Error('The previous execution session could not be revoked, so no replacement was created.')
+      runtimeSessions.current.delete(id)
+      setRuntimeMandateIds((current) => current.filter((item) => item !== id))
+
+      const recordActivationProgress = (progress: PancakeActivationProgress) => {
+        if (progress.phase === 'APPROVED') updateAttempt({ phase: 'GRANTING', approvalTxHash: progress.transactionHash })
+        else if (progress.phase === 'GRANTED') updateAttempt({ phase: 'DEPLOYING', grantTxHash: progress.transactionHash })
+        else updateAttempt({
+          phase: 'DEPLOYING',
+          moduleReceipts: [...(mandate.moduleReceipts ?? []), ...(progress.receipts ?? [])],
+        })
+      }
+      const proof = await altana.activateDeFiPortfolio(
+        remainingDays,
+        strategy,
+        latestSnapshot,
+        executionPlan,
+        true,
+        recordActivationProgress,
+        false,
+        completedModules,
+        ownerProfile,
+      )
+      const mergedReceipts = [...(mandate.moduleReceipts ?? []), ...proof.receipts]
+      const decision = buildDeploymentDecision(executionPlan, proof, review, true)
+      runtimeSessions.current.set(id, proof.session)
+      setRuntimeMandateIds((current) => current.includes(id) ? current : [...current, id])
+      setPancakePositions(proof.positions)
+      setMandates((current) => current.map((item) => item.id === id ? {
+        ...item,
+        sessionPublicKey: proof.session.publicKey,
+        expiry: proof.session.expiry,
+        grantTxHash: proof.grant.transactionHash,
+        moduleReceipts: mergedReceipts,
+        decisions: [decision, ...item.decisions],
+      } : item))
+      setActivationAttempts((current) => current.filter((item) => item.id !== attemptId))
+      await Promise.all([refreshSnapshot(mandate.stablecoin), refreshPancakePositions(mandate.stablecoin)])
+      const confirmed = completedPancakeModules(mergedReceipts).size
+      setView('overview')
+      setNotice(confirmed === 4
+        ? 'The existing strategy resumed successfully. Swap, LP, Farm, and Earn now have confirmed BSC Testnet receipts.'
+        : `The existing strategy resumed without creating a duplicate. ${confirmed}/4 modules are confirmed; review Activity for the remaining adapter failure.`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'The existing strategy could not be resumed.'
+      updateAttempt({ phase: 'FAILED', error: message })
+      setNotice(message)
+    } finally {
+      setResumingId('')
+    }
+  }
+
   async function revokeMandate(id: string) {
     const mandate = mandates.find((item) => item.id === id)
     if (!mandate) return
@@ -1370,7 +1531,7 @@ function App() {
     </header>
     <button className={`navigation-scrim ${menuOpen ? 'visible' : ''}`} onClick={closeMobileMenu} aria-label="Close navigation" />
     <main className="main-area" inert={menuOpen ? true : undefined} aria-hidden={menuOpen ? true : undefined}><div className="page-content">
-      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} positions={pancakePositions} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
+      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} positions={pancakePositions} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} resuming={resumingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onResume={() => { if (activeMandate) void resumeMandateDeployment(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
       {view === 'create' && <MandateWizard snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} walletName={wallet.selectedWallet?.name ?? 'Browser wallet'} walletBalance={wallet.balance} walletBalanceStatus={wallet.balanceStatus} altanaAddress={altana.address} altanaBalance={altana.balance} altanaBalanceWei={altana.balanceWei} altanaStage={altana.stage} altanaError={altana.error} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} isPasskeySupported={altana.isPasskeySupported} onConnect={openWalletPicker} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={fundAltanaWallet} onStart={startMandate} onCancel={() => setView('overview')} />}
       {view === 'decisions' && <DecisionLog mandates={mandates} activationAttempts={activationAttempts} />}
       {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} exitingId={exitingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onExit={(id) => void exitMandateAssets(id)} onCreate={() => setView('create')} />}

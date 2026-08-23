@@ -324,6 +324,12 @@
 .runtime-notice strong { font-size: 12px; }
 .runtime-notice span { color: #7a6747; font-size: 11px; }
 .runtime-notice button { min-height: 36px; border: 0; color: #7f4e00; background: transparent; cursor: pointer; font-size: 11px; font-weight: 750; }
+.resume-strategy-notice { margin: 14px 0; padding: 16px; border: 1px solid #c9b6f4; border-radius: 8px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 14px; background: #f8f5ff; }
+.resume-strategy-icon { width: 42px; height: 42px; border-radius: 7px; display: grid; place-items: center; color: #7645d9; background: #eee7ff; }
+.resume-strategy-notice > div:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
+.resume-strategy-notice span { color: #7645d9; font-size: 10px; font-weight: 750; text-transform: uppercase; }
+.resume-strategy-notice strong { color: var(--ink); font-family: Kanit, Inter, sans-serif; font-size: 17px; font-weight: 600; }
+.resume-strategy-notice p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
 /* Configurator */
 .configurator-page { max-width: 1160px; margin: 0 auto; }
@@ -546,6 +552,8 @@
   .policy-panel, .action-panel, .committee-panel, .positions-panel { grid-column: 1; grid-row: auto; }
   .committee-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .position-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .resume-strategy-notice { grid-template-columns: 42px minmax(0, 1fr); }
+  .resume-strategy-notice > button { grid-column: 1 / -1; justify-self: stretch; }
   .configurator-grid { grid-template-columns: minmax(0, 1fr) 330px; }
 }
 
@@ -692,6 +700,8 @@
   .sleeve-grid { grid-template-columns: 1fr; }
   .sleeve-grid article { min-height: 145px; }
   .position-grid { grid-template-columns: 1fr; }
+  .resume-strategy-notice { grid-template-columns: 1fr; }
+  .resume-strategy-icon { display: none; }
   .strategy-allocation-legend { grid-template-columns: 1fr; }
   .title-actions { flex-direction: column; }
   .title-actions button { width: 100%; }

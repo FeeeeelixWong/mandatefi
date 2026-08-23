@@ -5,6 +5,7 @@ import { stablecoinConfig } from '../lib/tokens'
 import {
   buildPancakePermissions,
   hasExistingPancakeExposure,
+  pendingPancakeModules,
   PANCAKE_CAKE_POOL,
   PANCAKE_CAKE_WBNB_LP,
   PANCAKE_MASTERCHEF_V2,
@@ -104,9 +105,14 @@ describe('PancakeSwap activation recovery', () => {
     expect(hasExistingPancakeExposure(emptyPositions)).toBe(false)
   })
 
-  it('detects any existing PancakeSwap position before retrying deployment', () => {
+  it('detects yield positions but not an already-created liquid market sleeve', () => {
     expect(hasExistingPancakeExposure({ ...emptyPositions, farmStaked: 1n })).toBe(true)
     expect(hasExistingPancakeExposure({ ...emptyPositions, earnShares: 1n })).toBe(true)
-    expect(hasExistingPancakeExposure({ ...emptyPositions, nativeBalance: parseEther('0.0031') })).toBe(true)
+    expect(hasExistingPancakeExposure({ ...emptyPositions, nativeBalance: parseEther('0.0031') })).toBe(false)
+  })
+
+  it('resumes only the modules that are not already confirmed', () => {
+    expect(pendingPancakeModules(new Set(['SWAP']))).toEqual(['LIQUIDITY', 'FARM', 'EARN'])
+    expect(pendingPancakeModules(new Set(['SWAP', 'LIQUIDITY', 'FARM', 'EARN']))).toEqual([])
   })
 })
