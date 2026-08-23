@@ -1,10 +1,45 @@
 import { describe, expect, it } from 'vitest'
 import { parseEther } from 'viem'
-import { buildPortfolioPlan, targetStableBpsFor } from './portfolio'
+import { activationFundingRequirement, buildPortfolioPlan, targetStableBpsFor } from './portfolio'
 
 const now = '2026-08-20T00:00:00.000Z'
 
 describe('portfolio policy engine', () => {
+  it('does not request the original deposit again after startup conversion', () => {
+    const requirement = activationFundingRequirement(
+      parseEther('0.00294'),
+      parseEther('0.4126'),
+      parseEther('0.1'),
+    )
+
+    expect(requirement.portfolioFunded).toBe(true)
+    expect(requirement.ready).toBe(true)
+    expect(requirement.targetBalance).toBe(parseEther('0.003'))
+  })
+
+  it('tops up only the Gas reserve when a funded portfolio falls below the low watermark', () => {
+    const requirement = activationFundingRequirement(
+      parseEther('0.001'),
+      parseEther('0.4126'),
+      parseEther('0.1'),
+    )
+
+    expect(requirement.ready).toBe(false)
+    expect(requirement.missing).toBe(parseEther('0.002'))
+  })
+
+  it('requires the requested capital before the first startup conversion', () => {
+    const requirement = activationFundingRequirement(
+      parseEther('0.02'),
+      0n,
+      parseEther('0.1'),
+    )
+
+    expect(requirement.portfolioFunded).toBe(false)
+    expect(requirement.ready).toBe(false)
+    expect(requirement.missing).toBe(parseEther('0.08'))
+  })
+
   it('combines goal and risk into a deterministic stable target', () => {
     expect(targetStableBpsFor('preserve', 'conservative')).toBe(8_000n)
     expect(targetStableBpsFor('balanced-growth', 'balanced')).toBe(4_500n)

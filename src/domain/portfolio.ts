@@ -51,6 +51,30 @@ export type PortfolioPlan = {
 export const GAS_RESERVE = parseEther('0.003')
 export const GAS_LOW_WATERMARK = parseEther('0.0015')
 
+export type ActivationFundingRequirement = {
+  portfolioFunded: boolean
+  ready: boolean
+  targetBalance: bigint
+  missing: bigint
+}
+
+export function activationFundingRequirement(
+  nativeBalance: bigint,
+  stableBalance: bigint,
+  requestedFunding: bigint,
+): ActivationFundingRequirement {
+  const portfolioFunded = stableBalance > 0n
+  const targetBalance = portfolioFunded ? GAS_RESERVE : requestedFunding
+  const readyThreshold = portfolioFunded ? GAS_LOW_WATERMARK : requestedFunding
+
+  return {
+    portfolioFunded,
+    ready: nativeBalance >= readyThreshold,
+    targetBalance,
+    missing: nativeBalance >= targetBalance ? 0n : targetBalance - nativeBalance,
+  }
+}
+
 export const riskProfiles: Record<RiskProfileId, RiskProfile> = {
   conservative: {
     id: 'conservative',

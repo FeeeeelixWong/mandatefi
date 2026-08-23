@@ -9,7 +9,7 @@ import {
 import { formatEther, formatUnits, parseEther } from 'viem'
 import type { Session } from '@altananetwork/sdk'
 import {
-  buildPortfolioPlan, formatNative, formatStable, GAS_LOW_WATERMARK, GAS_RESERVE, goalOptions,
+  activationFundingRequirement, buildPortfolioPlan, formatNative, formatStable, GAS_LOW_WATERMARK, GAS_RESERVE, goalOptions,
   riskProfiles, type InvestmentGoal, type PortfolioPlan, type PortfolioSnapshot,
   type RiskProfileId,
 } from './domain/portfolio'
@@ -693,7 +693,8 @@ function MandateWizard({
   const usableQuote = quote?.amountIn === executionPlan.amountIn && quote.inputSymbol === executionPlan.inputAsset ? quote : null
   const busy = starting || selectingStablecoin || !['idle', 'error'].includes(altanaStage)
   const amountValid = fundingAmount > GAS_RESERVE
-  const fundingReady = (altanaBalanceWei ?? 0n) >= fundingAmount || (smartStableBalance > 0n && (altanaBalanceWei ?? 0n) >= GAS_RESERVE)
+  const fundingRequirement = activationFundingRequirement(altanaBalanceWei ?? 0n, smartStableBalance, fundingAmount)
+  const fundingReady = fundingRequirement.ready
   const ready = Boolean(account && isTargetNetwork && altanaAddress && fundingReady && draft.stablecoinSelection)
   const selectedGoal = goalOptions.find((goal) => goal.id === draft.goal) ?? goalOptions[1]
   const selectedRisk = riskProfiles[draft.risk]
@@ -813,7 +814,7 @@ function MandateWizard({
           <div className="approval-checklist">
             <div className={account && isTargetNetwork ? 'complete' : ''}><span>{account && isTargetNetwork ? <Check size={16} /> : <Wallet size={16} />}</span><div><strong>Funding wallet</strong><small>{account ? `${walletName} · ${shortAddress(account)} · ${!isTargetNetwork ? 'wrong network' : walletBalanceStatus === 'loading' ? 'reading balance' : walletBalanceStatus === 'error' ? 'balance unavailable' : `${walletBalance ?? '0'} tBNB available`}` : 'Choose an installed wallet'}</small></div>{!account ? <button onClick={onConnect}>Connect</button> : !isTargetNetwork ? <button onClick={onSwitchNetwork}>Switch</button> : null}</div>
             <div className={altanaAddress ? 'complete' : ''}><span>{altanaAddress ? <Check size={16} /> : <Fingerprint size={16} />}</span><div><strong>Passkey smart wallet</strong><small>{altanaAddress ? shortAddress(altanaAddress) : 'Owner-controlled account'}</small></div>{!altanaAddress && <div className="inline-actions"><button disabled={!isPasskeySupported || busy} onClick={onCreateAltana}>Create</button><button disabled={!isPasskeySupported || busy} onClick={onRecoverAltana}>Recover</button></div>}</div>
-            <div className={fundingReady ? 'complete' : ''}><span>{fundingReady ? <Check size={16} /> : <Vault size={16} />}</span><div><strong>tBNB funding</strong><small>{altanaAddress ? `${altanaBalance} tBNB available · target ${draft.amount || '0'} tBNB` : 'Fund after wallet creation'}</small></div>{altanaAddress && !fundingReady && <button disabled={busy || !account || !amountValid} onClick={() => void onFundAltana(draft)}>Deposit missing tBNB</button>}</div>
+            <div className={fundingReady ? 'complete' : ''}><span>{fundingReady ? <Check size={16} /> : <Vault size={16} />}</span><div><strong>{fundingRequirement.portfolioFunded ? 'Execution Gas' : 'Initial funding'}</strong><small>{!altanaAddress ? 'Fund after wallet creation' : fundingRequirement.portfolioFunded ? `${altanaBalance} tBNB Gas available · ${fundingReady ? 'execution ready' : `refill to ${formatNative(GAS_RESERVE)} tBNB`}` : `${altanaBalance} tBNB available · target ${draft.amount || '0'} tBNB`}</small></div>{altanaAddress && !fundingReady && <button disabled={busy || !account || !amountValid} onClick={() => void onFundAltana(draft)}>{fundingRequirement.portfolioFunded ? 'Top up Gas reserve' : 'Deposit missing tBNB'}</button>}</div>
             <div className={smartStableBalance > 0n ? 'complete' : ''}><span>{smartStableBalance > 0n ? <Check size={16} /> : <ArrowDownUp size={16} />}</span><div><strong>AI-selected startup conversion</strong><small>{smartStableBalance > 0n ? `${formatStable(smartStableBalance)} ${draft.stablecoin} already available` : `Convert funded tBNB to ${draft.stablecoin}; keep ${formatNative(GAS_RESERVE)} tBNB for Gas`}</small></div><b className="checklist-state">{smartStableBalance > 0n ? 'Recorded' : `${draft.stablecoinSelection?.confidence ?? 0}% confidence`}</b></div>
           </div>
           <div className="approval-boundary"><KeyRound size={18} /><div><strong>Exact scope granted today</strong><span>The allocator chose {draft.stablecoin}, but it cannot grant itself broader access. The session is pinned to {shortAddress(selectedStable.router)}, the official CAKE router, CAKE/WBNB LP, MasterChef V2 PID 4, and flexible CAKE Pool methods. It cannot approve tokens, call arbitrary contracts, use leverage, or exceed daily caps.</span></div></div>
@@ -1085,17 +1086,24 @@ function App() {
 
   async function fundAltanaWallet(draft: MandateDraft) {
     if (!wallet.provider || !wallet.account) return
-    const target = safeParseNative(draft.amount)
-    const current = altana.balanceWei ?? 0n
-    const missing = target > current ? target - current : 0n
-    if (missing <= 0n) {
-      setNotice('The existing tBNB in this Passkey account already meets the funding target.')
+    const snapshot = await refreshSnapshot(draft.stablecoin)
+    const requirement = activationFundingRequirement(
+      snapshot?.nativeBalance ?? altana.balanceWei ?? 0n,
+      snapshot?.stableBalance ?? 0n,
+      safeParseNative(draft.amount),
+    )
+    if (requirement.ready) {
+      setNotice(requirement.portfolioFunded
+        ? 'The portfolio is already funded and its current Gas balance is execution-ready.'
+        : 'The existing tBNB in this Passkey account already meets the funding target.')
       return
     }
-    await altana.fund(wallet.provider, wallet.account, missing)
+    await altana.fund(wallet.provider, wallet.account, requirement.missing)
     await wallet.refresh()
     await refreshSnapshot(draft.stablecoin)
-    setNotice(`${formatNative(missing)} tBNB deposited into your owner-controlled Passkey account.`)
+    setNotice(requirement.portfolioFunded
+      ? `${formatNative(requirement.missing)} tBNB added to restore the execution Gas reserve.`
+      : `${formatNative(requirement.missing)} tBNB deposited into your owner-controlled Passkey account.`)
   }
 
   async function startMandate(draft: MandateDraft) {
@@ -1128,9 +1136,15 @@ function App() {
     const [fundingSnapshot, refreshedMarket] = await Promise.all([refreshSnapshot(draft.stablecoin), refreshPancakeMarket()])
     if (!fundingSnapshot) throw new Error('Portfolio data is unavailable.')
     const requestedFunding = safeParseNative(draft.amount)
-    const alreadyNormalized = fundingSnapshot.stableBalance > 0n && fundingSnapshot.nativeBalance >= GAS_RESERVE
-    if (fundingSnapshot.nativeBalance < requestedFunding && !alreadyNormalized) {
-      throw new Error(`Deposit at least ${draft.amount} tBNB before activating the strategy.`)
+    const fundingRequirement = activationFundingRequirement(
+      fundingSnapshot.nativeBalance,
+      fundingSnapshot.stableBalance,
+      requestedFunding,
+    )
+    if (!fundingRequirement.ready) {
+      throw new Error(fundingRequirement.portfolioFunded
+        ? `The portfolio is funded, but execution Gas is below ${formatNative(GAS_LOW_WATERMARK)} tBNB. Top up only the Gas reserve before retrying.`
+        : `Deposit at least ${draft.amount} tBNB before activating the strategy.`)
     }
     let normalization: AltanaNormalizationProof | null = null
     const nativeForConversion = fundingSnapshot.nativeBalance > GAS_RESERVE
