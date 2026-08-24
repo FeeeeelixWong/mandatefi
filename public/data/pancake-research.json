@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-24T06:54:08.004Z",
+  "generatedAt": "2026-08-24T07:57:03.137Z",
   "network": {
     "name": "BNB Chain mainnet",
     "chainId": 56
@@ -18,7 +18,7 @@
     "note": "Research uses an address allowlist, official PancakeSwap pool data, MasterChef V3 onchain emissions, and active Syrup Pool configuration. Execution remains separately constrained by the owner mandate."
   },
   "liquidity": {
-    "observedAt": "2026-08-24T06:54:08.004Z",
+    "observedAt": "2026-08-24T07:57:03.137Z",
     "opportunities": [
       {
         "id": "0x172fcd41e0913e95784454622d1c3724f546f849",
@@ -27,9 +27,9 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 1,
-        "tvlUsd": 11676864,
-        "volumeUsd24h": 154765624,
-        "feeAprBps": 3244,
+        "tvlUsd": 11689837,
+        "volumeUsd24h": 151444430,
+        "feeAprBps": 3174,
         "link": "https://pancakeswap.finance/add/0x55d398326f99059ff775485246999027b3197955/0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c/100?chain=bsc&persistChain=1"
       },
       {
@@ -39,9 +39,9 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 5,
-        "tvlUsd": 10968845,
-        "volumeUsd24h": 19555197,
-        "feeAprBps": 2151,
+        "tvlUsd": 10997159,
+        "volumeUsd24h": 19325271,
+        "feeAprBps": 2122,
         "link": "https://pancakeswap.finance/add/0x55d398326f99059ff775485246999027b3197955/0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c/500?chain=bsc&persistChain=1"
       },
       {
@@ -51,9 +51,9 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
         "feeTierBps": 5,
-        "tvlUsd": 13028338,
-        "volumeUsd24h": 18523712,
-        "feeAprBps": 1714,
+        "tvlUsd": 13065865,
+        "volumeUsd24h": 18399466,
+        "feeAprBps": 1700,
         "link": "https://pancakeswap.finance/add/0x55d398326f99059ff775485246999027b3197955/0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c/500?chain=bsc&persistChain=1"
       },
       {
@@ -63,9 +63,9 @@
         "token0Address": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 5,
-        "tvlUsd": 18393336,
-        "volumeUsd24h": 12606648,
-        "feeAprBps": 828,
+        "tvlUsd": 18531225,
+        "volumeUsd24h": 12256249,
+        "feeAprBps": 802,
         "link": "https://pancakeswap.finance/add/0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c/0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c/500?chain=bsc&persistChain=1"
       },
       {
@@ -75,9 +75,9 @@
         "token0Address": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 1,
-        "tvlUsd": 1926748,
-        "volumeUsd24h": 47462490,
-        "feeAprBps": 6028,
+        "tvlUsd": 1927705,
+        "volumeUsd24h": 46141999,
+        "feeAprBps": 5857,
         "link": "https://pancakeswap.finance/add/0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d/0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c/100?chain=bsc&persistChain=1"
       },
       {
@@ -87,22 +87,10 @@
         "token0Address": "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
         "token1Address": "0x55d398326f99059ff775485246999027b3197955",
         "feeTierBps": 1,
-        "tvlUsd": 1533199,
-        "volumeUsd24h": 6634676,
-        "feeAprBps": 1059,
+        "tvlUsd": 1538596,
+        "volumeUsd24h": 6721643,
+        "feeAprBps": 1072,
         "link": "https://pancakeswap.finance/add/0x2170ed0880ac9a755fd29b2688956bd959f933f8/0x55d398326f99059ff775485246999027b3197955/100?chain=bsc&persistChain=1"
-      },
-      {
-        "id": "0x92b7807bf19b7dddf89b706143896d05228f3121",
-        "pair": "USDT/USDC",
-        "protocol": "v3",
-        "token0Address": "0x55d398326f99059ff775485246999027b3197955",
-        "token1Address": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
-        "feeTierBps": 1,
-        "tvlUsd": 28924910,
-        "volumeUsd24h": 4693431,
-        "feeAprBps": 40,
-        "link": "https://pancakeswap.finance/add/0x55d398326f99059ff775485246999027b3197955/0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d/100?chain=bsc&persistChain=1"
       },
       {
         "id": "0xbe141893e4c6ad9272e8c04bab7e6a10604501a5",
@@ -111,10 +99,22 @@
         "token0Address": "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
         "token1Address": "0x55d398326f99059ff775485246999027b3197955",
         "feeTierBps": 5,
-        "tvlUsd": 4845916,
-        "volumeUsd24h": 1889065,
-        "feeAprBps": 470,
+        "tvlUsd": 4885543,
+        "volumeUsd24h": 1939773,
+        "feeAprBps": 482,
         "link": "https://pancakeswap.finance/add/0x2170ed0880ac9a755fd29b2688956bd959f933f8/0x55d398326f99059ff775485246999027b3197955/500?chain=bsc&persistChain=1"
+      },
+      {
+        "id": "0x92b7807bf19b7dddf89b706143896d05228f3121",
+        "pair": "USDT/USDC",
+        "protocol": "v3",
+        "token0Address": "0x55d398326f99059ff775485246999027b3197955",
+        "token1Address": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+        "feeTierBps": 1,
+        "tvlUsd": 28937804,
+        "volumeUsd24h": 4637028,
+        "feeAprBps": 39,
+        "link": "https://pancakeswap.finance/add/0x55d398326f99059ff775485246999027b3197955/0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d/100?chain=bsc&persistChain=1"
       },
       {
         "id": "0x247f51881d1e3ae0f759afb801413a6c948ef442",
@@ -123,9 +123,9 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
         "feeTierBps": 1,
-        "tvlUsd": 1023537,
-        "volumeUsd24h": 4396660,
-        "feeAprBps": 1052,
+        "tvlUsd": 1027975,
+        "volumeUsd24h": 4346386,
+        "feeAprBps": 1037,
         "link": "https://pancakeswap.finance/add/0x55d398326f99059ff775485246999027b3197955/0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c/100?chain=bsc&persistChain=1"
       },
       {
@@ -135,9 +135,9 @@
         "token0Address": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 5,
-        "tvlUsd": 1129979,
-        "volumeUsd24h": 2058983,
-        "feeAprBps": 2197,
+        "tvlUsd": 1135296,
+        "volumeUsd24h": 2062577,
+        "feeAprBps": 2198,
         "link": "https://pancakeswap.finance/add/0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82/0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c/500?chain=bsc&persistChain=1"
       },
       {
@@ -147,9 +147,9 @@
         "token0Address": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82",
         "token1Address": "0x55d398326f99059ff775485246999027b3197955",
         "feeTierBps": null,
-        "tvlUsd": 1772511,
-        "volumeUsd24h": 336957,
-        "feeAprBps": 1726,
+        "tvlUsd": 1776569,
+        "volumeUsd24h": 335611,
+        "feeAprBps": 1721,
         "link": "https://pancakeswap.finance/liquidity/add/bsc/infinity/0x47516855520496b84a169f7bb92ace7ffb6e8c535bccb52a308ccff113aeccfb?chain=bsc&persistChain=1"
       },
       {
@@ -159,15 +159,15 @@
         "token0Address": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 1,
-        "tvlUsd": 797420,
-        "volumeUsd24h": 6834870,
-        "feeAprBps": 2101,
+        "tvlUsd": 803241,
+        "volumeUsd24h": 6627229,
+        "feeAprBps": 2030,
         "link": "https://pancakeswap.finance/add/0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c/0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c/100?chain=bsc&persistChain=1"
       }
     ]
   },
   "farms": {
-    "observedAt": "2026-08-24T06:54:08.004Z",
+    "observedAt": "2026-08-24T07:57:03.137Z",
     "opportunities": [
       {
         "id": "0xf2688fb5b81049dfb7703ada5e770543770612c4",
@@ -176,13 +176,13 @@
         "token0Address": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 1,
-        "tvlUsd": 1926748,
-        "volumeUsd24h": 47462490,
-        "feeAprBps": 6028,
+        "tvlUsd": 1927705,
+        "volumeUsd24h": 46141999,
+        "feeAprBps": 5857,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 149,
         "rewardAprBps": 83,
-        "totalAprBps": 6111,
+        "totalAprBps": 5940,
         "rewardToken": "CAKE"
       },
       {
@@ -192,13 +192,13 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 1,
-        "tvlUsd": 11676864,
-        "volumeUsd24h": 154765624,
-        "feeAprBps": 3244,
+        "tvlUsd": 11689837,
+        "volumeUsd24h": 151444430,
+        "feeAprBps": 3174,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 137,
         "rewardAprBps": 361,
-        "totalAprBps": 3605,
+        "totalAprBps": 3535,
         "rewardToken": "CAKE"
       },
       {
@@ -208,13 +208,13 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 5,
-        "tvlUsd": 10968845,
-        "volumeUsd24h": 19555197,
-        "feeAprBps": 2151,
+        "tvlUsd": 10997159,
+        "volumeUsd24h": 19325271,
+        "feeAprBps": 2122,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 5,
-        "rewardAprBps": 258,
-        "totalAprBps": 2409,
+        "rewardAprBps": 259,
+        "totalAprBps": 2381,
         "rewardToken": "CAKE"
       },
       {
@@ -224,13 +224,13 @@
         "token0Address": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 1,
-        "tvlUsd": 797420,
-        "volumeUsd24h": 6834870,
-        "feeAprBps": 2101,
+        "tvlUsd": 803241,
+        "volumeUsd24h": 6627229,
+        "feeAprBps": 2030,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 453,
-        "rewardAprBps": 69,
-        "totalAprBps": 2170,
+        "rewardAprBps": 68,
+        "totalAprBps": 2098,
         "rewardToken": "CAKE"
       },
       {
@@ -240,13 +240,13 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
         "feeTierBps": 5,
-        "tvlUsd": 13028338,
-        "volumeUsd24h": 18523712,
-        "feeAprBps": 1714,
+        "tvlUsd": 13065865,
+        "volumeUsd24h": 18399466,
+        "feeAprBps": 1700,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 7,
         "rewardAprBps": 190,
-        "totalAprBps": 1904,
+        "totalAprBps": 1890,
         "rewardToken": "CAKE"
       },
       {
@@ -256,13 +256,13 @@
         "token0Address": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 5,
-        "tvlUsd": 18393336,
-        "volumeUsd24h": 12606648,
-        "feeAprBps": 828,
+        "tvlUsd": 18531225,
+        "volumeUsd24h": 12256249,
+        "feeAprBps": 802,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 55,
-        "rewardAprBps": 381,
-        "totalAprBps": 1209,
+        "rewardAprBps": 379,
+        "totalAprBps": 1181,
         "rewardToken": "CAKE"
       },
       {
@@ -272,13 +272,13 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
         "feeTierBps": 1,
-        "tvlUsd": 1023537,
-        "volumeUsd24h": 4396660,
-        "feeAprBps": 1052,
+        "tvlUsd": 1027975,
+        "volumeUsd24h": 4346386,
+        "feeAprBps": 1037,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 183,
         "rewardAprBps": 86,
-        "totalAprBps": 1138,
+        "totalAprBps": 1123,
         "rewardToken": "CAKE"
       },
       {
@@ -288,13 +288,13 @@
         "token0Address": "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
         "token1Address": "0x55d398326f99059ff775485246999027b3197955",
         "feeTierBps": 5,
-        "tvlUsd": 4845916,
-        "volumeUsd24h": 1889065,
-        "feeAprBps": 470,
+        "tvlUsd": 4885543,
+        "volumeUsd24h": 1939773,
+        "feeAprBps": 482,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 97,
-        "rewardAprBps": 353,
-        "totalAprBps": 823,
+        "rewardAprBps": 351,
+        "totalAprBps": 833,
         "rewardToken": "CAKE"
       },
       {
@@ -304,8 +304,8 @@
         "token0Address": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82",
         "token1Address": "0x55d398326f99059ff775485246999027b3197955",
         "feeTierBps": 25,
-        "tvlUsd": 4298726,
-        "volumeUsd24h": 353713,
+        "tvlUsd": 4309194,
+        "volumeUsd24h": 354277,
         "feeAprBps": 511,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 3,
@@ -320,13 +320,13 @@
         "token0Address": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82",
         "token1Address": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
         "feeTierBps": 25,
-        "tvlUsd": 4024332,
-        "volumeUsd24h": 153996,
-        "feeAprBps": 237,
+        "tvlUsd": 4024209,
+        "volumeUsd24h": 154300,
+        "feeAprBps": 238,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 1,
         "rewardAprBps": 7,
-        "totalAprBps": 244,
+        "totalAprBps": 245,
         "rewardToken": "CAKE"
       },
       {
@@ -336,27 +336,27 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
         "feeTierBps": 1,
-        "tvlUsd": 28924910,
-        "volumeUsd24h": 4693431,
-        "feeAprBps": 40,
+        "tvlUsd": 28937804,
+        "volumeUsd24h": 4637028,
+        "feeAprBps": 39,
         "link": "https://pancakeswap.finance/liquidity/pools?chain=bsc&type=0",
         "pid": 12,
         "rewardAprBps": 1,
-        "totalAprBps": 41,
+        "totalAprBps": 40,
         "rewardToken": "CAKE"
       }
     ]
   },
   "earn": {
-    "observedAt": "2026-08-24T06:54:08.004Z",
+    "observedAt": "2026-08-24T07:57:03.137Z",
     "opportunities": [
       {
         "id": "462",
         "contractAddress": "0x598a547f0945b43c0f9e2aeca3745c3b583dff9a",
         "stakeSymbol": "CAKE",
         "earnSymbol": "USDT",
-        "tvlUsd": 1463690,
-        "rewardAprBps": 399,
+        "tvlUsd": 1467631,
+        "rewardAprBps": 398,
         "withdrawal": "Flexible while pool remains active",
         "link": "https://pancakeswap.finance/pools?chain=bsc"
       }
