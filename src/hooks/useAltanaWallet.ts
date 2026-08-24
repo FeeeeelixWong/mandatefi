@@ -9,17 +9,14 @@ import { sendNativeTransfer, type Eip1193Provider } from '../lib/wallet'
 import type { StablecoinSymbol } from '../lib/tokens'
 import type { PancakeActivationProgress } from '../integrations/pancakeExecutor'
 import type { PancakeModule } from '../types'
+import { altanaErrorMessage } from '../lib/altanaErrors'
 
 export type AltanaStage = 'idle' | 'creating' | 'recovering' | 'funding' | 'normalizing' | 'approving' | 'granting' | 'executing' | 'revoking' | 'withdrawing' | 'error'
 
 const minimumBalance = parseEther('0.003')
 
 function operationErrorMessage(error: unknown) {
-  if (error instanceof DOMException && error.name === 'NotAllowedError') {
-    return 'The passkey request was cancelled or timed out.'
-  }
-  if (error instanceof Error) return error.message
-  return 'The Altana operation could not be completed.'
+  return altanaErrorMessage(error)
 }
 
 function displayBalance(value: bigint | null) {

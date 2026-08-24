@@ -90,6 +90,11 @@ const erc20Abi = [
     outputs: [{ type: 'bool' }],
   },
   {
+    name: 'allowance', type: 'function', stateMutability: 'view',
+    inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+  },
+  {
     name: 'transfer', type: 'function', stateMutability: 'nonpayable',
     inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
     outputs: [{ type: 'bool' }],
@@ -200,7 +205,7 @@ export type PancakeDeploymentProof = {
 }
 
 export type PancakeActivationProgress = {
-  phase: 'APPROVED' | 'GRANTED' | 'DEPLOYING'
+  phase: 'APPROVING' | 'APPROVED' | 'GRANTING' | 'GRANTED' | 'DEPLOYING'
   transactionHash?: Hex
   receipts?: PancakeModuleReceipt[]
 }
@@ -344,13 +349,23 @@ function approvalCalls(token: Address, spender: Address, amount: bigint) {
 
 export async function approvePancakeDeployment(profile: AltanaWalletProfile, deployment: PancakeDeploymentPlan) {
   const stablecoin = stablecoinConfig(deployment.stablecoin)
-  const calls = [
-    ...approvalCalls(stablecoin.address, stablecoin.router, deployment.stableApprovalCap),
-    ...approvalCalls(PANCAKE_TESTNET_CAKE, PANCAKE_V2_ROUTER, deployment.cakeRouterAllowance),
-    ...approvalCalls(PANCAKE_TESTNET_CAKE, PANCAKE_CAKE_POOL, deployment.cakePoolAllowance),
-    ...approvalCalls(PANCAKE_CAKE_WBNB_LP, PANCAKE_MASTERCHEF_V2, deployment.lpAllowance),
-    ...approvalCalls(PANCAKE_CAKE_WBNB_LP, PANCAKE_V2_ROUTER, deployment.lpAllowance),
+  const requirements = [
+    { token: stablecoin.address, spender: stablecoin.router, amount: deployment.stableApprovalCap },
+    { token: PANCAKE_TESTNET_CAKE, spender: PANCAKE_V2_ROUTER, amount: deployment.cakeRouterAllowance },
+    { token: PANCAKE_TESTNET_CAKE, spender: PANCAKE_CAKE_POOL, amount: deployment.cakePoolAllowance },
+    { token: PANCAKE_CAKE_WBNB_LP, spender: PANCAKE_MASTERCHEF_V2, amount: deployment.lpAllowance },
+    { token: PANCAKE_CAKE_WBNB_LP, spender: PANCAKE_V2_ROUTER, amount: deployment.lpAllowance },
   ]
+  const allowances = await Promise.all(requirements.map(({ token, spender }) => bscTestnetClient.readContract({
+    address: token,
+    abi: erc20Abi,
+    functionName: 'allowance',
+    args: [profile.wallet.address, spender],
+  })))
+  const calls = requirements.flatMap((requirement, index) => allowances[index] >= requirement.amount
+    ? []
+    : approvalCalls(requirement.token, requirement.spender, requirement.amount))
+  if (calls.length === 0) return undefined
   const result = await altanaClient.execute({ wallet: profile.wallet, signer: profile.signer, chainId: ALTANA_CHAIN_ID, calls })
   if (result.status === 'FAILED') throw new Error('The owner-bounded PancakeSwap approvals failed.')
   return result
@@ -624,10 +639,12 @@ export async function grantAndDeployPancakePortfolio(
   let approval: ExecuteResult | undefined
   if (executeApprovedPlan) {
     onStage?.('approving')
+    onProgress?.({ phase: 'APPROVING' })
     approval = await approvePancakeDeployment(profile, deployment)
-    onProgress?.({ phase: 'APPROVED', transactionHash: approval.transactionHash })
+    onProgress?.({ phase: 'APPROVED', transactionHash: approval?.transactionHash })
   }
   onStage?.('granting')
+  onProgress?.({ phase: 'GRANTING' })
   const grant = await altanaClient.grantSession({
     wallet: profile.wallet,
     signer: profile.signer,

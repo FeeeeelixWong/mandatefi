@@ -23,6 +23,7 @@ import { z } from 'zod'
 import type { ExecutionCostEstimate } from '../domain/investmentCommittee'
 import { GAS_RESERVE, type PortfolioAsset, type PortfolioPlan, type PortfolioSnapshot } from '../domain/portfolio'
 import { bscTestnetClient } from '../lib/chains'
+import { altanaErrorMessage } from '../lib/altanaErrors'
 import { BSC_TESTNET_WBNB as CONFIGURED_WBNB, stablecoinConfig, type StablecoinSymbol } from '../lib/tokens'
 
 const STORAGE_KEY = 'mandatefi.altana-wallet.v1'
@@ -168,6 +169,8 @@ export const altanaClient = createClient({
   defaultChainId: BNB_TESTNET.chainId,
 })
 
+export { altanaErrorMessage }
+
 function toProfile(
   address: Address,
   credential: Extract<PasskeyCredential, { kind: 'webauthn' }>,
@@ -235,6 +238,15 @@ export async function recoverAltanaWallet(): Promise<AltanaWalletProfile> {
 
 export async function readAltanaBalance(address: Address) {
   return bscTestnetClient.getBalance({ address })
+}
+
+export async function isAltanaSessionValid(walletAddress: Address, sessionPublicKey: Hex) {
+  return bscTestnetClient.readContract({
+    address: ALTANA_KEYSTORE,
+    abi: keyStoreReadAbi,
+    functionName: 'isValidKey',
+    args: [walletAddress, keccak256(sessionPublicKey)],
+  })
 }
 
 export function formatAltanaBalance(value: bigint | null) {
@@ -659,12 +671,4 @@ export async function exitAltanaAssets(
 
 export function altanaExplorerTx(hash?: Hex) {
   return hash ? `${BNB_TESTNET.explorer}/tx/${hash}` : null
-}
-
-export function altanaErrorMessage(error: unknown) {
-  if (error instanceof DOMException && error.name === 'NotAllowedError') {
-    return 'The passkey request was cancelled or timed out.'
-  }
-  if (error instanceof Error) return error.message
-  return 'The Altana operation could not be completed.'
 }

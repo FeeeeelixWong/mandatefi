@@ -343,6 +343,13 @@
 .resume-strategy-notice span { color: #7645d9; font-size: 10px; font-weight: 750; text-transform: uppercase; }
 .resume-strategy-notice strong { color: var(--ink); font-family: Kanit, Inter, sans-serif; font-size: 17px; font-weight: 600; }
 .resume-strategy-notice p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.resume-strategy-notice.resume-failed { border-color: #efb9b4; background: #fff7f6; }
+.resume-strategy-notice.resume-failed .resume-strategy-icon { color: #d1433c; background: #ffe7e4; }
+.resume-progress { margin-top: 7px; padding: 9px 11px; border-left: 3px solid #7645d9; display: grid; gap: 2px; background: rgb(118 69 217 / 6%); }
+.resume-progress b { color: #5f31bd; font-size: 10px; letter-spacing: 0; }
+.resume-progress small { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.resume-failed .resume-progress { border-left-color: #d1433c; background: rgb(209 67 60 / 6%); }
+.resume-failed .resume-progress b { color: #b82f29; }
 
 /* Configurator */
 .configurator-page { max-width: 1160px; margin: 0 auto; }

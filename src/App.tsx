@@ -43,6 +43,7 @@ import {
   DEFAULT_STABLECOIN, stablecoinConfig, type StablecoinSymbol,
 } from './lib/tokens'
 import type { AltanaNormalizationProof, AltanaPortfolioProof, PortfolioRebalanceQuote } from './integrations/altana'
+import { altanaErrorMessage } from './lib/altanaErrors'
 import {
   fetchPancakeResearch,
   type PancakeResearchSnapshot,
@@ -56,6 +57,8 @@ import type { ActivationAttempt, DecisionRecord, Mandate } from './types'
 import './App.css'
 
 type View = 'overview' | 'create' | 'decisions' | 'policies' | 'about'
+type ResumeStep = 'CHECKING' | 'RECOVERING' | 'REVOKING' | 'APPROVING' | 'GRANTING' | 'DEPLOYING' | 'FAILED'
+type ResumeProgress = { mandateId: string; step: ResumeStep; message: string } | null
 type MandateDraft = {
   amount: string
   stablecoin: StablecoinSymbol
@@ -525,7 +528,7 @@ function AboutPage({ onCreate }: { onCreate: () => void }) {
   </div>
 }
 
-function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancakeResearch, pancakeMarket, loading, runtimeAvailable, checking, resuming, onCreate, onCheck, onResume, onOpenPolicies }: {
+function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancakeResearch, pancakeMarket, loading, runtimeAvailable, checking, resuming, resumeProgress, onCreate, onCheck, onResume, onOpenPolicies }: {
   mandate: Mandate | null
   snapshot: PortfolioSnapshot | null
   positions: PancakePositionSnapshot | null
@@ -536,6 +539,7 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
   runtimeAvailable: boolean
   checking: boolean
   resuming: boolean
+  resumeProgress: ResumeProgress
   onCreate: () => void
   onCheck: () => void
   onResume: () => void
@@ -566,6 +570,7 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
     .filter((module) => !completedModuleSet.has(module))
     .map((module) => module === 'LIQUIDITY' ? 'LP' : module)
   const deploymentIncomplete = confirmedModules < 4
+  const currentResume = resumeProgress?.mandateId === mandate.id ? resumeProgress : null
   return <div className="dashboard-page">
     <div className="page-title-row"><div><span className="eyebrow">Managed strategy</span><h1>{mandate.name}</h1><p>{strategy.summary} Capital remains in the passkey smart wallet.</p></div><div className="title-actions"><button className="secondary-button" onClick={onOpenPolicies}><Settings2 size={16} /> Guardrails</button><button className="primary-button" disabled={checking || mandate.status !== 'Active'} onClick={onCheck}>{checking ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} Run live review</button></div></div>
     <section className="performance-hero-panel" aria-label="Portfolio performance">
@@ -596,7 +601,7 @@ function PortfolioOverview({ mandate, snapshot, positions, executionPlan, pancak
       <div><RefreshCw size={15} aria-hidden="true" /><span>Next review</span><strong>{strategy.reviewCadence}</strong></div>
       <div><CircleCheck size={15} aria-hidden="true" /><span>Onchain modules</span><strong>{confirmedModules}/4 confirmed</strong></div>
     </section>
-    {(deploymentIncomplete || !runtimeAvailable) && mandate.status === 'Active' && <section className="resume-strategy-notice"><div className="resume-strategy-icon"><RefreshCw size={20} /></div><div><span>Existing strategy detected</span><strong>{deploymentIncomplete ? `Complete missing modules: ${missingModules.join(', ')}` : 'All modules are confirmed; the local executor needs recovery'}</strong><p>This reuses {mandate.name}, its current Passkey wallet, funds, risk limits, and history. It does not create or fund another strategy.</p></div><button className="primary-button" disabled={resuming} onClick={onResume}>{resuming ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} {resuming ? 'Completing modules' : deploymentIncomplete ? 'Complete missing modules' : 'Recover executor'}</button></section>}
+    {(deploymentIncomplete || !runtimeAvailable) && mandate.status === 'Active' && <section className={`resume-strategy-notice ${currentResume?.step === 'FAILED' ? 'resume-failed' : ''}`}><div className="resume-strategy-icon">{currentResume?.step === 'FAILED' ? <AlertTriangle size={20} /> : <RefreshCw className={resuming ? 'spin' : ''} size={20} />}</div><div className="resume-strategy-copy"><span>Existing strategy detected</span><strong>{deploymentIncomplete ? `Complete missing modules: ${missingModules.join(', ')}` : 'All modules are confirmed; the local executor needs recovery'}</strong><p>This reuses {mandate.name}, its current Passkey wallet, funds, risk limits, and history. It does not create or fund another strategy.</p>{currentResume && <div className="resume-progress" role="status"><b>{currentResume.step.replaceAll('_', ' ')}</b><small>{currentResume.message}</small></div>}</div><button className="primary-button" disabled={resuming} onClick={onResume}>{resuming ? <LoaderCircle className="spin" size={16} /> : <Fingerprint size={16} />} {resuming ? 'Completing modules' : currentResume?.step === 'FAILED' ? 'Retry unfinished step' : deploymentIncomplete ? 'Complete missing modules' : 'Recover executor'}</button></section>}
     <div className="dashboard-layout">
       <section className="workspace-panel allocation-panel"><header className="panel-header"><div><span>AI portfolio construction</span><h2>Where the capital works</h2></div><span className="status-chip active"><i /> Active mandate</span></header><StrategyBar plan={strategy} /><div className="sleeve-grid">{strategy.sleeves.map((sleeve) => <article key={sleeve.id}><div className={`sleeve-icon sleeve-${sleeve.id}`}>{sleeve.id === 'reserve' ? <Vault size={18} /> : sleeve.id === 'market' ? <TrendingUp size={18} /> : sleeve.id === 'liquidity' ? <Waves size={18} /> : <Leaf size={18} />}</div><span>{sleeve.name}</span><strong>{formatBps(sleeve.allocationBps)}</strong><p>{sleeve.purpose}</p><small>{toolNames[sleeve.tool]}</small></article>)}</div></section>
       <aside className="workspace-panel ai-panel"><header className="panel-header"><div><span>Latest expert review</span><h2>{recommendationTitle}</h2></div><BrainCircuit size={23} /></header>{(latest || executionPlan) && <><p>{summarizeActivityText(latest?.rationale ?? executionPlan?.rationale ?? '', 320)}</p>{latest?.triggers?.length ? <div className="trigger-chips" aria-label="Active review triggers">{latest.triggers.map((trigger) => <span key={trigger}>{trigger.replaceAll('_', ' ')}</span>)}</div> : <div className="trigger-chips"><span>NO ACTIVE EVENT RISK</span></div>}<div className="ai-signals"><div><span>Portfolio data</span><strong>{snapshot ? 'Live snapshot' : 'Waiting'}</strong></div><div><span>Reasoning</span><strong>{latest?.modelMode === 'DEEPSEEK' ? latest.modelName : latest?.modelMode === 'HYBRID_FALLBACK' ? 'DeepSeek + rules' : 'Rules fallback'}</strong></div><div><span>Confidence</span><strong>{latest?.confidence !== undefined ? `${latest.confidence}%` : '—'}</strong></div><div><span>Risk gate</span><strong>{gateStatus.replaceAll('_', ' ')}</strong></div></div><div className={`ai-decision ${latest?.gateStatus === 'AUTO_EXECUTE' ? 'trade' : 'hold'}`}>{latest?.gateStatus === 'AUTO_EXECUTE' ? <ArrowDownUp size={17} /> : <CircleCheck size={17} />}<span>{latest?.gateStatus === 'AUTO_EXECUTE' && executionPlan ? `${executionPlan.inputAsset} to ${executionPlan.outputAsset} adapter authorised` : latest?.gateStatus === 'APPROVAL_REQUIRED' ? 'Waiting for explicit owner approval' : latest?.gateStatus === 'BLOCKED' ? 'Recommendation blocked until its adapter is live' : latest?.gateStatus === 'DEFERRED' ? 'Execution delayed by the cooldown policy' : 'No automatic action authorised'}</span></div></>}</aside>
@@ -916,7 +921,7 @@ function DecisionLog({ mandates, activationAttempts }: { mandates: Mandate[]; ac
         const latestHash = attempt.moduleReceipts?.findLast((item) => item.transactionHash)?.transactionHash ?? attempt.grantTxHash ?? attempt.approvalTxHash ?? attempt.normalizationDecision?.transactionHash
         return <article key={attempt.id}>
           <div className="decision-icon hold">{attempt.phase === 'FAILED' ? <AlertTriangle size={17} /> : <LoaderCircle className="spin" size={17} />}</div>
-          <div className="decision-copy"><div><strong>Strategy activation · {activationPhaseCopy[attempt.phase]}</strong><span>{attempt.name}</span></div><ActivityNarrative text={attempt.error ?? 'Confirmed stages are journaled immediately. Closing or refreshing this page will not erase the visible evidence.'} /><div className="decision-tags"><span>{attempt.stablecoin}</span><span>{attempt.fundingAmount} tBNB funded</span><span>{shortAddress(attempt.smartWallet)}</span>{attempt.recoveryDetected && <span>Existing positions preserved</span>}{attempt.normalizationDecision && <span>Startup conversion confirmed</span>}{attempt.grantTxHash && <span>Policy registered</span>}{attempt.moduleReceipts?.length ? <span>{completedPancakeModules(attempt.moduleReceipts).size}/4 modules</span> : null}</div></div>
+          <div className="decision-copy"><div><strong>Strategy activation · {activationPhaseCopy[attempt.phase]}</strong><span>{attempt.name}</span></div><ActivityNarrative text={attempt.error ? altanaErrorMessage(new Error(attempt.error)) : 'Confirmed stages are journaled immediately. Closing or refreshing this page will not erase the visible evidence.'} /><div className="decision-tags"><span>{attempt.stablecoin}</span><span>{attempt.fundingAmount} tBNB funded</span><span>{shortAddress(attempt.smartWallet)}</span>{attempt.recoveryDetected && <span>Existing positions preserved</span>}{attempt.normalizationDecision && <span>Startup conversion confirmed</span>}{attempt.grantTxHash && <span>Policy registered</span>}{attempt.moduleReceipts?.length ? <span>{completedPancakeModules(attempt.moduleReceipts).size}/4 modules</span> : null}</div></div>
           <div className="decision-evidence"><strong className={attempt.phase === 'FAILED' ? 'evidence-failed' : 'evidence-policy_only'}>{attempt.phase === 'FAILED' ? 'NEEDS ATTENTION' : 'IN PROGRESS'}</strong><span>{new Date(attempt.updatedAt).toLocaleString()}</span>{latestHash && <a href={txUrl(latestHash)} target="_blank" rel="noreferrer">Latest proof <ExternalLink size={12} /></a>}</div>
         </article>
       })}
@@ -957,6 +962,7 @@ function App() {
   const [exitingId, setExitingId] = useState('')
   const [checkingId, setCheckingId] = useState('')
   const [resumingId, setResumingId] = useState('')
+  const [resumeProgress, setResumeProgress] = useState<ResumeProgress>(null)
   const [runtimeMandateIds, setRuntimeMandateIds] = useState<string[]>([])
   const runtimeSessions = useRef(new Map<string, Session>())
   const runtimeBusy = useRef(false)
@@ -1356,6 +1362,7 @@ function App() {
     }
 
     setResumingId(id)
+    setResumeProgress({ mandateId: id, step: 'CHECKING', message: 'Checking which owner-authorized steps are already confirmed onchain. No signature is needed yet.' })
     setNotice('Recovering the existing strategy and checking its confirmed onchain modules...')
     const attemptId = crypto.randomUUID()
     const now = new Date().toISOString()
@@ -1382,6 +1389,7 @@ function App() {
     try {
       let ownerProfile = altana.profile
       if (!ownerProfile || ownerProfile.wallet.address.toLowerCase() !== mandate.smartWallet.toLowerCase()) {
+        setResumeProgress({ mandateId: id, step: 'RECOVERING', message: 'Recover the existing owner Passkey wallet once. This is not a new wallet or deposit.' })
         ownerProfile = await altana.recover()
       }
       if (ownerProfile.wallet.address.toLowerCase() !== mandate.smartWallet.toLowerCase()) {
@@ -1448,15 +1456,24 @@ function App() {
       }
 
       updateAttempt({ phase: 'APPROVING' })
-      const revoke = await altana.revoke(mandate.sessionPublicKey, ownerProfile)
-      if (revoke.status === 'FAILED') throw new Error('The previous execution session could not be revoked, so no replacement was created.')
+      const { isAltanaSessionValid } = await import('./integrations/altana')
+      const oldSessionIsValid = await isAltanaSessionValid(mandate.smartWallet, mandate.sessionPublicKey)
+      if (oldSessionIsValid) {
+        setResumeProgress({ mandateId: id, step: 'REVOKING', message: 'Owner confirmation: revoke the stale executor. A retry will skip this step once it is confirmed.' })
+        const revoke = await altana.revoke(mandate.sessionPublicKey, ownerProfile)
+        if (revoke.status === 'FAILED') throw new Error('The previous execution session could not be revoked, so no replacement was created.')
+      }
       runtimeSessions.current.delete(id)
       setRuntimeMandateIds((current) => current.filter((item) => item !== id))
 
       const recordActivationProgress = (progress: PancakeActivationProgress) => {
-        if (progress.phase === 'APPROVED') updateAttempt({ phase: 'GRANTING', approvalTxHash: progress.transactionHash })
-        else if (progress.phase === 'GRANTED') updateAttempt({ phase: 'DEPLOYING', grantTxHash: progress.transactionHash })
-        else updateAttempt({
+        if (progress.phase === 'APPROVING') setResumeProgress({ mandateId: id, step: 'APPROVING', message: 'Owner confirmation: approve only the missing PancakeSwap token limits. Existing sufficient allowances are skipped.' })
+        else if (progress.phase === 'APPROVED') updateAttempt({ phase: 'GRANTING', approvalTxHash: progress.transactionHash })
+        else if (progress.phase === 'GRANTING') setResumeProgress({ mandateId: id, step: 'GRANTING', message: 'Final owner confirmation: create the replacement scoped executor. LP, Farm, and Earn then deploy without more owner prompts.' })
+        else if (progress.phase === 'GRANTED') {
+          setResumeProgress({ mandateId: id, step: 'DEPLOYING', message: 'Owner confirmations are complete. The scoped session is now deploying LP, Farm, and Earn automatically.' })
+          updateAttempt({ phase: 'DEPLOYING', grantTxHash: progress.transactionHash })
+        } else updateAttempt({
           phase: 'DEPLOYING',
           moduleReceipts: [...(mandate.moduleReceipts ?? []), ...(progress.receipts ?? [])],
         })
@@ -1488,13 +1505,15 @@ function App() {
       setActivationAttempts((current) => current.filter((item) => item.id !== attemptId))
       await Promise.all([refreshSnapshot(mandate.stablecoin), refreshPancakePositions(mandate.stablecoin)])
       const confirmed = completedPancakeModules(mergedReceipts).size
+      setResumeProgress(null)
       setView('overview')
       setNotice(confirmed === 4
         ? 'The existing strategy resumed successfully. Swap, LP, Farm, and Earn now have confirmed BSC Testnet receipts.'
         : `The existing strategy resumed without creating a duplicate. ${confirmed}/4 modules are confirmed; review Activity for the remaining adapter failure.`)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'The existing strategy could not be resumed.'
+      const message = altanaErrorMessage(error)
       updateAttempt({ phase: 'FAILED', error: message })
+      setResumeProgress({ mandateId: id, step: 'FAILED', message })
       setNotice(message)
     } finally {
       setResumingId('')
@@ -1576,7 +1595,7 @@ function App() {
     </header>
     <button className={`navigation-scrim ${menuOpen ? 'visible' : ''}`} onClick={closeMobileMenu} aria-label="Close navigation" />
     <main className="main-area" inert={menuOpen ? true : undefined} aria-hidden={menuOpen ? true : undefined}><div className="page-content">
-      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} positions={pancakePositions} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} resuming={resumingId === activeMandate?.id} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onResume={() => { if (activeMandate) void resumeMandateDeployment(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
+      {view === 'overview' && <PortfolioOverview mandate={activeMandate} snapshot={snapshot} positions={pancakePositions} executionPlan={currentExecutionPlan} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} loading={snapshotLoading} runtimeAvailable={Boolean(activeMandate && runtimeMandateIds.includes(activeMandate.id))} checking={checkingId === activeMandate?.id} resuming={resumingId === activeMandate?.id} resumeProgress={resumeProgress} onCreate={() => setView('create')} onCheck={() => { if (activeMandate) void runPolicyCheck(activeMandate.id) }} onResume={() => { if (activeMandate) void resumeMandateDeployment(activeMandate.id) }} onOpenPolicies={() => setView('policies')} />}
       {view === 'create' && <MandateWizard snapshotLoading={snapshotLoading} account={wallet.account} isTargetNetwork={wallet.isTargetNetwork} walletError={wallet.error} walletName={wallet.selectedWallet?.name ?? 'Browser wallet'} walletBalance={wallet.balance} walletBalanceStatus={wallet.balanceStatus} altanaAddress={altana.address} altanaBalance={altana.balance} altanaBalanceWei={altana.balanceWei} altanaStage={altana.stage} altanaError={altana.error} pancakeResearch={pancakeResearch} pancakeMarket={pancakeMarket} isPasskeySupported={altana.isPasskeySupported} onConnect={openWalletPicker} onSwitchNetwork={() => void wallet.switchNetwork()} onCreateAltana={() => void altana.create().catch(() => undefined)} onRecoverAltana={() => void altana.recover().catch(() => undefined)} onFundAltana={fundAltanaWallet} onStart={startMandate} onCancel={() => setView('overview')} />}
       {view === 'decisions' && <DecisionLog mandates={mandates} activationAttempts={activationAttempts} />}
       {view === 'policies' && <Policies mandates={mandates} revokingId={revokingId} exitingId={exitingId} onPause={togglePause} onRevoke={(id) => void revokeMandate(id)} onExit={(id) => void exitMandateAssets(id)} onCreate={() => setView('create')} />}

@@ -8,9 +8,11 @@ import {
   ALTANA_KEYSTORE,
   ALTANA_NATIVE_FEE_CAP,
   altanaClient,
+  altanaErrorMessage,
   buildPortfolioPermissions,
   buildVerificationPermissions,
   grantAndVerifyAltanaMandate,
+  isAltanaSessionValid,
   minimumOutputFor,
   normalizeAltanaFunding,
   type AltanaWalletProfile,
@@ -58,6 +60,24 @@ describe('Altana verification mandate', () => {
     expect(result.grant).toBe(grant)
     expect(result.verification).toBeUndefined()
     expect(result.verificationError).toBe('relay unavailable')
+  })
+
+  it('checks an existing session key before asking the owner to revoke it again', async () => {
+    const address = '0x1111111111111111111111111111111111111111'
+    const read = vi.spyOn(bscTestnetClient, 'readContract').mockResolvedValue(false as never)
+
+    await expect(isAltanaSessionValid(address, '0x1234')).resolves.toBe(false)
+    expect(read).toHaveBeenCalledWith(expect.objectContaining({
+      address: ALTANA_KEYSTORE,
+      functionName: 'isValidKey',
+      args: [address, expect.stringMatching(/^0x[0-9a-f]{64}$/)],
+    }))
+  })
+
+  it('turns an expired relay quote into an actionable retry message', () => {
+    const message = altanaErrorMessage(new Error('Invalid parameters were provided. Details: quote expired'))
+    expect(message).toContain('No transaction was sent')
+    expect(message).toContain('skip every owner step already confirmed onchain')
   })
 })
 

@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseEther } from 'viem'
 import type { PortfolioPlan } from '../domain/portfolio'
 import { stablecoinConfig } from '../lib/tokens'
+import { bscTestnetClient } from '../lib/chains'
+import { altanaClient, type AltanaWalletProfile } from './altana'
 import {
+  approvePancakeDeployment,
   buildPancakePermissions,
   hasExistingPancakeExposure,
   pendingPancakeModules,
@@ -13,6 +16,8 @@ import {
   PANCAKE_V2_ROUTER,
   type PancakeDeploymentPlan,
 } from './pancakeExecutor'
+
+afterEach(() => vi.restoreAllMocks())
 
 const usdt = stablecoinConfig('USDT')
 
@@ -114,5 +119,17 @@ describe('PancakeSwap activation recovery', () => {
   it('resumes only the modules that are not already confirmed', () => {
     expect(pendingPancakeModules(new Set(['SWAP']))).toEqual(['LIQUIDITY', 'FARM', 'EARN'])
     expect(pendingPancakeModules(new Set(['SWAP', 'LIQUIDITY', 'FARM', 'EARN']))).toEqual([])
+  })
+
+  it('skips the owner approval prompt when every exact allowance is already sufficient', async () => {
+    const profile = {
+      wallet: { address: '0x1111111111111111111111111111111111111111' },
+      signer: {},
+    } as unknown as AltanaWalletProfile
+    vi.spyOn(bscTestnetClient, 'readContract').mockResolvedValue(parseEther('100') as never)
+    const execute = vi.spyOn(altanaClient, 'execute')
+
+    await expect(approvePancakeDeployment(profile, deployment)).resolves.toBeUndefined()
+    expect(execute).not.toHaveBeenCalled()
   })
 })
