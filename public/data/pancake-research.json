@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-25T22:55:18.516Z",
+  "generatedAt": "2026-08-25T23:23:34.969Z",
   "network": {
     "name": "BNB Chain mainnet",
     "chainId": 56
@@ -18,7 +18,7 @@
     "note": "Research uses an address allowlist, official PancakeSwap pool data, MasterChef V3 onchain emissions, and active Syrup Pool configuration. Execution remains separately constrained by the owner mandate."
   },
   "liquidity": {
-    "observedAt": "2026-08-25T22:55:18.516Z",
+    "observedAt": "2026-08-25T23:23:34.969Z",
     "opportunities": [
       {
         "id": "0x172fcd41e0913e95784454622d1c3724f546f849",
@@ -167,7 +167,7 @@
     ]
   },
   "farms": {
-    "observedAt": "2026-08-25T22:55:18.516Z",
+    "observedAt": "2026-08-25T23:23:34.969Z",
     "opportunities": [
       {
         "id": "0x172fcd41e0913e95784454622d1c3724f546f849",
@@ -348,7 +348,7 @@
     ]
   },
   "earn": {
-    "observedAt": "2026-08-25T22:55:18.516Z",
+    "observedAt": "2026-08-25T23:23:34.969Z",
     "opportunities": [
       {
         "id": "462",
