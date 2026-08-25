@@ -7,6 +7,7 @@ import { altanaClient, type AltanaWalletProfile } from './altana'
 import {
   approvePancakeDeployment,
   buildPancakePermissions,
+  expectedPairContribution,
   hasExistingPancakeExposure,
   pendingPancakeModules,
   PANCAKE_CAKE_POOL,
@@ -37,6 +38,8 @@ const deployment: PancakeDeploymentPlan = {
   liquidityNativeForCake: parseEther('0.00297'),
   liquidityNativeForPair: parseEther('0.00297'),
   lpCakeDesired: parseEther('1.98'),
+  lpCakeMinimum: parseEther('1.94'),
+  lpNativeMinimum: parseEther('0.0029'),
   estimatedLp: parseEther('0.08'),
   stableAllowance: parseEther('8'),
   stableApprovalCap: parseEther('11.5'),
@@ -51,6 +54,18 @@ const rebalance = {
 } as PortfolioPlan
 
 describe('PancakeSwap module permissions', () => {
+  it('derives LP minimums from the pool ratio rather than the maximum native budget', () => {
+    const contribution = expectedPairContribution(
+      99n,
+      50n,
+      4_000n,
+      100n,
+    )
+
+    expect(contribution).toEqual({ cakeUsed: 99n, nativeUsed: 2n })
+    expect(contribution.nativeUsed).toBeLessThan(50n)
+  })
+
   it('pins Swap, LP, Farm, and Earn calls to their official testnet contracts', () => {
     const permissions = buildPancakePermissions(deployment, rebalance)
 

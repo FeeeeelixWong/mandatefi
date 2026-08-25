@@ -174,6 +174,8 @@ export type PancakeDeploymentPlan = {
   liquidityNativeForCake: bigint
   liquidityNativeForPair: bigint
   lpCakeDesired: bigint
+  lpCakeMinimum: bigint
+  lpNativeMinimum: bigint
   estimatedLp: bigint
   stableAllowance: bigint
   stableApprovalCap: bigint
@@ -253,7 +255,26 @@ async function quote(router: Address, amountIn: bigint, path: readonly Address[]
   return { amountIn, quotedOut, minimumOut: minimumOutputFor(quotedOut, slippageBps), router, path }
 }
 
-async function estimateLpTokens(cakeAmount: bigint, nativeAmount: bigint) {
+export function expectedPairContribution(
+  cakeDesired: bigint,
+  nativeDesired: bigint,
+  cakeReserve: bigint,
+  nativeReserve: bigint,
+) {
+  if (cakeDesired <= 0n || nativeDesired <= 0n || cakeReserve <= 0n || nativeReserve <= 0n) {
+    throw new Error('The official CAKE/WBNB testnet pair has no usable reserves.')
+  }
+  const nativeForCake = cakeDesired * nativeReserve / cakeReserve
+  if (nativeForCake <= nativeDesired) {
+    return { cakeUsed: cakeDesired, nativeUsed: nativeForCake }
+  }
+  return {
+    cakeUsed: nativeDesired * cakeReserve / nativeReserve,
+    nativeUsed: nativeDesired,
+  }
+}
+
+async function estimateLpPosition(cakeAmount: bigint, nativeAmount: bigint) {
   const [token0, reserves, totalSupply] = await Promise.all([
     bscTestnetClient.readContract({ address: PANCAKE_CAKE_WBNB_LP, abi: pairAbi, functionName: 'token0' }),
     bscTestnetClient.readContract({ address: PANCAKE_CAKE_WBNB_LP, abi: pairAbi, functionName: 'getReserves' }),
@@ -265,9 +286,13 @@ async function estimateLpTokens(cakeAmount: bigint, nativeAmount: bigint) {
   if (cakeReserve <= 0n || nativeReserve <= 0n || totalSupply <= 0n) {
     throw new Error('The official CAKE/WBNB testnet pair has no usable reserves.')
   }
-  const byCake = cakeAmount * totalSupply / cakeReserve
-  const byNative = nativeAmount * totalSupply / nativeReserve
-  return byCake < byNative ? byCake : byNative
+  const contribution = expectedPairContribution(cakeAmount, nativeAmount, cakeReserve, nativeReserve)
+  const byCake = contribution.cakeUsed * totalSupply / cakeReserve
+  const byNative = contribution.nativeUsed * totalSupply / nativeReserve
+  return {
+    ...contribution,
+    estimatedLp: byCake < byNative ? byCake : byNative,
+  }
 }
 
 export async function preparePancakeDeployment(snapshot: PortfolioSnapshot, strategy: StrategyPlan): Promise<PancakeDeploymentPlan> {
@@ -290,7 +315,10 @@ export async function preparePancakeDeployment(snapshot: PortfolioSnapshot, stra
     quote(PANCAKE_V2_ROUTER, earnQuote.minimumOut, [BSC_TESTNET_WBNB, PANCAKE_TESTNET_CAKE], slippageBps),
   ])
   const lpCakeDesired = liquidityCakeQuote.minimumOut
-  const estimatedLp = await estimateLpTokens(lpCakeDesired, liquidityNativeForPair)
+  const lpPosition = await estimateLpPosition(lpCakeDesired, liquidityNativeForPair)
+  const lpCakeMinimum = minimumOutputFor(lpPosition.cakeUsed, slippageBps)
+  const lpNativeMinimum = minimumOutputFor(lpPosition.nativeUsed, slippageBps)
+  const estimatedLp = lpPosition.estimatedLp
   if (estimatedLp <= 0n) throw new Error('The CAKE/WBNB LP estimate is zero at this portfolio size.')
 
   return {
@@ -309,6 +337,8 @@ export async function preparePancakeDeployment(snapshot: PortfolioSnapshot, stra
     liquidityNativeForCake,
     liquidityNativeForPair,
     lpCakeDesired,
+    lpCakeMinimum,
+    lpNativeMinimum,
     estimatedLp,
     stableAllowance: marketAmount + liquidityAmount + earnAmount,
     stableApprovalCap: marketAmount + liquidityAmount + earnAmount,
@@ -532,8 +562,8 @@ export async function deployPancakePortfolio(
           args: [
             PANCAKE_TESTNET_CAKE,
             deployment.lpCakeDesired,
-            minimumOutputFor(deployment.lpCakeDesired, deployment.slippageBps),
-            minimumOutputFor(deployment.liquidityNativeForPair, deployment.slippageBps),
+            deployment.lpCakeMinimum,
+            deployment.lpNativeMinimum,
             wallet,
             deadline,
           ],
