@@ -1,11 +1,13 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const outputPath = resolve(projectRoot, 'public/data/pancake-research.json')
-const explorerBase = 'https://explorer.pancakeswap.com/api/cached/pools'
-const bscRpc = 'https://bsc-rpc.publicnode.com'
+const outputPath = process.env.PANCAKE_RESEARCH_OUTPUT?.trim()
+  ? resolve(process.env.PANCAKE_RESEARCH_OUTPUT)
+  : resolve(projectRoot, 'public/data/pancake-research.json')
+const explorerBase = process.env.PANCAKE_EXPLORER_BASE?.trim() || 'https://explorer.pancakeswap.com/api/cached/pools'
+const bscRpc = process.env.BSC_RPC_URL?.trim() || 'https://bsc-rpc.publicnode.com'
 const masterChefV3 = '0x556B9306565093C855AEA9AE92A594704c2Cd59e'
 const secondsPerYear = 31_536_000
 const minimumTvlUsd = 250_000
@@ -282,7 +284,44 @@ async function main() {
   console.log(`LP ${liquidity.length} · Farms ${farms.length} · Earn ${earn.length} · CAKE $${cakePriceUsd.toFixed(4)}`)
 }
 
-main().catch((error) => {
+function isUsableSnapshot(snapshot) {
+  if (!snapshot || snapshot.schemaVersion !== 1 || snapshot.network?.chainId !== 56) return false
+  if (!Number.isFinite(Date.parse(snapshot.generatedAt))) return false
+
+  return ['liquidity', 'farms', 'earn'].every((module) =>
+    Array.isArray(snapshot[module]?.opportunities) && snapshot[module].opportunities.length > 0,
+  )
+}
+
+async function retainPreviousSnapshot(refreshError) {
+  let previous
+  try {
+    previous = JSON.parse(await readFile(outputPath, 'utf8'))
+  } catch (snapshotError) {
+    throw new AggregateError(
+      [refreshError, snapshotError],
+      'PancakeSwap refresh failed and no previous research snapshot could be read.',
+    )
+  }
+
+  if (!isUsableSnapshot(previous)) {
+    throw new AggregateError(
+      [refreshError],
+      'PancakeSwap refresh failed and the previous research snapshot is incomplete.',
+    )
+  }
+
+  const reason = refreshError instanceof Error ? refreshError.message : String(refreshError)
+  console.warn(`::warning title=PancakeSwap research refresh::${reason}`)
+  console.warn(`Keeping the last complete snapshot from ${previous.generatedAt}; freshness guards remain active in the product.`)
+}
+
+main().catch(async (error) => {
   console.error(error)
-  process.exitCode = 1
+  try {
+    await retainPreviousSnapshot(error)
+  } catch (fallbackError) {
+    console.error(fallbackError)
+    process.exitCode = 1
+  }
 })
