@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-04T23:27:48.748Z",
+  "generatedAt": "2026-10-05T02:17:18.920Z",
   "network": {
     "name": "BNB Chain mainnet",
     "chainId": 56
@@ -18,7 +18,7 @@
     "note": "Research uses an address allowlist, official PancakeSwap pool data, MasterChef V3 onchain emissions, and active Syrup Pool configuration. Execution remains separately constrained by the owner mandate."
   },
   "liquidity": {
-    "observedAt": "2026-10-04T23:27:48.748Z",
+    "observedAt": "2026-10-05T02:17:18.920Z",
     "opportunities": [
       {
         "id": "0x47516855520496b84a169f7bb92ace7ffb6e8c535bccb52a308ccff113aeccfb",
@@ -27,9 +27,9 @@
         "token0Address": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82",
         "token1Address": "0x55d398326f99059ff775485246999027b3197955",
         "feeTierBps": null,
-        "tvlUsd": 1735385,
-        "volumeUsd24h": 75841,
-        "feeAprBps": 382,
+        "tvlUsd": 1738970,
+        "volumeUsd24h": 77210,
+        "feeAprBps": 388,
         "link": "https://pancakeswap.finance/liquidity/add/bsc/infinity/0x47516855520496b84a169f7bb92ace7ffb6e8c535bccb52a308ccff113aeccfb?chain=bsc&persistChain=1"
       },
       {
@@ -40,8 +40,8 @@
         "token1Address": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
         "feeTierBps": null,
         "tvlUsd": 1229021,
-        "volumeUsd24h": 11162,
-        "feeAprBps": 3,
+        "volumeUsd24h": 12720,
+        "feeAprBps": 4,
         "link": "https://pancakeswap.finance/liquidity/add/bsc/infinity/0x3c2c41b2711bf990822e25135eab4effe9bd33c8d016fd19dc131d7c9e2a432d?chain=bsc&persistChain=1"
       },
       {
@@ -51,8 +51,8 @@
         "token0Address": "0x55d398326f99059ff775485246999027b3197955",
         "token1Address": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
         "feeTierBps": null,
-        "tvlUsd": 250282,
-        "volumeUsd24h": 977983,
+        "tvlUsd": 250281,
+        "volumeUsd24h": 981587,
         "feeAprBps": 14,
         "link": "https://pancakeswap.finance/liquidity/add/bsc/infinity/0xb158d1b9ed428dd2500fa85e8a3938bf54dfe2d6a3564328ca7346e15d86b11f?chain=bsc&persistChain=1"
       },
@@ -167,7 +167,7 @@
     ]
   },
   "farms": {
-    "observedAt": "2026-10-04T23:27:48.748Z",
+    "observedAt": "2026-10-05T02:17:18.920Z",
     "opportunities": [
       {
         "id": "0x172fcd41e0913e95784454622d1c3724f546f849",
@@ -348,7 +348,7 @@
     ]
   },
   "earn": {
-    "observedAt": "2026-10-04T23:27:48.748Z",
+    "observedAt": "2026-10-05T02:17:18.920Z",
     "opportunities": []
   },
   "sources": [
